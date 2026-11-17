@@ -83,3 +83,5 @@
 58300 end
 6700 shot
 7600 shot
+7700 btn 1
+8100 shot

@@ -123,6 +123,8 @@ export function mountFm1(host, on) {
     },
     leds(b, k, dim) {
       for (const id in btnEls) btnEls[id].classList.toggle("lit", !!(b >> id & 1));
+      btnEls[12].classList.toggle("green", !!(b >> 14 & 1));          // PLAY's green light: lit, or breathing
+      btnEls[12].classList.toggle("breathe", !!(b >> 15 & 1));
       keyEls.forEach((g, i) => { g.classList.toggle("lit", !!(k >> i & 1)); g.classList.toggle("dim", !!(dim >> i & 1) && !(k >> i & 1)); });
     },
     // the computer's keyboard; returns true when the key was one of ours
@@ -152,6 +154,9 @@ export const FM1_CSS = `
 .fm1-active.on{opacity:.55}
 .fm1-lamp{fill:#2a2d33}
 .fm1-btn.lit .fm1-lamp{fill:#fff1d6;filter:drop-shadow(0 0 6px #fff1d6)}
+.fm1-btn.green .fm1-lamp{fill:#5fe08a;filter:drop-shadow(0 0 6px #5fe08a)}
+.fm1-btn.breathe .fm1-lamp{fill:#5fe08a;filter:drop-shadow(0 0 6px #5fe08a);animation:fm1breath 2.25s ease-in-out infinite}
+@keyframes fm1breath{0%,100%{opacity:.05}50%{opacity:1}}
 .fm1-btn.down rect:first-child{fill:#2a2d33}
 .fm1-slit{fill:#7d776a;opacity:.35}
 .fm1-key.black .fm1-slit{fill:#55524a}

@@ -84,13 +84,17 @@ static void lamp_draw(void)
     }
     galpha(90 + (tsin(tm, 30, 0) >> 9)); gdisc(cx, cy, 12, th->pad); galpha(256); gdisc(cx, cy, 6, th->pad);
     if (lp.done) {
-        gtextc(120, 8, TR(T_LAMP_DONE), th->text, 2);
-    } else {
-        gtext_wrap(8, 6, 224, TR(T_LAMP1), th->text, 1, 9, -1, 1, 0, 1);
-        if (agree >= 1 && agree < 3) gtextc(120, 26, TR(T_LAMP_TWO), th->caps[3], 1);
-        if (lp.idle > 20000) gtext_wrap(8, 208, 224, TR(T_LAMP_HINT), th->caps[0], 1, 9, -1, 1, 0, 1);
-        else gtextc(120, 210, TR(T_LAMP2), th->mute, 1);
-        gtextc(120, 226, TR(T_KNOBS123), th->pad, 1);
+        grect(0, 0, 240, 8 + TLH(ts(2, 4)), th->bg);
+        gfit(120, 6 + 2 * ts(2, 4), 232, TR(T_LAMP_DONE), th->text, ts(2, 4));
+    } else {                                     /* the words on cleared strips, top and foot: the rings run under them */
+        int32_t a = ts(1, 2), at = ts(1, 3), h = gblock_h(232, TR(T_LAMP1), at), y;
+        if (lp.t < 9000 || a == 1) { grect(0, 0, 240, h + 4, th->bg); gblock(4, 2, 232, TR(T_LAMP1), th->text, at, 1); }
+        else h = 0;                              /* (larger text: it steps aside once read, the rings need the room) */
+        if (agree >= 1 && agree < 3) gfit(120, h + 4 + 2 * a, 232, TR(T_LAMP_TWO), th->caps[3], a);
+        y = gfoot(238 - TLH(a), TR(lp.idle > 20000 ? T_LAMP_HINT : T_LAMP2), lp.idle > 20000 ? th->caps[0] : th->mute, th->bg, a);
+        grect(0, 238 - TLH(a), 240, TLH(a) + 2, th->bg);
+        gfit(120, 238 - TLH(a) + 2 * a, 232, TR(T_KNOBS123), th->pad, a);
+        (void)y;
     }
 }
 
@@ -196,7 +200,7 @@ static int dish_tick(int32_t dt)
         for (k = 0; k < AC_NKEY; k++) if (in.kdown >> k & 1u) sfx(key_note(k) + 12, 0, 700, W_TRI, 3000, 5, 130);
         if (ds.stage == DS_WAIT && ipulse((uint32_t)ds.t, 900) > 128) led_btn_want |= 1u << BTN_REC;
         if (ds.stage == DS_REVIEW) {
-            if (ipulse((uint32_t)ds.t, 900) > 128) led_btn_want |= 1u << BTN_PLAY;
+            led_play_breathe = 1;
             if (BDOWN(BTN_PLAY)) return 1;
         }
         led_btn_want |= (1u << BTN_FX) << ((step / 4u) % 4u);   /* four buttons count the bar */
@@ -242,37 +246,40 @@ static void dish_draw(void)
             grect(x - 1, y - 1, hit ? 3 : 2, hit ? 3 : 2, th->text);
         }
     }
-    if (ds.stage == DS_STIR) {
-        gtextc(120, 10, TR(T_DISH1), th->text, 2);
-        gtext_wrap(8, 28, 224, TR(T_DISH2), th->mute, 1, 9, -1, 1, 0, 1);
-        if (ds.steady > 0) {
-            char num[2] = {(char)('0' + ds.steady), 0};
-            gtextc(120, cy - 12, num, th->text, 5);
+    {   /* the words: a heading at the top, what to do at the foot */
+        int32_t st = ts(2, 4), a = ts(1, 3), top = 6 + 2 * st, used;
+        if (ds.stage == DS_STIR) {
+            used = gfit(120, top, 232, TR(T_DISH1), th->text, st);
+            if (ds.steady == 0 && ds.msg_t <= 0) gblock(4, top + 5 * used + 4, 232, TR(T_DISH2), th->mute, a, 1);
+            if (ds.steady > 0) {
+                char num[2] = {(char)('0' + ds.steady), 0};
+                gtextc(120, cy - 12, num, th->text, 5);
+            }
+            if (ds.bpm > 20) {
+                char b[12]; int32_t v = ds.bpm, n = 0;
+                if (v >= 100) b[n++] = (char)('0' + v / 100);
+                b[n++] = (char)('0' + v / 10 % 10); b[n++] = (char)('0' + v % 10); b[n++] = ' '; b[n++] = 'B'; b[n++] = 'P'; b[n++] = 'M'; b[n] = 0;
+                gfit(120, 238 - TLH(a) + 2 * a, 232, b, (ds.bpm > 55 && ds.bpm < 165) ? th->pad : th->mute, a);
+            }
+            if (ds.msg_t > 0) gfoot(238 - TLH(a) - 2, TR(ds.msg), th->caps[0], th->bg, ts(2, 4));
+        } else if (ds.stage == DS_LOCKED) {
+            gblock(4, 6, 232, TR(T_DISH_LOCK), th->text, st, 1);
+        } else if (ds.stage == DS_WAIT) {
+            gfit(120, top, 232, TR(T_TAKE1), th->text, st);
+            gfoot(238, TR(ds.few ? T_TAKE_FEW : T_TAKE_REC), ds.few ? th->caps[0] : th->pad, th->bg, a);
+        } else if (ds.stage == DS_COUNT) {
+            uint32_t step = (tr_now_q8() >> 8) / TICKS_STEP;
+            gfit(120, top, 232, TR(T_TAKE_READY), th->text, st);
+            if (ds.start_step > step && ds.start_step - step <= 16u) {
+                char num[2] = {(char)('0' + (ds.start_step - step + 3u) / 4u), 0};
+                gtextc(120, cy - 12, num, th->pad, 5);
+            }
+        } else if (ds.stage == DS_REC) {
+            used = gfit(128, top, 208, TR(T_TAKE_RECING), HEXC(0xff453a), st);
+            gdisc(128 - gtextw(TR(T_TAKE_RECING), used) / 2 - 4 - 3 * used, top + 5 * used / 2, 2 * used, HEXC(0xff453a));
+        } else {
+            gfit(120, top, 232, TR(T_YOURSONG), th->text, st);
+            gfoot(238, TR(T_TAKE_KEEP), th->pad, th->bg, a);
         }
-        if (ds.msg_t > 0) gtextc(120, 196, TR(ds.msg), th->caps[0], 2);
-        if (ds.bpm > 20) {
-            char b[12]; int32_t v = ds.bpm, n = 0;
-            if (v >= 100) b[n++] = (char)('0' + v / 100);
-            b[n++] = (char)('0' + v / 10 % 10); b[n++] = (char)('0' + v % 10); b[n++] = ' '; b[n++] = 'B'; b[n++] = 'P'; b[n++] = 'M'; b[n] = 0;
-            gtextc(120, 222, b, (ds.bpm > 55 && ds.bpm < 165) ? th->pad : th->mute, 1);
-        }
-    } else if (ds.stage == DS_LOCKED) {
-        gtext_wrap(8, 10, 224, TR(T_DISH_LOCK), th->text, 2, 15, -1, 1, 0, 1);
-    } else if (ds.stage == DS_WAIT) {
-        gtextc(120, 10, TR(T_TAKE1), th->text, 2);
-        gtext_wrap(8, 204, 224, TR(ds.few ? T_TAKE_FEW : T_TAKE_REC), ds.few ? th->caps[0] : th->pad, 1, 9, -1, 1, 0, 1);
-    } else if (ds.stage == DS_COUNT) {
-        uint32_t step = (tr_now_q8() >> 8) / TICKS_STEP;
-        gtextc(120, 10, TR(T_TAKE_READY), th->text, 2);
-        if (ds.start_step > step && ds.start_step - step <= 16u) {
-            char num[2] = {(char)('0' + (ds.start_step - step + 3u) / 4u), 0};
-            gtextc(120, cy - 12, num, th->pad, 5);
-        }
-    } else if (ds.stage == DS_REC) {
-        gtextc(120, 10, TR(T_TAKE_RECING), HEXC(0xff453a), 2);
-        gdisc(120 - gtextw(TR(T_TAKE_RECING), 2) / 2 - 12, 15, 4, HEXC(0xff453a));
-    } else {
-        gtextc(120, 10, TR(T_YOURSONG), th->text, 2);
-        gtext_wrap(8, 210, 224, TR(T_TAKE_KEEP), th->pad, 1, 9, -1, 1, 0, 1);
     }
 }

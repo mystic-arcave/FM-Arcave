@@ -55,6 +55,7 @@ enum { ENC_SELECT = 0, ENC_ALGORITHM = 1, ENC_KNOB1 = 2, ENC_KNOB2 = 3, ENC_KNOB
 #if BOARD_SMK37
 #include "smk_input.h"                          /* keys with velocity, buttons, 8 encoders, LEDs, pads, faders, wheels */
 static void fm1_led_key_glow(uint32_t id, int on) { (void)id; (void)on; }   /* (no key LEDs: the pads glow) */
+static void fm1_play_led(uint32_t mode) { fm1_led_key(BTN_PLAY, mode != 0u); }   /* (the SMK-37: PLAY's one LED) */
 #else
 #define FM1_SETTLE_US 100u                      /* the boot scan (OCT- for the rescue): 10 us read no key on an FM-1, the tick waits 100 too */
 #include "fm1_input.h"
@@ -67,6 +68,13 @@ static void fm1_led_key_glow(uint32_t id, int on)   /* as fm1_led_key, the dim l
                 if (on) fm1_led_dim[p] |= (uint8_t)(1u << r);
                 else fm1_led_dim[p] &= (uint8_t)~(1u << r);
             }
+}
+/* (FM ARCAVE) PLAY's second, green LED: not in the key matrix (no key there), on the hardware at column 8, row bit 1
+ * (JIANT's ui_input.c found it). mode 0 dark, 1 lit, 2 breathing */
+static void fm1_play_led(uint32_t mode)
+{
+    fm1_led[8] = (uint8_t)((fm1_led[8] & ~2u) | (mode == 1u ? 2u : 0u));
+    fm1_led_breath[8] = (uint8_t)((fm1_led_breath[8] & ~2u) | (mode == 2u ? 2u : 0u));
 }
 #endif
 #include "fm1_timer.h"

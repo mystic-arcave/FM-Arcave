@@ -287,7 +287,7 @@ static int intro_tick(int32_t dt)
         }
     }
     /* the lights: PLAY breathes when it is wanted; near a pad every key calls */
-    if (intro_want_play() && ipulse(in_time, 2600) > 110) led_btn_want |= 1u << BTN_PLAY;
+    if (intro_want_play()) led_play_breathe = 1;
     if (G.phase == IP_PLAY && G.near > 0) {
         if (G.on_pad || tsin(in_time, 120, 0) > 0) led_key_want = (1u << AC_NKEY) - 1u;
         else led_key_dim_want = (1u << AC_NKEY) - 1u;
@@ -298,6 +298,16 @@ static int intro_tick(int32_t dt)
 
 /* ---------------------------------------------------------------- drawing */
 static void T8(const char *s, int32_t x, int32_t y, col_t c, int32_t a) { galpha(a); gtextc(x, y - 2, s, c, 1); galpha(256); }
+/* small print as a centred block with its top at y, in the size the settings ask for (two lines at most twice the
+ * first build's: the intro's pictures need the room); its height */
+static int32_t TB(const char *s, int32_t cap, int32_t y, col_t c, int32_t a)
+{
+    int32_t h;
+    galpha(a);
+    h = gblock(4, y, 232, s, c, ts(1, cap), 1);
+    galpha(256);
+    return h;
+}
 
 static int32_t far_f1(int32_t u) { return (22 * isin(u * 149) + 9 * isin(u * 453 + 10430)) >> 14; }
 static int32_t far_f2(int32_t u) { return (28 * isin(u * 110 + 20860) + 8 * isin(u * 336)) >> 14; }
@@ -319,16 +329,25 @@ static uint8_t lang_touched;
 static void lang_tip_draw(int32_t a)
 {
     const char *s = TR(lang_touched ? T_LANG : T_CHANGE_LANG);
-    int32_t wd = gtextw(s, 1);
+    int32_t wd = gtextw(s, 1), sc = ts(1, 2);
     if (a <= 0) return;
-    T8(s, 121, 222, th->text, a);
-    T8("\xE2\x86\x90 OCT-", 121 - wd / 2 - 26, 222, th->mute, a);
-    T8("OCT+ \xE2\x86\x92", 121 + wd / 2 + 26, 222, th->mute, a);
+    if (sc == 1) {                               /* small: all on one line, the words between the two buttons */
+        T8(s, 121, 222, th->text, a);
+        T8("\xE2\x86\x90 OCT-", 121 - wd / 2 - 26, 222, th->mute, a);
+        T8("OCT+ \xE2\x86\x92", 121 + wd / 2 + 26, 222, th->mute, a);
+        return;
+    }
+    galpha(a);                                   /* larger: the words, and under them the two buttons left and right */
+    gfit(120, 206, 232, s, th->text, sc);
+    gtext(8, 225, "\xE2\x86\x90 OCT-", th->mute, sc);
+    gtextr(232, 225, "OCT+ \xE2\x86\x92", th->mute, sc);
+    galpha(256);
 }
 
 static void intro_draw_title(void)
 {
     int32_t tt = G.t, d = smooth8(0, 1150, tt), rise = (256 - d) * 12 / 256, open, lk = 0, i, w = 0, x0, sweep;
+    int32_t up = ts(1, 2) > 1 ? 26 : 0;          /* larger text under the name: the hat and the name move up for it */
     const char *s = "FM ARCAVE";
     char one[2] = {0, 0};
     int32_t xs[16], n = 0;
@@ -338,10 +357,10 @@ static void intro_draw_title(void)
     if (tt > 1750 && tt < 2450) lk = isin((tt - 1750) * 65536 / 700) >> 6;
     if (tt > 2810 && tt < 3700) {
         int32_t a = (tt - 2810) * 256 / 900;
-        for (i = 0; i < 3; i++) { galpha((256 - a) * (256 - i * 77) / 256); gcirc(120, 104, 8 + i * 9 + a * 90 / 256, th->caps[i]); }
+        for (i = 0; i < 3; i++) { galpha((256 - a) * (256 - i * 77) / 256); gcirc(120, 104 - up, 8 + i * 9 + a * 90 / 256, th->caps[i]); }
         galpha(256);
     }
-    hat_draw(120, 108 + rise, 256, th->hat, th->hat_eye, th->hat_pupil, open, lk, th->dark, th->hat_rim, d);
+    hat_draw(120, 108 + rise - up, 256, th->hat, th->hat_eye, th->hat_pupil, open, lk, th->dark, th->hat_rim, d);
     /* the name drops in letter by letter, in the colours of the caps, then settles to white with a sweep */
     for (i = 0; s[i]; i++) { one[0] = s[i]; xs[n++] = w; w += gtextw(one, 3) + 3 + (s[i] == ' ' ? 3 : 0); }
     x0 = 121 - (w - 3) / 2;
@@ -349,13 +368,13 @@ static void intro_draw_title(void)
     for (i = 0; s[i]; i++) {
         int32_t a = (tt - 1500 - i * 110) * 256 / 280, e, y;
         if (a <= 0) continue;
-        e = imin(256, a); y = 152 - (256 - e) * (256 - e) * 10 / 65536;
+        e = imin(256, a); y = 152 - up - (256 - e) * (256 - e) * 10 / 65536;
         one[0] = s[i];
         galpha(imin(256, a * 2));
         gtext(x0 + xs[i], y, one, (a < 333 || iabs(sweep - i) < 2) ? th->caps[i % 5] : th->text, 3);
     }
     galpha(256);
-    T8(TR(T_TAGLINE), 121, 180, th->dark ? HEXC(0x7fe6d2) : HEXC(0xf2b45a), smooth8(2900, 3600, tt));
+    TB(TR(T_TAGLINE), 2, up ? 150 : 174, th->dark ? HEXC(0x7fe6d2) : HEXC(0xf2b45a), smooth8(2900, 3600, tt));
     gfade(G.fade);
 }
 
@@ -510,10 +529,10 @@ static void intro_draw(void)
             grect(px + ZS(4), py - ZS(16), imax(1, ZS(2)), imax(1, ZS(3)), th->caps[o->c]);
         } else if (z == 256) {
             const char *s = TR(T_SIGN1 + o->n);
-            int32_t w = gtextw(s, 1) + 8;
+            int32_t a = ts(1, 2), w = gtextw(s, a) + 8, h = 5 * a + 8;
             gline(px, py, px, py - 22, th->stem);
-            grect(px - w / 2, py - 34, w, 13, th->ground); gbox(px - w / 2, py - 34, w, 13, th->pad);
-            T8(s, px + 1, py - 29, th->text, 256);
+            grect(px - w / 2, py - 21 - h, w, h, th->ground); gbox(px - w / 2, py - 21 - h, w, h, th->pad);
+            gtextc(px + 1, py - 17 - h, s, th->text, a);
         }
     }
     if (x0 < -250) {                             /* the hollow behind the start: the Hat, the old name, the loop */
@@ -521,7 +540,11 @@ static void intro_draw(void)
         int32_t bl = (tm % 4300u) < 180u ? iabs((int32_t)(tm % 4300u) - 90) * 256 / 90 : 256;
         hat_draw(px, py - ZS(12), (230 * z) >> 8, th->dark ? HEXC(0x0c1216) : th->hat, th->hat_eye, th->hat_pupil, bl,
                  iclamp(((r->x >> 8) - CO_CARDX) * 256 / 80, -256, 256), th->dark, th->hat_rim, 256);
-        if (z == 256) { gtextc(px, py - 103, "THE MYSTIC ARCAVE", th->text, 2); T8(TR(T_TAGLINE), px, py - 84, th->caps[0], 256); }
+        if (z == 256) {
+            int32_t big = ts(1, 2) > 1;
+            gtextc(px, py - (big ? 128 : 103), "THE MYSTIC ARCAVE", th->text, 2);
+            TB(TR(T_TAGLINE), 2, py - (big ? 114 : 90), th->caps[0], 256);
+        }
         garc(lx, ly, ZS(CO_LOOPR), ZS(CO_LOOPR), 0, 65536, th->pad, 1);
         for (k = 0; k < 5; k++) {
             int32_t a = -(int32_t)(tm * 25u) + k * 13107;
@@ -555,7 +578,7 @@ static void intro_draw(void)
             galpha(imax(0, 256 - a) * (256 - i * 64) / 256);
             gcirc(bx, by, ZS(6 + i * 7 + a * (G.burst.big ? 52 : 26) / 256), th->caps[(i + G.burst.c) % 5]);
         }
-        if (G.burst.big) T8(TR(G.burst.label ? G.burst.label : T_BONUS), bx, by - 18 - a * 10 / 256, th->pad, imax(0, 256 - a));
+        if (G.burst.big) { galpha(imax(0, 256 - a)); gfit(bx, by - 16 - 5 * ts(1, 3) - a * 10 / 256, 232, TR(G.burst.label ? G.burst.label : T_BONUS), th->pad, ts(1, 3)); }
         galpha(256);
     }
     if (x1 > CO_L - 20) {                        /* the mountain and the cave */
@@ -613,13 +636,14 @@ static void intro_draw(void)
         int32_t pulse = 97 + 159 * ipulse(tm, 2600) / 256;
         if (G.phase == IP_WIDE && G.t > 1000) {
             int32_t a = imin(256, (G.t - 1000) * 256 / 800) * pulse / 256;
-            T8(TR(T_WAKE1), 156, 34, th->text, a); T8(TR(T_WAKE2), 156, 46, th->text, a);
+            if (ts(1, 2) == 1) { T8(TR(T_WAKE1), 156, 34, th->text, a); T8(TR(T_WAKE2), 156, 46, th->text, a); }
+            else { int32_t h = TB(TR(T_WAKE1), 3, 8, th->text, a); TB(TR(T_WAKE2), 3, 8 + h, th->text, a); }
         }
         if (G.phase == IP_PLAY) {
-            if (G.hint > 0) { T8(TR(T_ROLL), 120, 34, th->text, G.hint * pulse / 256); T8(TR(T_JUMP), 120, 46, th->text, G.hint * pulse / 256); }
+            if (G.hint > 0) { int32_t h = TB(TR(T_ROLL), 3, 10, th->text, G.hint * pulse / 256); TB(TR(T_JUMP), 3, 12 + h, th->text, G.hint * pulse / 256); }
             if (G.cave_a > 0) {
-                T8(TR(T_ENTER), 104, 58, th->text, G.cave_a * pulse / 256);
-                if (G.cave_t > 600) T8(TR(T_PRESSPLAY), 104, 70, th->text, G.cave_a * pulse / 256);
+                int32_t h = TB(TR(T_ENTER), 3, 24, th->text, G.cave_a * pulse / 256);
+                if (G.cave_t > 600) TB(TR(T_PRESSPLAY), 3, 26 + h, th->text, G.cave_a * pulse / 256);
             }
         }
     }

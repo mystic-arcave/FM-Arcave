@@ -21,7 +21,7 @@ console.log("rolling: " + lit() + " pixels lit, clock " + (ex.web_clock_q8() >>>
 if ((ex.web_clock_q8() >>> 8) < 1000) fail("the clock is not running");
 // ARCAVE LINK: a beacon from a hub pulls the clock to it
 ex.web_buttons(1 << 7); run(100); ex.web_buttons(0); run(200);                        // GLO
-ex.web_enc(0, 1); run(100); ex.web_enc(0, 1); run(100); ex.web_enc(6, 1); run(200);   // LINK: 1
+ex.web_enc(0, 1); run(100); ex.web_enc(0, 1); run(100); ex.web_enc(0, 1); run(100); ex.web_enc(6, 1); run(200);   // LINK (the fourth line): 1
 ex.web_buttons(1 << 7); run(100); ex.web_buttons(0); run(200);
 const beacon = (ticksQ2, bpm) => { const t = bpm * 32; for (const [c, v] of [[102, t >> 7], [103, t & 127], [104, ticksQ2 >> 14 & 127], [105, ticksQ2 >> 7 & 127], [106, ticksQ2 & 127], [107, 8]]) ex.web_midi(0xBF, c, v); };
 let hub = ((ex.web_clock_q8() >>> 6) + 4 * 200) & 0x1FFFFF;                            // a hub 200 ticks ahead, at 100 BPM

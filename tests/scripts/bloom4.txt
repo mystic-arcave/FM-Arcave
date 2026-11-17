@@ -1,0 +1,11 @@
+# NIGHT BLOOM with every spore caught (CATCH=1): the second, third and fourth ring join after five each
+300 shot
+500 btn 12
+4000 shot
+14000 shot
+22000 shot
+27000 shot
+33000 shot
+40000 shot
+52000 shot
+53000 end

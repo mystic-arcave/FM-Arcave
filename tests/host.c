@@ -77,6 +77,8 @@ static uint64_t host_leds;                      /* bit id: LED id lit (0..13 but
 static void fm1_irq_off(void) {}                 /* (the host's audio runs between the main loop's passes) */
 static void fm1_irq_on(void) {}
 static void fm1_led_key(uint32_t id, int on) { if (on) host_leds |= (uint64_t)1 << id; else host_leds &= ~((uint64_t)1 << id); }
+static uint32_t host_play_led;                  /* (FM ARCAVE) PLAY's green LED: 0 dark, 1 lit, 2 breathing */
+static void fm1_play_led(uint32_t mode) { host_play_led = mode; }
 static uint64_t host_glow;                      /* the dim layer (not in the film log) */
 static void fm1_led_key_glow(uint32_t id, int on) { if (on) host_glow |= (uint64_t)1 << id; else host_glow &= ~((uint64_t)1 << id); }
 

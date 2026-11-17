@@ -29,7 +29,7 @@ static uint8_t glo_used;
 
 typedef struct {
     uint32_t magic;
-    uint8_t lang, look, story, link, track, take_n, take_bpm, pad;
+    uint8_t lang, look, story, link, track, take_n, take_bpm, tsize1;   /* tsize1: the text size + 1 (0: never set) */
     uint8_t take[TAKE_MAX][2];
     uint32_t best[3];
 } save_t;
@@ -40,7 +40,7 @@ static void save_now(void)
 {
     uint32_t i;
     sv.magic = SAVE_MAGIC; sv.lang = lang; sv.look = look_i; sv.story = story; sv.link = link_id; sv.track = juke_track;
-    sv.take_n = take_n; sv.take_bpm = take_bpm;
+    sv.take_n = take_n; sv.take_bpm = take_bpm; sv.tsize1 = (uint8_t)(tsize + 1u);
     for (i = 0; i < TAKE_MAX; i++) { sv.take[i][0] = take_ev[i][0]; sv.take[i][1] = take_ev[i][1]; }
     for (i = 0; i < 3u; i++) sv.best[i] = best[i];
     settings_save(&sv, sizeof sv);
@@ -67,7 +67,7 @@ static void story_reset(void)
 static void save_wipe(void)
 {
     best[0] = best[1] = best[2] = 0;
-    link_id = 0; set_look(0); mn.on = 0;
+    link_id = 0; set_look(0); mn.on = 0; tsize = 1;
     story_reset();
     banner_show("", TR(T_WIPED), 0);
     sfx(60, 0, 400, W_TRI, 3000, 4, 150); sfx(48, 200, 900, W_TRI, 3000, 4, 150);
@@ -80,11 +80,15 @@ static void arcave_init(void)
     if (settings_load(&sv, sizeof sv) == 0 && sv.magic == SAVE_MAGIC) {
         set_lang(sv.lang); set_look(sv.look); story = sv.story > 4u ? 0u : sv.story; link_id = sv.link % 5u; juke_track = sv.track % JUKE_N;
         take_bpm = sv.take_bpm ? sv.take_bpm : 90u;
+        tsize = sv.tsize1 >= 1u && sv.tsize1 <= 3u ? (uint8_t)(sv.tsize1 - 1u) : 1u;
         for (i = 0; i < TAKE_MAX; i++) { take_ev[i][0] = sv.take[i][0] % 32u; take_ev[i][1] = sv.take[i][1] % AC_NKEY; }
         take_n = sv.take_n > TAKE_MAX ? 0u : sv.take_n;
         for (i = 0; i < 3u; i++) best[i] = sv.best[i];
         if (story == 3u) story = 2u;             /* the light was back but no song yet: the rings again (they are quick) */
     }
+#ifdef AC_TEST_TSIZE                             /* (tests) the text size: 0 small, 1 medium, 2 large */
+    tsize = AC_TEST_TSIZE;
+#endif
 #ifdef AC_TEST_STORY                             /* (tests) start further on in the story */
     story = AC_TEST_STORY;
     if (story >= 4u) { take_n = 3; take_ev[0][0] = 0; take_ev[0][1] = 5; take_ev[1][0] = 8; take_ev[1][1] = 12; take_ev[2][0] = 20; take_ev[2][1] = 9; }
@@ -133,7 +137,7 @@ static void arcave_frame(void)
         set_lang(lang + (BDOWN(BTN_OCT_UP) ? 1 : L_N - 1));
         lang_touched = 1;
         if (tip_t > 0) tip_t = imax(tip_t, 2600);                    /* the tip is up: it shows the new language a while longer */
-        else if (!(scene == SC_INTRO && G.phase == IP_TITLE) && !mn.on) banner_show(TR(T_LANGUAGE), TR(T_LANG), 0);
+        else if (!(scene == SC_INTRO && G.phase == IP_TITLE) && !mn.on && !dlg.on) banner_show(TR(T_LANGUAGE), TR(T_LANG), 0);   /* (the Hat's box says it in the new language itself) */
         snd_ui(72 + lang * 2); save_soon();
     }
     /* GLO: a tap opens the settings (as it is let go). Held a second, a notice comes up; held three seconds while the
@@ -166,7 +170,7 @@ static void arcave_frame(void)
             break;
         case SC_CAVE:
             r = cave_tick(dt);
-            if (thanks_due && !dlg.on) { thanks_t -= dt; if (thanks_t <= 0) { thanks_due = 0; dlg_open(TR(T_HAT), TR(T_HAT_THANKS)); } }
+            if (thanks_due && !dlg.on) { thanks_t -= dt; if (thanks_t <= 0) { thanks_due = 0; dlg_open(T_HAT, T_HAT_THANKS); } }
             if (r == CVA_LAMP) { scene = SC_LAMP; lamp_reset(); sy_rumble_want = 0; }
             else if (r >= CVA_M1) { scene = SC_MACH; mach_enter(r - CVA_M1); sy_rumble_want = 0; }
             break;
@@ -203,10 +207,11 @@ static void arcave_frame(void)
     else if (tip_t > 0) { tip_t -= dt; if (!mn.on) lang_tip_draw(imin(256, tip_t * 256 / 600)); }   /* three seconds more, then it fades */
     if (mn.on) menu_draw();
     if (wipe_show > 0) {                         /* the notice, and a bar that fills while GLO is held */
-        grect(14, 84, 212, 72, th->panel); gbox(14, 84, 212, 72, th->caps[0]);
-        gtext_wrap(22, 94, 196, TR(T_WIPE), th->text, 1, 11, -1, 1, 0, 1);
-        gbox(30, 136, 180, 9, th->mute);
-        grect(32, 138, 176 * imin(wipe_hold, 3000) / 3000, 5, th->caps[0]);
+        int32_t a = ts(1, 3), h = gblock_h(204, TR(T_WIPE), a), y = 120 - (h + 30) / 2;
+        grect(8, y, 224, h + 30, th->panel); gbox(8, y, 224, h + 30, th->caps[0]);
+        gblock(18, y + 6, 204, TR(T_WIPE), th->text, a, 1);
+        gbox(30, y + h + 14, 180, 9, th->mute);
+        grect(32, y + h + 16, 176 * imin(wipe_hold, 3000) / 3000, 5, th->caps[0]);
     }
     banner_draw(dt);
     ac_present();

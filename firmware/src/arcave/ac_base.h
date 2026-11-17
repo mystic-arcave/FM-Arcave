@@ -4,7 +4,7 @@
  *
  * The platform under it (Dinghy's platform.c on the FM-1, tests/host.c on a computer, web/emu/web_host.c in a
  * browser) supplies: fm1_ms, fm1_in, fm1_input_edges, fm1_input_note_edges, fm1_enc_take, fm1_led_key,
- * fm1_led_key_glow, lcd_blit, lcd_sync, midi_get, midi_send, settings_load, settings_save. */
+ * fm1_led_key_glow, fm1_play_led, lcd_blit, lcd_sync, midi_get, midi_send, settings_load, settings_save. */
 #include "arcave_tab.h"
 
 #define AC_W 240
@@ -262,12 +262,13 @@ static void gtextc(int32_t cx, int32_t y, const char *s, col_t c, int32_t sc) { 
 static void gtextr(int32_t xr, int32_t y, const char *s, col_t c, int32_t sc) { gtext(xr - gtextw(s, sc), y, s, c, sc); }
 
 /* text broken into lines of at most w pixels, at most `shown` characters of it (a typewriter; -1: all).
- * align 0 left, 1 centre. Returns the number of lines; *total gets the character count. '\n' breaks a line. */
+ * align 0 left, 1 centre. Returns the number of lines; *total gets the character count. '\n' breaks a line; a word
+ * wider than the line is cut. With max_lines > 0 it stops after that many and *rest points at what is left. */
 static int32_t gtext_wrap(int32_t x, int32_t y, int32_t w, const char *s, col_t c, int32_t sc, int32_t lh,
-                          int32_t shown, int align, int32_t *total, int draw)
+                          int32_t shown, int align, int32_t *total, int draw, int32_t max_lines, const char **rest)
 {
     int32_t lines = 0, count = 0;
-    while (*s) {
+    while (*s && !(max_lines > 0 && lines >= max_lines)) {
         const char *p = s, *brk = 0, *end;
         int32_t lw = 0, n = 0, nb = 0;
         char buf[64];
@@ -275,7 +276,7 @@ static int32_t gtext_wrap(int32_t x, int32_t y, int32_t w, const char *s, col_t 
             const char *q = p;
             uint32_t cp = utf8_next(&q);
             int32_t gw = (FNT_W[fnt_glyph(cp)] + 1) * sc;
-            if (lw + gw - sc > w && brk) break;
+            if (lw + gw - sc > w && (brk || p > s)) break;
             if (cp == ' ') brk = p;
             lw += gw;
             p = q;
@@ -300,7 +301,44 @@ static int32_t gtext_wrap(int32_t x, int32_t y, int32_t w, const char *s, col_t 
         if (*s == '\n') s++;
     }
     if (total) *total = count;
+    if (rest) *rest = s;
     return lines;
+}
+
+/* ---------------------------------------------------------------- the size of the text
+ * Three sizes (the settings): 0 small, the first build's; 1 medium, about twice that, the default; 2 large.
+ * The game asks for text by kind (1 small print, 2 what is said, 3 names) and gets a scale; where a line must
+ * stay one line it is shrunk until it fits, and a block is wrapped and measured, so every size lays out. */
+static uint8_t tsize = 1;
+static int32_t ts(int32_t kind, int32_t cap)
+{
+    static const uint8_t M[3][3] = {{1, 2, 3}, {2, 3, 4}, {3, 4, 4}};
+    int32_t a = M[tsize % 3u][iclamp(kind, 1, 3) - 1];
+    return cap && a > cap ? cap : a;
+}
+#define TLH(a) ((a) * 8)                         /* a line's height at scale a: accents, capitals, a gap */
+/* one line, centred on cx (and kept on the screen), its capitals' top at y, shrunk until no wider than w; the scale used */
+static int32_t gfit(int32_t cx, int32_t y, int32_t w, const char *s, col_t c, int32_t a)
+{
+    int32_t tw;
+    while (a > 1 && gtextw(s, a) > w) a--;
+    tw = gtextw(s, a);
+    gtext(tw >= AC_W - 4 ? (AC_W - tw) / 2 : iclamp(cx - tw / 2, 2, AC_W - 2 - tw), y, s, c, a);
+    return a;
+}
+static int32_t gblock_h(int32_t w, const char *s, int32_t a) { return gtext_wrap(0, 0, w, s, 0, a, TLH(a), -1, 0, 0, 0, 0, 0) * TLH(a); }
+/* a wrapped block with its top at y (room for the first line's accents included); its height */
+static int32_t gblock(int32_t x, int32_t y, int32_t w, const char *s, col_t c, int32_t a, int align)
+{
+    return gtext_wrap(x, y + 2 * a, w, s, c, a, TLH(a), -1, align, 0, 1, 0, 0) * TLH(a);
+}
+/* a block centred at the foot of the screen, on a cleared strip (what is under it would spoil it); its top */
+static int32_t gfoot(int32_t bottom, const char *s, col_t c, col_t bg, int32_t a)
+{
+    int32_t h = gblock_h(232, s, a), y = bottom - h;
+    grect(0, y - 2, AC_W, h + 3, bg);
+    gblock(4, y, 232, s, c, a, 1);
+    return y;
 }
 
 /* ---------------------------------------------------------------- to the screen: only the rows and columns that changed */
@@ -376,13 +414,19 @@ static void ac_input(void)
 
 /* the lights: set what should be lit each frame; only changes reach the panel */
 static uint32_t led_key_want, led_key_dim_want, led_btn_want, led_key_now, led_key_dim_now, led_btn_now;
-static void ac_leds_begin(void) { led_key_want = led_key_dim_want = led_btn_want = 0; }
+static uint8_t led_play_breathe, led_play_now = 255;   /* PLAY: its green light, breathing when it is wanted */
+static void ac_leds_begin(void) { led_key_want = led_key_dim_want = led_btn_want = 0; led_play_breathe = 0; }
 static void ac_leds_end(void)
 {
     uint32_t k;
     for (k = 0; k < AC_NKEY; k++) {
         if ((led_key_want ^ led_key_now) >> k & 1u) fm1_led_key(KEY_LED(k), (int)(led_key_want >> k & 1u));
         if ((led_key_dim_want ^ led_key_dim_now) >> k & 1u) fm1_led_key_glow(KEY_LED(k), (int)(led_key_dim_want >> k & 1u));
+    }
+    {   /* PLAY shows green, never white: lit when asked for, a slow breath when it waits to be pressed */
+        uint8_t m = (led_btn_want >> BTN_PLAY & 1u) ? 1u : led_play_breathe ? 2u : 0u;
+        if (m != led_play_now) { fm1_play_led(m); led_play_now = m; }
+        led_btn_want &= ~(1u << BTN_PLAY);
     }
     for (k = 0; k < 14u; k++)
         if ((led_btn_want ^ led_btn_now) >> k & 1u) fm1_led_key(k, (int)(led_btn_want >> k & 1u));

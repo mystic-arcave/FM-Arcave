@@ -23,6 +23,9 @@ run "a booster, a secret high up, then GLO held: the save wiped (and saved)" sh 
 run "MYSTIC RUN" play run 4 3
 run "THE LIGHT TABLE" play table 4 4
 run "NIGHT BLOOM" play bloom 4 5
+run "NIGHT BLOOM, every spore caught: the rings join one by one" env CATCH=1 sh -c 'tests/run_arcave.sh bloom4 4 5 > build/host/bloom4.log 2>&1 && grep -q "^sound" build/host/bloom4.log'
+run "the small text size" env TSIZE=0 sh -c 'tests/run_arcave.sh story 1 > build/host/story0.log 2>&1 && grep -q "^sound" build/host/story0.log'
+run "the large text size" env TSIZE=2 sh -c 'tests/run_arcave.sh story 1 > build/host/story2.log 2>&1 && grep -q "^sound" build/host/story2.log'
 if [ -f build/emu/fm-arcave.wasm ]; then run "the browser build in Node" node tests/emu_test.mjs; else echo "-- no build/emu: web/emu/build.sh first for the browser test"; fi
 if [ -f build/fm-arcave.fwsc ]; then
     CC="${CC:-cc} -O1 -Wall -Wno-unused-function"

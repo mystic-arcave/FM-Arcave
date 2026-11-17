@@ -11,6 +11,8 @@ cd "$(dirname "$0")/.."
 N="$1"; mkdir -p build/host
 D=; [ -n "$2" ] && D="-DAC_TEST_STORY=$2"
 [ -n "$3" ] && D="$D -DAC_TEST_SCENE=$3"
+[ -n "$CATCH" ] && D="$D -DAC_TEST_CATCH=1"       # CATCH=1: NIGHT BLOOM catches every spore
+[ -n "$TSIZE" ] && D="$D -DAC_TEST_TSIZE=$TSIZE"   # TSIZE=0|1|2: the text size (default: medium, 1)
 cc -O2 -Wall -Wno-unused-function -Wno-unused-variable -Wno-unused-const-variable -Wno-empty-body -DDINGHY_HOST \
    '-Dsection(x)=' -DAPP_VER='"dev"' $D -Ifirmware/hal -Ifirmware/src -Ifirmware/gen -o "build/host/$N" firmware/src/fm_arcave.c
 rm -f build/host/"$N"-*.ppm

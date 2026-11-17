@@ -12,9 +12,9 @@ machines, free play, and a jukebox on the ALGORITHM knob.
 - **Install it on an FM-1:** [the installer](https://mystic-arcave.github.io/FM-Arcave/install/), over USB from Chrome or Edge.
 - **Several FM-1s in time:** [the Link page](https://mystic-arcave.github.io/FM-Arcave/link/), see [docs/LINK.md](docs/LINK.md).
 
-> **Status: 0.1, not yet run on an FM-1.** The game is played in the browser build and in scripted runs on a computer;
-> the FM-1 package builds and passes every check of the build and Dinghy's update-path tests. What only the device
-> can tell is still open: how fast the screen follows, how loud it is, how the knobs feel. Installing it is at your own
+> **Status: 0.2.** 0.1 was installed from the installer page and played on a newer FM-1 (the one with M-VAVE printed
+> under the screen) on 17.11.2026. 0.2 adds the text sizes, PLAY's green light and NIGHT BLOOM's rings arriving one by
+> one; it is tested in the browser build and in scripted runs, not yet on the device. Installing it is at your own
 > risk; the way back is any other firmware's installer, or OCT- held at power-on (the USB rescue).
 
 ## The game
@@ -26,7 +26,7 @@ machines, free play, and a jukebox on the ALGORITHM knob.
 | **The mending** | Three rings of glass, each with a crack: KNOB 1, 2, 3 turn them until the light gets out. Then the dish: sweep the keys (or turn a knob) to spin it, hold a speed for eight beats and that is your tempo. REC, and two bars of keys are your first song. The power comes back with it. |
 | **Free play** | ALGORITHM changes the tune; a banner slides in from the top with its name. The machines: **MYSTIC RUN** (hop crystals on the beat), **THE LIGHT TABLE** (three rings under a needle, an instrument), **NIGHT BLOOM** (new: four knobs turn four petals, a click a twenty-fourth of a turn; catch each spore on its own colour). |
 
-Everywhere: **GLO** opens the settings over the paused game (language, look, LINK, about, replay the intro, start
+Everywhere: **GLO** opens the settings over the paused game (language, text size, look, LINK, about, replay the intro, start
 over); held for a second it warns, and held three seconds more it wipes the whole save. **OCT-** and **OCT+** step through English, German, Danish, French and Spanish. **HOME** leaves a machine.
 
 ## Build it

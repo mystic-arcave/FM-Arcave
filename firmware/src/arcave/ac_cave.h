@@ -12,73 +12,85 @@ static void banner_show(const char *small, const char *big, int note)
 }
 static void banner_draw(int32_t dt)
 {
-    int32_t y, w, t, k;
+    int32_t y, w, t, k, sa = ts(1, 2), sb = ts(2, 4), tw = banner.note ? 196 : 220, ha, hb, h;
     if (!banner.on) return;
     banner.t += dt;
     t = banner.t;
     if (t > 2900) { banner.on = 0; return; }
-    y = t < 260 ? -36 + 36 * ease8(t * 256 / 260) / 256 : t > 2640 ? -36 * ease8((t - 2640) * 256 / 260) / 256 : 0;
-    w = imax(gtextw(banner.b, 2), gtextw(banner.a, 1)) + (banner.note ? 44 : 24);
-    w = imin(w, 236);
-    grect(120 - w / 2, y, w, 34, th->panel);
+    while (sb > 2 && gtextw(banner.b, sb) > tw) sb--;            /* a size down before it takes a second line */
+    ha = banner.a[0] ? TLH(sa) : 0; hb = gblock_h(tw, banner.b, sb); h = ha + hb + 8;
+    y = t < 260 ? -h + h * ease8(t * 256 / 260) / 256 : t > 2640 ? -h * ease8((t - 2640) * 256 / 260) / 256 : 0;
+    w = hb > TLH(sb) ? 236 : imin(236, imax(gtextw(banner.b, sb), gtextw(banner.a, sa)) + (banner.note ? 48 : 24));
+    grect(120 - w / 2, y, w, h, th->panel);
     for (k = 0; k < 5; k++)                      /* a seam of the five colours along its lower edge, running */
-        grect(120 - w / 2 + ((k * w / 5 + t / 12) % w), y + 32, w / 5 - 2, 2, th->caps[k]);
-    gbox(120 - w / 2, y - 1, w, 36, th->rim);
-    if (banner.note) gtext(120 - w / 2 + 8, y + 12 + (tsin((uint32_t)t, 80, 0) >> 13), "\xE2\x99\xAA", th->caps[(t / 300) % 5], 2);
-    gtextc(120 + (banner.note ? 9 : 0), y + 5, banner.a, th->mute, 1);
-    gtextc(120 + (banner.note ? 9 : 0), y + 16, banner.b, th->text, 2);
+        grect(120 - w / 2 + ((k * w / 5 + t / 12) % w), y + h - 2, w / 5 - 2, 2, th->caps[k]);
+    gbox(120 - w / 2, y - 1, w, h + 2, th->rim);
+    if (banner.note) gtext(120 - w / 2 + 8, y + h / 2 - 6 + (tsin((uint32_t)t, 80, 0) >> 13), "\xE2\x99\xAA", th->caps[(t / 300) % 5], 2);
+    if (ha) gfit(120 + (banner.note ? 10 : 0), y + 2 + 2 * sa, tw, banner.a, th->mute, sa);
+    gblock(120 - tw / 2 + (banner.note ? 10 : 0), y + 3 + ha, tw, banner.b, th->text, sb, 1);
 }
 
-/* ---------------------------------------------------------------- the dialogue box */
-static struct { const char *name, *text, *page; int32_t shown, total, t; uint8_t on, top; } dlg;
-static void dlg_page_len(void)
+/* ---------------------------------------------------------------- the dialogue box
+ * It keeps which line it is saying, not the words: when the language changes mid-sentence the box says the same
+ * page in the new one. A page too long for the box (larger text) is shown a boxful at a time. */
+static struct { int32_t shown, total, t, rest; uint16_t name_id, text_id; uint8_t on, top, page, lang_seen; uint16_t win; } dlg;
+static char dlg_buf[220];
+static void dlg_layout(int draw, int32_t y0)     /* the box's words from where it stands; fills total and rest */
 {
-    const char *p = dlg.page;
-    dlg.total = 0;
-    while (*p && *p != '|') { utf8_next(&p); dlg.total++; }
+    const char *p = TX[dlg.text_id][lang], *rest = 0;
+    int32_t n = 0, k = dlg.page, sc = ts(2, 4), lines;
+    while (k > 0 && *p) { if (*p == '|') k--; p++; }
+    for (k = 0; k < dlg.win && *p && *p != '|'; k++) p++;
+    while (*p && *p != '|' && n < 218) dlg_buf[n++] = *p++;
+    dlg_buf[n] = 0;
+    lines = gtext_wrap(12, y0, 216, dlg_buf, th->text, sc, TLH(sc), draw ? dlg.shown : -1, 0, &dlg.total, draw, sc >= 3 ? 4 : 6, &rest);
+    dlg.rest = *rest ? (int32_t)(rest - dlg_buf) : 0;
+    (void)lines;
 }
-static void dlg_open(const char *name, const char *text)
+static void dlg_open(int name_id, int text_id)
 {
-    dlg.name = name; dlg.text = text; dlg.page = text; dlg.shown = 0; dlg.t = 0; dlg.on = 1;
-    dlg_page_len();
+    dlg.name_id = (uint16_t)name_id; dlg.text_id = (uint16_t)text_id; dlg.page = 0; dlg.win = 0;
+    dlg.shown = 0; dlg.t = 0; dlg.on = 1; dlg.lang_seen = lang;
+    dlg_layout(0, 0);
 }
 /* returns 1 while the box is open (the scene under it should hold still) */
 static int dlg_tick(int32_t dt)
 {
     int32_t was;
     if (!dlg.on) return 0;
+    if (dlg.lang_seen != lang) { dlg.lang_seen = lang; dlg.win = 0; dlg.t = 100000; }   /* the same page, in the new language, whole */
+    dlg_layout(0, 0);
     dlg.t += dt;
     was = dlg.shown;
     dlg.shown = imin(dlg.total, dlg.t * 34 / 1000);
-    if (dlg.shown > was && !(dlg.shown & 1)) sfx(57 + (int32_t)(ihash((uint32_t)(dlg.shown + dlg.total * 31)) * 5u >> 16) * 2, 0, 70, W_SQUARE, 1300, 2, 30);
+    if (dlg.shown > was && !(dlg.shown & 1) && dlg.t < 90000) sfx(57 + (int32_t)(ihash((uint32_t)(dlg.shown + dlg.total * 31)) * 5u >> 16) * 2, 0, 70, W_SQUARE, 1300, 2, 30);
     if (BDOWN(BTN_PLAY) || (in.kdown && dlg.shown >= dlg.total)) {
         if (dlg.shown < dlg.total) dlg.t = 100000;
+        else if (dlg.rest) { dlg.win = (uint16_t)(dlg.win + dlg.rest); dlg.t = 0; dlg.shown = 0; snd_ui(72); }
         else {
-            const char *p = dlg.page;
-            while (*p && *p != '|') p++;
-            if (*p == '|') { dlg.page = p + 1; dlg.t = 0; dlg.shown = 0; dlg_page_len(); snd_ui(72); }
+            const char *p = TX[dlg.text_id][lang];
+            int32_t k = dlg.page + 1;
+            while (k > 0 && *p) { if (*p == '|') k--; p++; }
+            if (k == 0) { dlg.page++; dlg.win = 0; dlg.t = 0; dlg.shown = 0; snd_ui(72); }
             else { dlg.on = 0; snd_ui(67); }
         }
     }
-    if (ipulse((uint32_t)dlg.t, 900) > 128 && dlg.shown >= dlg.total) led_btn_want |= 1u << BTN_PLAY;
+    if (dlg.shown >= dlg.total) led_play_breathe = 1;
     return 1;
 }
 static void dlg_draw(void)
 {
-    char buf[200];
-    const char *p = dlg.page;
-    int32_t n = 0, lines, h, y;
+    int32_t sc = ts(2, 4), sn = ts(1, 2), lines, h, y;
     if (!dlg.on) return;
-    while (*p && *p != '|' && n < 198) buf[n++] = *p++;
-    buf[n] = 0;
-    lines = gtext_wrap(0, 0, 216, buf, 0, 2, 15, -1, 0, 0, 0);
-    h = 26 + lines * 15;
+    dlg_layout(0, 0);
+    lines = gtext_wrap(0, 0, 216, dlg_buf, 0, sc, TLH(sc), -1, 0, 0, 0, sc >= 3 ? 4 : 6, 0);
+    h = 6 + TLH(sn) + 2 + lines * TLH(sc) + 6;
     y = dlg.top ? 4 : 236 - h;
     grect(4, y, 232, h, th->panel);
     gbox(4, y, 232, h, th->rim);
-    gtext(12, y + 7, dlg.name, th->caps[3], 1);
-    gtext_wrap(12, y + 19, 216, buf, th->text, 2, 15, dlg.shown, 0, 0, 1);
-    if (dlg.shown >= dlg.total && ipulse((uint32_t)dlg.t, 900) > 128) gtextr(228, y + 7, "PLAY \xE2\x86\x92", th->pad, 1);
+    gtext(12, y + 5 + 2 * sn, TR(dlg.name_id), th->caps[3], sn);
+    dlg_layout(1, y + 6 + TLH(sn) + 2 + 2 * sc);
+    if (dlg.shown >= dlg.total && ipulse((uint32_t)dlg.t, 900) > 128) gtextr(228, y + 5 + 2 * sn, dlg.rest ? "PLAY \xE2\x86\x93" : "PLAY \xE2\x86\x92", th->pad, sn);
 }
 
 /* ---------------------------------------------------------------- the cave */
@@ -269,7 +281,7 @@ static int cave_tick(int32_t dt)
         if (cv.psst > 1500 && (cv.psst % 2600) < dt && hx < CV_HAT_X - 130) { sfx(69, 0, 90, W_SQUARE, 1500, 2, 220); sfx(74, 110, 160, W_SQUARE, 1500, 2, 220); }
         if (hx > CV_HAT_X - 46 && cv.g) {
             cv.met = 1; cv.vx = 0;
-            if (story < 2) { story = 2; dlg_open(TR(T_HAT), TR(T_HAT_HELLO)); }
+            if (story < 2) { story = 2; dlg_open(T_HAT, T_HAT_HELLO); }
         }
     }
     /* what is in reach */
@@ -277,9 +289,9 @@ static int cave_tick(int32_t dt)
     if (iabs(hx - CV_HAT_X) < 40 && hy > CV_GROUND - 40) cv.near = 1;
     if (iabs(hx - CV_JUKE_X) < 30 && hy > CV_GROUND - 40) cv.near = 2;
     for (i = 0; i < 3; i++) if (iabs(hx - CV_MACH[i][0]) < 26 && iabs(hy - (CV_MACH[i][1] - 8)) < 22) cv.near = (uint8_t)(3 + i);
-    if (cv.near && ipulse((uint32_t)cv.t, 1400) > 100) led_btn_want |= 1u << BTN_PLAY;
+    if (cv.near) led_play_breathe = 1;
     if (BDOWN(BTN_PLAY) && cv.near) {
-        if (cv.near == 1) dlg_open(TR(T_HAT), TR(story < 4 ? T_HAT_REMIND : T_HAT_FREE));
+        if (cv.near == 1) dlg_open(T_HAT, story < 4 ? T_HAT_REMIND : T_HAT_FREE);
         else if (cv.near == 2) { if (story < 4) act = CVA_LAMP; else snd_ui(79); }
         else if (story >= 4) act = CVA_M1 + cv.near - 3;
         else { banner_show("", TR(T_NOPOWER), 0); sfx_ex(43, 0, 260, W_SAW, 2400, 2, 120, 0, 0, 65300); }
@@ -449,20 +461,22 @@ static void cave_draw(void)
               th->rock, th->rock_rim, th->dark, th->moss, th->eye, th->pupil);
     /* words */
     if (!cv.met && cv.psst > 1200 && (cv.x >> 8) < CV_HAT_X - 130) {
-        int32_t a = 120 + ipulse(tm, 1300) / 2, w = gtextw(TR(T_PSST), 1) + 22;
+        int32_t a = 120 + ipulse(tm, 1300) / 2, sc = ts(1, 3), w, h;
+        while (sc > 1 && gtextw(TR(T_PSST), sc) + 12 + 8 * sc > 236) sc--;
+        w = gtextw(TR(T_PSST), sc) + 12 + 8 * sc; h = 5 * sc + 10;
         galpha(a);
-        grect(238 - w, 150, w, 15, th->panel); gbox(238 - w, 150, w, 15, th->pad);
-        gtext(244 - w, 155, TR(T_PSST), th->text, 1);
-        gtext(238 - 10 + (tsin(tm, 60, 0) >> 13), 155, "\xE2\x86\x92", th->pad, 1);
+        grect(238 - w, 150, w, h, th->panel); gbox(238 - w, 150, w, h, th->pad);
+        gtext(244 - w, 155, TR(T_PSST), th->text, sc);
+        gtext(238 - 7 * sc - 2 + (tsin(tm, 60, 0) >> 13), 155, "\xE2\x86\x92", th->pad, sc);
         galpha(256);
     }
     if (cv.near && !dlg.on) {
         const char *s = cv.near == 1 ? TR(T_TALK) : cv.near == 2 ? (on ? "" : TR(T_FIX)) : TR(T_START);
         int32_t px = SX(cv.x >> 8), py = SY(cv.y >> 8) - 30;
-        if (cv.near >= 3) gtextc(SX(CV_MACH[cv.near - 3][0]), SY(CV_MACH[cv.near - 3][1]) - 62, MACH_NAME[cv.near - 3], on ? th->caps[(cv.near - 3) * 2 % 5] : th->mute, 1);
+        if (cv.near >= 3) gfit(SX(CV_MACH[cv.near - 3][0]), SY(CV_MACH[cv.near - 3][1]) - 58 - 5 * ts(1, 3), 232, MACH_NAME[cv.near - 3], on ? th->caps[(cv.near - 3) * 2 % 5] : th->mute, ts(1, 3));
         if (cv.near >= 3 && !on) s = TR(T_NOPOWER);
         galpha(160 + ipulse(tm, 1400) * 96 / 256);
-        gtextc(iclamp(px, gtextw(s, 1) / 2 + 3, 237 - gtextw(s, 1) / 2), py, s, th->text, 1);
+        gfit(px, py + 6 - 6 * ts(1, 3), 232, s, th->text, ts(1, 3));
         galpha(256);
     }
     if (cv.power_t > 0) { galpha(cv.power_t * 256 / 1600); grect(0, 0, 240, 240, th->pad); galpha(256); }

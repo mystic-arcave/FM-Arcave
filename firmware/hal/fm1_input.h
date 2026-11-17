@@ -105,6 +105,23 @@ static uint8_t fm1_led[FM1_NCOL];
 #endif
 #define FM1__NS_T(ns) (((uint32_t)(ns) * FM1_TICKS_PER_US + 500u) / 1000u)   /* ns -> TIMER4 ticks */
 static uint8_t fm1_led_dim[FM1_NCOL];   /* same layout as fm1_led: the glow */
+/* (FM ARCAVE) breathing LEDs, same layout: dark, up to lit and back, about 2.2 s a breath, all in step. A level of
+ * 64 is made of lit frames spread evenly (a frame is 1.1 ms: nothing to see flicker), the level the square of a
+ * triangle so the eye sees it rise and fall evenly. fm1__br_lit says whether this frame is one of the lit ones. */
+static uint8_t fm1_led_breath[FM1_NCOL];
+static uint16_t fm1__br_ph;
+static uint8_t fm1__br_acc, fm1__br_lit;
+static void fm1__breath_frame(void)              /* once a frame, from the scan */
+{
+    uint32_t tri = (fm1__br_ph >> 1) & 1023u, lvl;
+    fm1__br_ph++;
+    if (tri > 511u) tri = 1023u - tri;
+    lvl = (tri * tri) >> 12;                     /* 0..63 */
+    fm1__br_acc = (uint8_t)(fm1__br_acc + lvl);
+    fm1__br_lit = fm1__br_acc >= 64u;
+    if (fm1__br_lit) fm1__br_acc = (uint8_t)(fm1__br_acc - 64u);
+}
+#define FM1__LIT(c) (fm1_led[c] | (fm1__br_lit ? fm1_led_breath[c] : 0u))
 static uint8_t fm1_led_bg[FM1_NCOL];    /* same layout: the backlight (labels readable in the dark) */
 static volatile uint16_t fm1_led_bg_ns; /* the backlight pulse a frame (ns), 0 = off (menu LIGHTS) */
 
@@ -291,7 +308,7 @@ static void fm1_input_tick(void)
 {
     uint32_t p = fm1__tick_col, n = p + 1u == FM1_NCOL ? 0u : p + 1u, i;
     uint32_t w = 0xFFFFu ^ (1u << n) ^ (n < 2u ? 1u << (11u + n) : 0u);
-    uint32_t lit = fm1_led[p], a = fm1_led_dim[p] & ~lit, b = fm1_led_bg[p] & ~lit & ~a;
+    uint32_t lit = FM1__LIT(p), a = fm1_led_dim[p] & ~lit, b = fm1_led_bg[p] & ~lit & ~a;
     uint32_t ta = a ? FM1__NS_T(FM1_GLOW_NS) : 0u, tb = b ? FM1__NS_T(fm1_led_bg_ns) : 0u;
     uint32_t tmax = ta > tb ? ta : tb;
     fm1__led_lines(0);
@@ -313,7 +330,9 @@ static void fm1_input_tick(void)
     } else {
         fm1__sr_word(w);
     }
-    fm1__led_lines(fm1_led[n]);
+    if (n == 0u)
+        fm1__breath_frame();                       /* (FM ARCAVE) a new frame: is it one of the breath's lit ones */
+    fm1__led_lines(FM1__LIT(n));
     fm1__tick_col = (uint8_t)n;
     fm1__keys(p);                                  /* its keys now: no wait for the frame's end */
     if (n == 0u)
