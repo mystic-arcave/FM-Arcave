@@ -133,7 +133,7 @@ static void arcave_frame(void)
     if (algo_quiet > 0) algo_quiet -= dt;
 
     /* OCT- and OCT+ step through the languages, anywhere */
-    if (BDOWN(BTN_OCT_DOWN) || BDOWN(BTN_OCT_UP)) {
+    if ((BDOWN(BTN_OCT_DOWN) || BDOWN(BTN_OCT_UP)) && !mn.on) {   /* (in the settings OCT+ confirms and OCT- steps back) */
         set_lang(lang + (BDOWN(BTN_OCT_UP) ? 1 : L_N - 1));
         lang_touched = 1;
         if (tip_t > 0) tip_t = imax(tip_t, 2600);                    /* the tip is up: it shows the new language a while longer */
@@ -159,6 +159,11 @@ static void arcave_frame(void)
         r = menu_tick(dt);
         if (r == MA_REPLAY) { replay = 1; scene = SC_INTRO; intro_reset(); mus_set(MUS_INTRO, 0); sy_drone_want = 0; sy_music_want = 256; }
         else if (r == MA_RESET) story_reset();
+        else if (r == MA_SKIP) {                 /* into the cave as if PLAY had just been pressed at its mouth: Rock at the
+                                                    entrance, the fade in; the story stays where it stands */
+            if (story < 1u) story = 1;
+            replay = 0; sy_rumble_want = 0; dlg.on = 0; to_cave(1); save_soon();
+        }
         else if (r == MA_CHANGED) save_soon();
         sy_rumble_want = 0;
     } else {

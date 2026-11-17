@@ -26,8 +26,8 @@ machines, free play, and a jukebox on the ALGORITHM knob.
 | **The mending** | Three rings of glass, each with a crack: KNOB 1, 2, 3 turn them until the light gets out. Then the dish: sweep the keys (or turn a knob) to spin it, hold a speed for eight beats and that is your tempo. REC, and two bars of keys are your first song. The power comes back with it. |
 | **Free play** | ALGORITHM changes the tune; a banner slides in from the top with its name. The machines: **MYSTIC RUN** (hop crystals on the beat), **THE LIGHT TABLE** (three rings under a needle, an instrument), **NIGHT BLOOM** (new: four knobs turn four petals, a click a twenty-fourth of a turn; catch each spore on its own colour). |
 
-Everywhere: **GLO** opens the settings over the paused game (language, text size, look, LINK, about, replay the intro, start
-over); held for a second it warns, and held three seconds more it wipes the whole save. **OCT-** and **OCT+** step through English, German, Danish, French and Spanish. **HOME** leaves a machine.
+Everywhere: **GLO** opens the settings over the paused game (language, text size, look, LINK, about, replay the intro, skip to the
+Mystic Arcave, start over; in there PLAY or OCT+ confirms); held for a second it warns, and held three seconds more it wipes the whole save. **OCT-** and **OCT+** step through English, German, Danish, French and Spanish. **HOME** leaves a machine.
 
 ## Build it
 

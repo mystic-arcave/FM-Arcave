@@ -1,9 +1,10 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /* The settings, on GLO: the game holds still under a sheet of dark glass. SELECT (or KNOB 1) moves, PRESETS (or
- * KNOB 2, or PLAY) changes; GLO closes. ABOUT tells what the Mystic Arcave is. */
+ * KNOB 2) changes; PLAY or OCT+ confirms or steps on (OCT- steps back: in here they do not change the language);
+ * GLO closes. ABOUT tells what the Mystic Arcave is. */
 
-enum { MI_LANG, MI_TEXT, MI_LOOK, MI_LINK, MI_ABOUT, MI_REPLAY, MI_RESET, MI_N };
-enum { MA_NONE, MA_REPLAY, MA_RESET, MA_CHANGED };
+enum { MI_LANG, MI_TEXT, MI_LOOK, MI_LINK, MI_ABOUT, MI_REPLAY, MI_SKIP, MI_RESET, MI_N };
+enum { MA_NONE, MA_REPLAY, MA_RESET, MA_CHANGED, MA_SKIP };
 static struct { uint8_t on, sel, about, sure; int32_t t, win, rest; } mn;
 #ifndef APP_VER
 #define APP_VER "dev"
@@ -16,10 +17,11 @@ static void set_look(int l) { look_i = (uint8_t)(l & 1); th = &LOOKS[look_i]; }
 static int menu_tick(int32_t dt)
 {
     int32_t mv = in.enc[ENC_SELECT] + in.enc[ENC_KNOB1], ch = in.enc[ENC_PRESETS] + in.enc[ENC_KNOB2];
-    int act = MA_NONE;
+    int act = MA_NONE, ok = BDOWN(BTN_PLAY) || BDOWN(BTN_OCT_UP);
     mn.t += dt;
+    if (BDOWN(BTN_OCT_DOWN)) ch -= 1;
     if (mn.about) {                              /* PLAY: on, a screenful at a time, then the next part; GLO: back */
-        if (BDOWN(BTN_PLAY) || ch > 0) {
+        if (ok || ch > 0) {
             snd_ui(72);
             if (mn.rest) mn.win += mn.rest;
             else { mn.about++; mn.win = 0; if (mn.about > 4) mn.about = 0; }
@@ -31,7 +33,7 @@ static int menu_tick(int32_t dt)
     }
     if (BDOWN(BTN_GLO) || BDOWN(BTN_HOME)) { mn.on = 0; snd_ui(67); return MA_NONE; }   /* (arcave.c: this press does not reopen it) */
     if (mv) { mn.sel = (uint8_t)iclamp(mn.sel + (mv > 0 ? 1 : -1), 0, MI_N - 1); mn.sure = 0; snd_ui(64 + mn.sel); }
-    if (BDOWN(BTN_PLAY) && !ch) ch = 1;
+    if (ok && !ch) ch = 1;
     if (ch) {
         int d = ch > 0 ? 1 : -1;
         switch (mn.sel) {
@@ -40,8 +42,9 @@ static int menu_tick(int32_t dt)
         case MI_LOOK: set_look(look_i + 1); act = MA_CHANGED; break;
         case MI_LINK: link_id = (uint8_t)((link_id + 5 + d) % 5); act = MA_CHANGED; break;
         case MI_ABOUT: mn.about = 1; mn.win = 0; break;
-        case MI_REPLAY: if (BDOWN(BTN_PLAY)) { mn.on = 0; act = MA_REPLAY; } break;
-        case MI_RESET: if (BDOWN(BTN_PLAY)) { if (mn.sure) { mn.on = 0; act = MA_RESET; } else mn.sure = 1; } break;
+        case MI_REPLAY: if (ok) { mn.on = 0; act = MA_REPLAY; } break;
+        case MI_SKIP: if (ok) { mn.on = 0; act = MA_SKIP; } break;
+        case MI_RESET: if (ok) { if (mn.sure) { mn.on = 0; act = MA_RESET; } else mn.sure = 1; } break;
         }
         snd_ui(79);
     }
@@ -50,7 +53,7 @@ static int menu_tick(int32_t dt)
 }
 static void menu_draw(void)
 {
-    static const int LAB[MI_N] = {T_LANGUAGE, T_TEXTSIZE, T_LOOK, T_LINK, T_ABOUT, T_REPLAY, T_RESET};
+    static const int LAB[MI_N] = {T_LANGUAGE, T_TEXTSIZE, T_LOOK, T_LINK, T_ABOUT, T_REPLAY, T_SKIP, T_RESET};
     static const int LKS[4] = {T_LINK_ALONE, T_LINK_FOLLOW, T_LINK_LEAD, T_LINK_CLOCK};
     int32_t i, y, sh = ts(2, 4), sf = ts(1, 2), rh, vis, first, y0, foot;
     gveil(th->bg, 25);
@@ -76,7 +79,7 @@ static void menu_draw(void)
     gfit(120, foot + 2 * sf, 232, TR(T_CLOSE), th->pad, sf);
     foot -= TLH(sf);
     gfit(120, foot + 2 * sf, 232, mn.sel == MI_LINK && link_id ? TR(LKS[lk.state]) : mn.sel == MI_RESET && mn.sure ? TR(T_SURE)
-         : "SELECT \xE2\x86\x91\xE2\x86\x93  PRESETS \xE2\x86\x90\xE2\x86\x92", mn.sel == MI_RESET && mn.sure ? th->caps[0] : mn.sel == MI_LINK && link_id ? th->caps[3] : th->mute, sf);
+         : "SELECT \xE2\x86\x91\xE2\x86\x93   OCT+ OK", mn.sel == MI_RESET && mn.sure ? th->caps[0] : mn.sel == MI_LINK && link_id ? th->caps[3] : th->mute, sf);
     /* the lines: as many as fit, the list moving under the selected one */
     rh = TLH(sh) + 6; vis = imax(1, (foot - 4 - y0) / rh);
     first = iclamp(mn.sel - vis / 2, 0, imax(0, MI_N - vis));

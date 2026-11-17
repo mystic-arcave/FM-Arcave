@@ -1,0 +1,15 @@
+# from the title: GLO, SELECT down to SKIP TO THE MYSTIC ARCAVE, OCT+ confirms: the cave; then OCT+ changes the language again
+2000 btn 7
+2400 enc 0 1
+2600 enc 0 1
+2800 enc 0 1
+3000 enc 0 1
+3200 enc 0 1
+3400 enc 0 1
+3700 shot
+3800 btn 1
+4200 shot
+6500 shot
+7000 btn 1
+7600 shot
+8000 end

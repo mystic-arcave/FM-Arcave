@@ -18,6 +18,7 @@ run "the intro: title, wake, roll, pads, the last stretch" play intro
 run "the title in each language" play lang
 run "into the cave, the Hat, the jukebox, the settings" play story 1
 run "the rings, the dish, a song kept, the power back (and saved)" sh -c 'tests/run_arcave.sh mend 2 1 > build/host/mend.log 2>&1 && grep -q "settings 0 saved" build/host/mend.log'
+run "the settings: skip to the Mystic Arcave, OCT+ confirms (and saved)" sh -c 'tests/run_arcave.sh skip > build/host/skip.log 2>&1 && grep -q "settings 0 saved" build/host/skip.log'
 run "the lit cave, a tune changed" play lit 4
 run "a booster, a secret high up, then GLO held: the save wiped (and saved)" sh -c 'tests/run_arcave.sh boost 4 > build/host/boost.log 2>&1 && grep -q "settings 0 saved" build/host/boost.log'
 run "MYSTIC RUN" play run 4 3
