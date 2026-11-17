@@ -1,0 +1,85 @@
+# into the cave, the Hat, the rings, the dish, the power back, the jukebox, the settings
+600 btn 12
+3600 shot
+3800 enc 2 8
+4050 enc 2 8
+4300 enc 2 8
+4550 enc 2 8
+4800 enc 2 8
+5050 enc 2 8
+5300 enc 2 8
+5550 enc 2 8
+5800 enc 2 8
+6050 enc 2 8
+6300 enc 2 8
+6550 enc 2 8
+6800 enc 2 8
+7050 enc 2 8
+7300 enc 2 8
+8400 btn 12
+9100 btn 12
+9800 btn 12
+10500 btn 12
+11200 btn 12
+11900 btn 12
+12600 btn 12
+13300 btn 12
+14000 shot
+14200 enc 6 -5
+14450 enc 6 -5
+14700 enc 6 -5
+16600 shot
+16700 btn 12
+17600 shot
+17800 enc 4 -1
+18100 enc 3 -5
+19200 shot
+19400 enc 2 2
+19900 shot
+21200 shot
+23800 shot
+24100 enc 2 4
+24250 enc 2 4
+24400 enc 2 4
+26800 shot
+31800 shot
+33300 btn 13
+35800 shot
+37500 keys 8
+37650 keys 0
+38000 keys 512
+38150 keys 0
+38500 keys 16384
+38650 keys 0
+39000 keys 1048576
+39150 keys 0
+39300 shot
+39500 keys 4096
+39650 keys 0
+40000 keys 128
+40150 keys 0
+42800 shot
+43100 btn 12
+43900 shot
+45800 shot
+47300 shot
+47500 btn 12
+48200 btn 12
+48900 btn 12
+49600 btn 12
+50300 btn 12
+51000 btn 12
+51700 btn 12
+52400 btn 12
+53800 enc 1 1
+54300 shot
+55800 enc 1 1
+56300 shot
+56800 btn 7
+57300 shot
+57500 enc 0 3
+57700 btn 12
+58100 shot
+58300 end
+6700 shot
+7600 shot

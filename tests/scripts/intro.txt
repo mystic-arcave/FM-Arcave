@@ -1,0 +1,39 @@
+# title, wake, roll, jump
+1500 shot
+3500 shot
+7500 shot
+8000 btn 12
+9200 shot
+12000 shot
+12100 enc 2 6
+12400 enc 3 6
+12700 enc 0 6
+13000 enc 6 6
+13300 enc 1 6
+13600 enc 2 6
+13900 enc 2 6
+14200 enc 2 6
+14500 keys 0x4000
+14600 keys 0
+14800 shot
+15200 enc 2 8
+15800 enc 2 8
+16400 enc 2 8
+17000 enc 2 8
+17600 enc 2 8
+18200 enc 2 8
+18800 enc 2 8
+19000 shot
+19500 btn 11
+20500 enc 2 10
+21500 enc 2 10
+22500 enc 2 10
+23500 enc 2 10
+24000 shot
+24500 enc 2 10
+25500 enc 2 10
+26500 enc 2 10
+28000 shot
+28100 btn 10
+28400 shot
+29000 end

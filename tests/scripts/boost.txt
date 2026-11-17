@@ -1,0 +1,52 @@
+# the left booster, the high ledge and its sleeper, the cap toward the chimes; then GLO held: the save wiped
+600 btn 12
+3200 shot
+3600 enc 2 6
+3850 enc 2 6
+4100 enc 2 6
+4350 enc 2 6
+4600 enc 2 6
+5000 shot
+5200 enc 2 -8
+5400 enc 2 -8
+5600 enc 2 -8
+5800 enc 2 -8
+6000 enc 2 -8
+6200 enc 2 -8
+6400 enc 2 -8
+6400 shot
+6600 enc 2 -8
+6800 enc 2 -8
+7000 enc 2 -8
+7000 shot
+7200 enc 2 -8
+7400 enc 2 -8
+7600 shot
+8400 shot
+9200 shot
+9400 enc 2 8
+9600 enc 2 8
+9800 enc 2 8
+10000 enc 2 8
+10200 enc 2 8
+10200 shot
+10400 enc 2 8
+10600 enc 2 8
+10800 enc 2 8
+10800 shot
+11000 enc 2 8
+11200 enc 2 8
+11400 enc 2 8
+11400 shot
+11600 enc 2 8
+11800 enc 2 8
+12000 enc 2 8
+12000 shot
+12800 shot
+14000 btndown 7
+15400 shot
+17200 shot
+18600 btnup 7
+19000 shot
+20500 shot
+21000 end

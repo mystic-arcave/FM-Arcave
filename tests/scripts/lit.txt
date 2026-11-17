@@ -1,0 +1,37 @@
+# the cave with the power back: the jukebox, a tune changed, toward the machines
+600 btn 12
+2600 enc 2 8
+2850 enc 2 8
+3100 enc 2 8
+3350 enc 2 8
+3600 enc 2 8
+3850 enc 2 8
+4100 enc 2 8
+4300 shot
+4350 enc 2 8
+4600 enc 2 8
+4850 enc 2 8
+5100 enc 2 8
+5200 shot
+6000 shot
+7000 enc 1 1
+7600 shot
+8400 shot
+10500 enc 2 8
+10750 enc 2 8
+11000 enc 2 8
+11000 keys 16777216
+11100 keys 0
+11250 enc 2 8
+11500 enc 2 8
+11600 shot
+11750 enc 2 8
+12000 enc 2 8
+12250 enc 2 8
+12500 enc 2 8
+12500 shot
+12750 enc 2 8
+13000 enc 2 8
+13250 enc 2 8
+13800 shot
+14000 end

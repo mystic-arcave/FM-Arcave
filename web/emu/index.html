@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FM ARCAVE in the browser</title>
+<meta name="description" content="Play FM ARCAVE, the Mystic Arcave game for the FM-1 synthesizer, in your browser.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Silkscreen&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../site.css">
+<style>
+main{padding:28px 0 0;display:grid;gap:22px}
+.stage{position:relative;max-width:1000px;margin:0 auto;width:100%}
+#on{position:absolute;inset:0;display:grid;place-items:center;background:rgba(0,0,0,.72);border:0;cursor:pointer;border-radius:4%/6.4%;color:var(--text)}
+#on[hidden]{display:none}
+#on span{font:400 15px/1 var(--pix);letter-spacing:.1em;border:1px solid var(--opal);color:var(--opal);padding:16px 22px;background:#000}
+#on:hover span{background:var(--opal);color:#000}
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:center}
+.bar .btn{padding:10px 14px;font-size:11px}
+.help{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:8px 40px;max-width:1000px;margin:0 auto;width:100%}
+.help div{display:flex;justify-content:space-between;gap:16px;border-bottom:1px solid var(--line);padding:9px 0;font-size:15px;color:var(--mute)}
+.help div b{font-weight:400;color:var(--text)}
+#status{text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="top">
+  <a class="name" href="../">FM ARCAVE</a>
+  <nav><a href="./" aria-current="page">PLAY</a><a href="../install/">INSTALL</a><a href="../link/">LINK</a><a href="https://github.com/mystic-arcave/FM-Arcave">SOURCE</a></nav>
+</header>
+<main>
+  <div class="stage">
+    <div id="fm"></div>
+    <button id="on" aria-label="Switch on"><span>SWITCH ON</span></button>
+  </div>
+  <div id="status" class="status" role="status">The same code that runs on the FM-1, version @VERSION@.</div>
+  <div class="bar">
+    <button class="btn" id="midi" aria-pressed="false">MIDI: OFF</button>
+    <button class="btn" id="mute" aria-pressed="false">SOUND: ON</button>
+    <button class="btn" id="wipe">FORGET THE SAVE</button>
+  </div>
+  <div class="help" aria-label="Keys">
+    <div><b>Roll</b><span><kbd>←</kbd> <kbd>→</kbd> turn the lit knob</span></div>
+    <div><b>Which knob</b><span><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>4</kbd>, or scroll over one</span></div>
+    <div><b>PLAY</b><span><kbd>Space</kbd></span></div>
+    <div><b>Jump, play notes</b><span><kbd>Z</kbd> to <kbd>/</kbd>, <kbd>Q</kbd> to <kbd>O</kbd></span></div>
+    <div><b>The jukebox (ALGORITHM)</b><span><kbd>Shift</kbd> <kbd>←</kbd> <kbd>→</kbd></span></div>
+    <div><b>Settings (GLO)</b><span><kbd>G</kbd> or <kbd>Esc</kbd></span></div>
+    <div><b>Language (OCT- OCT+)</b><span><kbd>[</kbd> <kbd>]</kbd></span></div>
+    <div><b>HOME, REC</b><span><kbd>A</kbd>, <kbd>P</kbd></span></div>
+    <div><b>SELECT, PRESETS</b><span><kbd>↑</kbd> <kbd>↓</kbd>, with <kbd>Shift</kbd></span></div>
+  </div>
+</main>
+<footer class="foot"><p>FM ARCAVE is free software, GPL-3.0-only. The picture and the sound here come from the firmware's own code, built for the browser. Your progress is kept in this browser.</p></footer>
+</div>
+<script type="module">
+import { mountFm1, FM1_CSS } from "./panel.js";
+document.head.appendChild(Object.assign(document.createElement("style"), { textContent: FM1_CSS }));
+const $ = (id) => document.getElementById(id);
+const SAVE = "fm-arcave-emu-save";
+let node = null, ac = null, gain = null, midi = null, midiOn = false;
+const send = (m) => { if (node) node.port.postMessage(m); };
+const fm = mountFm1($("fm"), {
+  buttons: (mask) => send({ type: "buttons", mask }),
+  keys: (mask) => send({ type: "keys", mask }),
+  enc: (id, n) => send({ type: "enc", id, n }),
+});
+addEventListener("keydown", (e) => { if (e.target.closest("button,a,input") && (e.code === "Space" || e.code === "Enter")) return; if (fm.key(e, true)) e.preventDefault(); });
+addEventListener("keyup", (e) => { if (fm.key(e, false)) e.preventDefault(); });
+addEventListener("blur", () => fm.releaseAll());
+document.addEventListener("visibilitychange", () => send({ type: "hidden", on: document.hidden }));
+
+async function start() {
+  if (node) return;
+  $("status").textContent = "Starting...";
+  try {
+    ac = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 44100, latencyHint: "interactive" });
+    await ac.audioWorklet.addModule("worklet.js");
+    const wasm = await (await fetch("fm-arcave.wasm")).arrayBuffer();
+    const n = new AudioWorkletNode(ac, "fm-arcave", { numberOfInputs: 0, outputChannelCount: [2] });
+    gain = ac.createGain(); n.connect(gain); gain.connect(ac.destination);
+    let store = null;
+    try { const s = localStorage.getItem(SAVE); if (s) store = Uint8Array.from(atob(s), (c) => c.charCodeAt(0)); } catch (e) {}
+    n.port.onmessage = (e) => {
+      const m = e.data;
+      if (m.type === "ready") { node = n; $("on").hidden = true; $("status").textContent = "The same code that runs on the FM-1, version @VERSION@."; window.__fm = { n, last: null }; }
+      else if (m.type === "error") $("status").textContent = "Could not start: " + m.text;
+      else if (m.type === "frame") {
+        if (m.fb) fm.screen(m.fb);
+        fm.leds(m.leds[0], m.leds[1], m.leds[2]);
+        if (window.__fm) window.__fm.last = { state: m.state, clock: m.clock, bpm: m.bpm };
+        if (m.store) { try { localStorage.setItem(SAVE, btoa(String.fromCharCode(...m.store))); } catch (e) {} }
+        if (midiOn && midi) for (const v of m.midi) for (const o of midi.outputs.values()) o.send([v & 255, v >> 8 & 127, v >> 16 & 127]);
+      }
+    };
+    n.port.postMessage({ type: "load", wasm, store }, [wasm]);
+    if (ac.state !== "running") await ac.resume();
+  } catch (err) { $("status").textContent = "Could not start: " + err; }
+}
+$("on").addEventListener("click", start);
+$("mute").addEventListener("click", () => {
+  const off = $("mute").getAttribute("aria-pressed") !== "true";
+  $("mute").setAttribute("aria-pressed", off); $("mute").textContent = off ? "SOUND: OFF" : "SOUND: ON";
+  if (gain) gain.gain.value = off ? 0 : 1;
+});
+$("wipe").addEventListener("click", () => { try { localStorage.removeItem(SAVE); } catch (e) {} location.reload(); });
+// MIDI in and out: notes are not played, but ARCAVE LINK's messages and a MIDI clock are followed, as on the FM-1
+$("midi").addEventListener("click", async () => {
+  if (!midi) {
+    try { midi = await navigator.requestMIDIAccess(); } catch (e) { $("status").textContent = "This browser gave no MIDI access."; return; }
+    const hook = () => { for (const i of midi.inputs.values()) i.onmidimessage = (e) => { if (midiOn && e.data.length <= 3 && e.data[0] !== 0xF0) send({ type: "midi", st: e.data[0], d1: e.data[1] || 0, d2: e.data[2] || 0 }); }; };
+    hook(); midi.onstatechange = hook;
+  }
+  midiOn = !midiOn;
+  $("midi").setAttribute("aria-pressed", midiOn); $("midi").textContent = midiOn ? "MIDI: ON" : "MIDI: OFF";
+});
+</script>
+</body>
+</html>

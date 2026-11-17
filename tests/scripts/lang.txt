@@ -1,0 +1,11 @@
+# the tip at the foot of the title: change language, then the language; it stays three seconds past the title; GLO tapped: the settings
+4600 shot
+5000 btn 1
+5600 shot
+7400 shot
+8800 shot
+9400 shot
+10200 shot
+10400 btn 7
+10900 shot
+11000 end

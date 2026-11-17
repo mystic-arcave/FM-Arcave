@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FM ARCAVE: the Mystic Arcave on the FM-1</title>
+<meta name="description" content="FM ARCAVE is a music game for the M-VAVE FM-1 synthesizer: wake up Rock, roll into the cave, mend the jukebox with your own song, and play three arcade machines. Open source.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Silkscreen&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="site.css">
+<style>
+.px{image-rendering:pixelated;display:block;width:100%;height:auto;aspect-ratio:1;background:#000}
+.cover{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:clamp(28px,5vw,72px);align-items:center;padding:clamp(40px,7vw,96px) 0 0}
+.cover h1{margin:18px 0 14px;white-space:nowrap;font-size:clamp(34px,5.6vw,64px)}
+.cover .tag{font:400 clamp(12px,1.5vw,15px)/1.3 var(--pix);letter-spacing:.14em;color:var(--opal)}
+.cover p.lead{font-size:19px;margin:26px 0 30px;color:var(--text)}
+.cta{display:flex;flex-wrap:wrap;gap:12px}
+.cover .ver{margin-top:22px}
+.device{display:block;position:relative;text-decoration:none}
+.device::after{content:"";position:absolute;inset:-18% -8%;background:radial-gradient(closest-side,rgba(127,230,210,.13),transparent 70%);z-index:-1;pointer-events:none}
+.device .fm1{pointer-events:none}
+.steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:22px;margin-top:34px}
+.steps figure{margin:0}
+.steps figcaption{margin-top:14px}
+.steps b{display:block;font:400 13px/1.3 var(--pix);letter-spacing:.08em;color:var(--text);margin-bottom:6px}
+.steps span{color:var(--mute);font-size:15px;line-height:1.5;display:block}
+.steps .n{font:400 11px/1 var(--pix);color:var(--mute);letter-spacing:.12em;margin-bottom:8px;display:block}
+.mach{display:grid;gap:0;margin-top:34px}
+.mach article{display:grid;grid-template-columns:200px minmax(0,1fr) minmax(0,1fr);gap:0 36px;align-items:start;padding:28px 0;border-top:1px solid var(--line)}
+.mach h3{font-size:20px;letter-spacing:.06em;margin-bottom:10px}
+.mach article:nth-child(1) h3{color:var(--pink)}.mach article:nth-child(2) h3{color:var(--teal)}.mach article:nth-child(3) h3{color:var(--blue)}
+.mach p{color:var(--mute)}
+.mach dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:8px 16px;font-size:15px}
+.mach dt{font:400 11px/1.6 var(--pix);letter-spacing:.08em;color:var(--text);white-space:nowrap}
+.mach dd{margin:0;color:var(--mute)}
+.new{font:400 10px/1 var(--pix);letter-spacing:.12em;color:#000;background:var(--opal);padding:4px 6px;margin-left:10px;vertical-align:middle}
+.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:clamp(28px,5vw,72px);margin-top:30px;align-items:start}
+.two p+p{margin-top:14px}
+.two p{color:var(--mute)}
+.langs{display:flex;flex-wrap:wrap;gap:10px 28px;margin-top:22px;font:400 clamp(16px,2.4vw,24px)/1.2 var(--pix);letter-spacing:.06em}
+.langs span:nth-child(1){color:var(--pink)}.langs span:nth-child(2){color:var(--violet)}.langs span:nth-child(3){color:var(--teal)}.langs span:nth-child(4){color:var(--opal)}.langs span:nth-child(5){color:var(--blue)}
+h2+p{margin-top:16px;color:var(--mute)}
+.kicker+h2{margin-top:14px}
+@media (max-width:860px){
+  .cover{grid-template-columns:1fr}
+  .steps{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .mach article{grid-template-columns:120px minmax(0,1fr);row-gap:16px}
+  .mach dl{grid-column:1/-1}
+  .two{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="top">
+  <a class="name" href="./" aria-current="page">FM ARCAVE</a>
+  <nav><a href="emu/">PLAY</a><a href="install/">INSTALL</a><a href="link/">LINK</a><a href="https://github.com/mystic-arcave/FM-Arcave">SOURCE</a></nav>
+</header>
+
+<div class="cover">
+  <div>
+    <div class="caps" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+    <h1>FM ARCAVE</h1>
+    <p class="tag">ELECTRIC UNDERGROUND ARCADE</p>
+    <p class="lead">The Mystic Arcave, on a synthesizer. Wake up Rock, roll down to the cave, and mend the jukebox with a song of your own. Then the arcade is yours.</p>
+    <div class="cta">
+      <a class="btn on" href="emu/">PLAY IN THE BROWSER</a>
+      <a class="btn" href="install/">INSTALL ON AN FM-1</a>
+    </div>
+    <p class="status ver">VERSION <span id="ver">DEV</span> · FREE SOFTWARE, GPL-3.0</p>
+  </div>
+  <a class="device" href="emu/" aria-label="Play FM ARCAVE in the browser"><div id="fm"></div></a>
+</div>
+
+<section>
+  <p class="kicker">How it goes</p>
+  <h2>Knobs roll. Keys jump.</h2>
+  <p>Every knob on the FM-1 turns without end, so every knob can roll a rock. The keys are the jump: far left is a hop, far right clears a ledge. That is all you need to know to start.</p>
+  <div class="steps">
+    <figure><img class="px" src="img/wake.png" alt="Rock, a lumpy stone with moss on top, opening two eyes" width="240" height="240"><figcaption><span class="n">1</span><b>WAKE UP ROCK</b><span>Press PLAY. Roll down a long course of hills, launch pads and jelly caps to the cave mouth.</span></figcaption></figure>
+    <figure><img class="px" src="img/hat.png" alt="The Hat, a wizard's hat with one eye, talking to Rock in a dark cave lit by mushrooms" width="240" height="240"><figcaption><span class="n">2</span><b>MEET THE HAT</b><span>Inside it is dark and it hums. The jukebox that powered the arcade has gone out.</span></figcaption></figure>
+    <figure><img class="px" src="img/rings.png" alt="Three rings of glass around a lamp, light escaping where their cracks line up" width="240" height="240"><figcaption><span class="n">3</span><b>MEND THE JUKEBOX</b><span>Line up three rings of glass. Then stir the dish to set a tempo, and record your first song.</span></figcaption></figure>
+    <figure><img class="px" src="img/jukebox.png" alt="The cave lit up, arcade machines glowing on ledges, a banner reading Now playing: Spore Drift" width="240" height="240"><figcaption><span class="n">4</span><b>FREE PLAY</b><span>The power comes back with your song. Turn ALGORITHM to change the music. Three machines wait on the ledges.</span></figcaption></figure>
+  </div>
+</section>
+
+<section>
+  <p class="kicker">Three machines</p>
+  <h2>All three run on the jukebox's clock</h2>
+  <p>Whatever is playing, the games play with it: crystals arrive on the beat, drops sound as their ring comes round, spores land in time.</p>
+  <div class="mach">
+    <article>
+      <img class="px" src="img/run.png" alt="Rock hopping over crystals on a glowing line" width="240" height="240">
+      <div><h3>MYSTIC RUN</h3><p>Rock runs on the beat. Hop the crystals as they come; the nearer the beat, the better the score.</p></div>
+      <dl><dt>ANY KEY</dt><dd>hop; higher keys hop higher</dd><dt>KNOB 1</dt><dd>the tempo</dd></dl>
+    </article>
+    <article>
+      <img class="px" src="img/table.png" alt="Three rings of coloured drops turning under a needle on a pool of light" width="240" height="240">
+      <div><h3>THE LIGHT TABLE</h3><p>Three rings turn under a needle. Drop light on them and each drop sounds every time it comes round. No score. It is an instrument.</p></div>
+      <dl><dt>KEYS</dt><dd>drop a note: low keys the inner ring, high keys the outer</dd><dt>KNOB 1 2 3</dt><dd>how fast each ring turns</dd><dt>KNOB 4</dt><dd>heat: plucks become chords</dd><dt>REC</dt><dd>wipe the table</dd></dl>
+    </article>
+    <article>
+      <img class="px" src="img/bloom.png" alt="Four coloured arcs on four rings around a flower, spores drifting in" width="240" height="240">
+      <div><h3>NIGHT BLOOM<span class="new">NEW</span></h3><p>Made for this panel. Four knobs turn four petals round a flower, one click for one twenty-fourth of a turn, the same as the knob in your fingers. Catch each spore on the petal of its own colour.</p></div>
+      <dl><dt>KNOB 1 2 3 4</dt><dd>one petal each, inner to outer</dd><dt>ANY KEY</dt><dd>a breath that pushes the spores back</dd></dl>
+    </article>
+  </div>
+</section>
+
+<section>
+  <p class="kicker">Arcave Link</p>
+  <h2>Four FM-1s, one clock</h2>
+  <div class="two">
+    <div>
+      <p>Each FM-1 keeps its own scene and its own tune; LINK keeps their bars and beats together. One leads, the others slide into step. Every tune in the game uses the same five notes, so four machines on four different tunes still sound like one band.</p>
+      <p>The <a href="link/">Link page</a> is the hub: it hears every FM-1, measures each one's delay and hands out the leader's clock. It works over USB today. Bluetooth is the next step, and it needs the hub either way: the FM-1's open Bluetooth code holds one connection at a time.</p>
+    </div>
+    <div>
+      <p class="kicker" style="margin-bottom:14px">Everywhere in the game</p>
+      <table>
+        <tr><th>GLO</th><td>Settings. The game holds still under dark glass.</td></tr>
+        <tr><th>OCT- OCT+</th><td>The language.</td></tr>
+        <tr><th>ALGORITHM</th><td>The jukebox: the next tune.</td></tr>
+        <tr><th>HOME</th><td>Out of a machine, back to the cave.</td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section>
+  <p class="kicker">Five languages</p>
+  <h2>Every word of it</h2>
+  <div class="langs"><span>ENGLISH</span><span>DEUTSCH</span><span>DANSK</span><span>FRANÇAIS</span><span>ESPAÑOL</span></div>
+</section>
+
+<section>
+  <p class="kicker">About</p>
+  <h2>Where it comes from</h2>
+  <div class="two">
+    <div>
+      <p>The Mystic Arcave began as an installation: a cave of glowing mushrooms projected large, where many players steer pet rocks from their phones, racing for mushrooms. FM ARCAVE is the Arcave you can hold.</p>
+      <p>It is free software under GPL-3.0. It stands on <a href="https://github.com/zvenson/dinghy">Dinghy</a> by zvenson, which stands on <a href="https://github.com/hugelton/Felucca">Felucca</a> by Leo Kuroshita and SLOOP by isod89. The jukebox repair is after UMBRA OBSCURA.</p>
+    </div>
+    <div>
+      <p>The source is one small C program with no floating point, the same code on the FM-1, in this site's emulator and in the tests. Build it, change it, make your own machine for the fourth ledge.</p>
+      <div class="cta" style="margin-top:22px"><a class="btn" href="https://github.com/mystic-arcave/FM-Arcave">THE SOURCE</a><a class="btn" href="firmware/versions.json">THE PACKAGE</a></div>
+    </div>
+  </div>
+</section>
+
+<footer class="foot"><p>FM ARCAVE is not made or endorsed by M-VAVE. FM-1 is their product; this is a community firmware, installed at your own risk.</p></footer>
+</div>
+<script type="module">
+import { mountFm1, FM1_CSS } from "./emu/panel.js";
+document.head.appendChild(Object.assign(document.createElement("style"), { textContent: FM1_CSS }));
+// the device on the cover shows the game's own screens, one after another
+mountFm1(document.getElementById("fm"), { buttons() {}, keys() {}, enc() {} });
+const cv = document.querySelector("#fm canvas"), c = cv.getContext("2d");
+const shots = ["title", "course", "hat", "rings", "dish", "cave", "run", "table", "bloom"].map((n) => Object.assign(new Image(), { src: "img/" + n + ".png" }));
+let i = 0;
+const show = () => { const im = shots[i % shots.length]; if (im.complete && im.naturalWidth) c.drawImage(im, 0, 0); i++; };
+shots[0].onload = () => { i = 0; show(); };
+if (!matchMedia("(prefers-reduced-motion: reduce)").matches) setInterval(show, 2600);
+fetch("firmware/versions.json").then((r) => r.json()).then((v) => { document.getElementById("ver").textContent = v.latest.version; }).catch(() => {});
+</script>
+</body>
+</html>

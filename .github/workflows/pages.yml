@@ -1,0 +1,70 @@
+# FM ARCAVE's site: the home page, the browser emulator, the installer with the package, the Link hub.
+# Published on every push to main as a Pages artifact (Settings > Pages > Source: "GitHub Actions").
+# The version is the newest tag vX.Y (0.1 before the first). If the FM-1 toolchain or the SDK cannot be fetched the
+# site still goes up, without the installer.
+name: pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - run: python3 -m pip install Pillow
+      - uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 6.0.11
+      - name: The version
+        run: |
+          V="$(git tag -l 'v[0-9]*.[0-9]*' --sort=-v:refname | head -1)"
+          echo "VER=${V:+${V#v}}" >> "$GITHUB_ENV"
+      - name: The emulator
+        run: sh web/emu/build.sh "${VER:-0.1}"
+      - name: The game's tests on the host, and the browser build in Node
+        run: sh tests/run_arcave_tests.sh
+      - name: The FM-1 package
+        id: fw
+        continue-on-error: true
+        run: |
+          sh tools/get_toolchain.sh
+          for i in 1 2 3; do
+            git clone --depth 1 --branch AC79NN_SDK_V1.2.1_2023-12-13 \
+                https://gitee.com/Jieli-Tech/fw-AC79_AIoT_SDK.git ~/fw-AC79_AIoT_SDK && break
+            rm -rf ~/fw-AC79_AIoT_SDK
+            sleep 20
+          done
+          sh build.sh --release "${VER:-0.1}"
+      - name: The site
+        run: |
+          P="$(ls build/fm-arcave-[0-9]*.fwsc 2>/dev/null | head -1 || true)"
+          python3 tools/make_site.py "${VER:-0.1}" "$P" build/site
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/site
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

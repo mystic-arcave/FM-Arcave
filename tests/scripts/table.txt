@@ -1,0 +1,59 @@
+# THE LIGHT TABLE: drops on the rings, a faster ring, more heat, wiped
+300 shot
+500 btn 12
+1200 keys 1
+1300 keys 0
+1570 keys 128
+1670 keys 0
+1940 keys 16384
+2040 keys 0
+2310 keys 2097152
+2410 keys 0
+2680 keys 2
+2780 keys 0
+3000 shot
+3050 keys 256
+3150 keys 0
+3420 keys 32768
+3520 keys 0
+3790 keys 4194304
+3890 keys 0
+4160 keys 4
+4260 keys 0
+4530 keys 512
+4630 keys 0
+4900 keys 65536
+5000 keys 0
+5270 keys 8388608
+5370 keys 0
+5640 keys 8
+5740 keys 0
+6010 keys 1024
+6110 keys 0
+6380 keys 131072
+6480 keys 0
+6750 keys 16777216
+6850 keys 0
+7120 keys 16
+7220 keys 0
+7490 keys 2048
+7590 keys 0
+7860 keys 262144
+7960 keys 0
+8000 shot
+8230 keys 33554432
+8330 keys 0
+8600 keys 32
+8700 keys 0
+8970 keys 4096
+9070 keys 0
+9340 keys 524288
+9440 keys 0
+9710 keys 67108864
+9810 keys 0
+10500 enc 2 1
+10700 enc 5 4
+12000 shot
+14000 btn 13
+14300 shot
+15000 end
