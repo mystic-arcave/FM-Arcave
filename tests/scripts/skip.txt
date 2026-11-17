@@ -6,6 +6,7 @@
 3000 enc 0 1
 3200 enc 0 1
 3400 enc 0 1
+3550 enc 0 1
 3700 shot
 3800 btn 1
 4200 shot

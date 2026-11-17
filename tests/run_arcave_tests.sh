@@ -16,13 +16,19 @@ play() { tests/run_arcave.sh "$@" > "$OUT/$1.log" 2>&1 && grep -q '^sound' "$OUT
 
 run "the intro: title, wake, roll, pads, the last stretch" play intro
 run "the title in each language" play lang
+run "the controls box by the start, HOME: the controls sheet" play controls
+run "the settings, line by line" play menu
 run "into the cave, the Hat, the jukebox, the settings" play story 1
-run "the rings, the dish, a song kept, the power back (and saved)" sh -c 'tests/run_arcave.sh mend 2 1 > build/host/mend.log 2>&1 && grep -q "settings 0 saved" build/host/mend.log'
+run "the four rings, the dish, a song kept, the power back (and saved)" sh -c 'tests/run_arcave.sh mend 2 1 > build/host/mend.log 2>&1 && grep -q "settings 0 saved" build/host/mend.log'
 run "the settings: skip to the Mystic Arcave, OCT+ confirms (and saved)" sh -c 'tests/run_arcave.sh skip > build/host/skip.log 2>&1 && grep -q "settings 0 saved" build/host/skip.log'
 run "the lit cave, a tune changed" play lit 4
 run "a booster, a secret high up, then GLO held: the save wiped (and saved)" sh -c 'tests/run_arcave.sh boost 4 > build/host/boost.log 2>&1 && grep -q "settings 0 saved" build/host/boost.log'
+run "the room up on the left, its door, outside: over the start line" play door 4 7
+run "the race back, start to finish (and the time saved)" sh -c 'tests/run_arcave.sh race 4 6 > build/host/race.log 2>&1 && grep -q "settings 0 saved" build/host/race.log'
 run "MYSTIC RUN" play run 4 3
 run "THE LIGHT TABLE" play table 4 4
+run "MYSTIC RUN a long way in: the start card, the controls, blocks and their buttons, EDIT: the scores" env CATCH=1 sh -c 'tests/run_arcave.sh run2 4 3 > build/host/run2.log 2>&1 && grep -q "^sound" build/host/run2.log'
+run "FX a dozen times; child ear protection (and saved)" sh -c 'tests/run_arcave.sh fx 4 > build/host/fx.log 2>&1 && grep -q "settings 0 saved" build/host/fx.log'
 run "NIGHT BLOOM" play bloom 4 5
 run "NIGHT BLOOM, every spore caught: the rings join one by one" env CATCH=1 sh -c 'tests/run_arcave.sh bloom4 4 5 > build/host/bloom4.log 2>&1 && grep -q "^sound" build/host/bloom4.log'
 run "the small text size" env TSIZE=0 sh -c 'tests/run_arcave.sh story 1 > build/host/story0.log 2>&1 && grep -q "^sound" build/host/story0.log'

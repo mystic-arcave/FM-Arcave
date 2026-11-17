@@ -1,0 +1,32 @@
+# the FX button a dozen times in the lit Arcave, then the settings: child ear protection on
+600 btn 12
+3000 btn 2
+3450 shot
+4300 btn 2
+4750 shot
+5600 btn 2
+6050 shot
+6900 btn 2
+7350 shot
+8200 btn 2
+8650 shot
+9500 btn 2
+9950 shot
+10800 btn 2
+11250 shot
+12100 btn 2
+12550 shot
+13400 btn 2
+13850 shot
+14700 btn 2
+15150 shot
+16000 btn 2
+16450 shot
+17300 btn 2
+17750 shot
+19500 btn 7
+19800 enc 0 1
+20000 enc 0 1
+20200 btn 1
+20600 shot
+22500 end

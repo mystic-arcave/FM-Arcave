@@ -12,9 +12,9 @@ machines, free play, and a jukebox on the ALGORITHM knob.
 - **Install it on an FM-1:** [the installer](https://mystic-arcave.github.io/FM-Arcave/install/), over USB from Chrome or Edge.
 - **Several FM-1s in time:** [the Link page](https://mystic-arcave.github.io/FM-Arcave/link/), see [docs/LINK.md](docs/LINK.md).
 
-> **Status: 0.2.** 0.1 was installed from the installer page and played on a newer FM-1 (the one with M-VAVE printed
-> under the screen) on 17.11.2026. 0.2 adds the text sizes, PLAY's green light and NIGHT BLOOM's rings arriving one by
-> one; it is tested in the browser build and in scripted runs, not yet on the device. Installing it is at your own
+> **Status: 0.3.** 0.1 and 0.2 were installed from the installer page and played on a newer FM-1 (the one with M-VAVE
+> printed under the screen). 0.3 adds the controls sheets, a fourth ring, button blocks in MYSTIC RUN, the scores board,
+> FX and child ear protection; it is tested in the browser build and in scripted runs, not yet on the device. Installing it is at your own
 > risk; the way back is any other firmware's installer, or OCT- held at power-on (the USB rescue).
 
 ## The game
@@ -22,12 +22,13 @@ machines, free play, and a jukebox on the ALGORITHM knob.
 | | |
 | --- | --- |
 | **The intro** | The title, then "press PLAY to wake up Rock". Any of the seven knobs rolls the rock; the keys jump, far left a hop, far right the biggest. Launch pads, jelly caps, star rings, and a secret behind the start. |
-| **The cave** | A platforming hub with no music, only a low hum and the sounds Rock makes. Both ends of the floor are ramps with a booster; springy caps and the boosters reach three things hidden high up. Someone calls from off the screen: the Hat, a wizard's hat with no body. The jukebox that powered the three arcade machines has gone out. |
-| **The mending** | Three rings of glass, each with a crack: KNOB 1, 2, 3 turn them until the light gets out. Then the dish: sweep the keys (or turn a knob) to spin it, hold a speed for eight beats and that is your tempo. REC, and two bars of keys are your first song. The power comes back with it. |
-| **Free play** | ALGORITHM changes the tune; a banner slides in from the top with its name. The machines: **MYSTIC RUN** (hop crystals on the beat), **THE LIGHT TABLE** (three rings under a needle, an instrument), **NIGHT BLOOM** (new: four knobs turn four petals, a click a twenty-fourth of a turn; catch each spore on its own colour). |
+| **The cave** | A platforming hub with no music, only a low hum and the sounds Rock makes. Both ends of the floor are ramps with a booster; springy caps and the boosters reach three things hidden high up. Someone calls from off the screen: the Hat, a wizard's hat with no body. The jukebox that powered the three arcade machines has gone out. The left booster is unmarked; it throws Rock up to a ledge whose far end is a small room with a door back outside. Through it the course becomes a **race back**: a start line, a clock, the pads and boosters turned round, to where the game began. The best time is kept with the scores. |
+| **The mending** | Four rings of glass, each with a crack: KNOB 1, 2, 3, 4 turn them until the light gets out. Then the dish: sweep the keys (or turn a knob) to spin it, hold a speed for eight beats and that is your tempo. REC, and two bars of keys are your first song. The power comes back with it. |
+| **Free play** | ALGORITHM changes the tune; a banner slides in from the top with its name. The machines: **MYSTIC RUN** (hop crystals on the beat; a block goes only when you press the button that lights up), **THE LIGHT TABLE** (three rings under a needle, an instrument), **NIGHT BLOOM** (new: KNOB 1, SELECT, KNOB 2 and ALGORITHM each turn a petal, a click a twenty-fourth of a turn; catch each spore on its own colour). In a machine PLAY starts, HOME shows how it is played, REC goes back to the Arcave. A board by the Hat lists the best scores and the time played. |
 
-Everywhere: **GLO** opens the settings over the paused game (language, text size, look, LINK, about, replay the intro, skip to the
-Mystic Arcave, start over; in there PLAY or OCT+ confirms); held for a second it warns, and held three seconds more it wipes the whole save. **OCT-** and **OCT+** step through English, German, Danish, French and Spanish. **HOME** leaves a machine.
+Everywhere: **GLO** opens the settings over the paused game (language, text size, child ear protection, look, LINK, about, replay the
+intro, skip to the Mystic Arcave, start over; in there PLAY or OCT+ confirms); held for a second it warns, and held three seconds more it wipes the whole save. **OCT-** and **OCT+** step through English, German, Danish, French and Spanish. **HOME** shows the controls (on the course and in a machine). **EDIT** shows the scores and the time played. **FX** plays one
+of a dozen effects, picture and sound.
 
 ## Build it
 

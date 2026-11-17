@@ -1,0 +1,45 @@
+# the room up on the left: the door, PLAY: outside at the cave mouth; over the start line the clock runs
+800 shot
+1000 enc 2 -5
+1200 enc 2 -5
+1400 enc 2 -5
+1600 enc 2 -5
+1800 enc 2 -5
+2000 enc 2 -5
+2500 shot
+2700 btn 12
+3900 shot
+4200 enc 2 -6
+4350 enc 2 -6
+4500 enc 2 -6
+4650 enc 2 -6
+4800 enc 2 -6
+4950 enc 2 -6
+5100 enc 2 -6
+5250 enc 2 -6
+5400 enc 2 -6
+5550 shot
+5550 enc 2 -6
+5700 enc 2 -6
+5850 enc 2 -6
+6000 enc 2 -6
+6150 enc 2 -6
+6300 enc 2 -6
+6450 enc 2 -6
+6600 enc 2 -6
+6750 shot
+6750 enc 2 -6
+6900 enc 2 -6
+7050 enc 2 -6
+7200 enc 2 -6
+7350 enc 2 -6
+7500 enc 2 -6
+7650 enc 2 -6
+7800 enc 2 -6
+7950 enc 2 -6
+8100 enc 2 -6
+8250 enc 2 -6
+8400 enc 2 -6
+8550 enc 2 -6
+8700 shot
+9000 end

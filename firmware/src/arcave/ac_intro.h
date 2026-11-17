@@ -23,9 +23,24 @@ static struct {
     struct { int32_t x, y, t; uint8_t c, big, label, on; } burst;
     struct { int32_t x, y, t; } trail[20];
     uint32_t ntrail;
-    uint8_t pad_used[CO_NPAD], sky_used[CO_NSKY];
-    int16_t sky_sq[CO_NSKY];
+    uint8_t pad_used[CO_NPAD > CO_NRPAD ? CO_NPAD : CO_NRPAD], sky_used[CO_NSKY > CO_NRSKY ? CO_NSKY : CO_NRSKY];
+    int16_t sky_sq[CO_NSKY > CO_NRSKY ? CO_NSKY : CO_NRSKY];
+    uint8_t race;                                /* the race back: 0 not, 1 out of the door (before the line), 2 on the clock */
+    int32_t race_ms, race_show, step_cd;
 } G;
+/* the race back: out of the Arcave's upper door, over the start line, to where the game began. The pads and the
+ * sky things are the mirrored set (CO_RPAD, CO_RSKY), a booster throws Rock up each of the four big steps, and
+ * Rock pushes harder (it is uphill all the way). The best time is kept with the scores. */
+#define RACE_X0 (CO_L - 96)                      /* where Rock comes out */
+#define RACE_START (CO_L - 196)
+#define RACE_END 74
+static uint32_t race_best_cs, race_last_cs;      /* hundredths of a second; 0: never run */
+static uint8_t race_new, race_save_due;
+#define I_PAD (G.race ? CO_RPAD : CO_PAD)
+#define I_NPAD (G.race ? CO_NRPAD : CO_NPAD)
+#define I_SKY (G.race ? CO_RSKY : CO_SKY)
+#define I_NSKY (G.race ? CO_NRSKY : CO_NSKY)
+#define I_DIR (G.race ? -1 : 1)
 static uint32_t in_time;                         /* ms since the intro began: what its little animations run on */
 
 static int32_t land_y(int32_t x)
@@ -49,8 +64,8 @@ static void rock_phys(rock_t *s, int32_t knob, int32_t jump)
 {
     int32_t sl = land_sl(s->x), n = (int32_t)isqrt((uint32_t)(65536 + sl * sl)), tx = 65536 / n, ty = sl * 256 / n, gy;
     if (s->g) {
-        int32_t vt = (s->vx * tx + s->vy * ty) >> 8, push = knob * TQ, lump, fr, a;
-        if ((knob > 0 && vt > 0) || (knob < 0 && vt < 0)) push = (push * imax(0, 256 - iabs(vt) * 256 / VK)) >> 8;
+        int32_t vt = (s->vx * tx + s->vy * ty) >> 8, push = knob * (G.race ? TQ * 8 / 5 : TQ), lump, fr, a;
+        if ((knob > 0 && vt > 0) || (knob < 0 && vt < 0)) push = (push * imax(0, 256 - iabs(vt) * 256 / (G.race ? Q8(300) : VK))) >> 8;
         lump = -513 * (rock_rad(s->th + 209) - rock_rad(s->th - 209));
         fr = -vt / 5 - (iabs(vt) > 512 ? (vt > 0 ? Q8(5) : -Q8(5)) : 0);
         a = push + lump + fr;
@@ -88,19 +103,19 @@ static void rock_phys(rock_t *s, int32_t knob, int32_t jump)
 }
 
 /* a pad's jump: the strength (of 19) that lands best on the next downward slope */
-static int32_t pad_plan(int32_t px, int32_t far, int32_t speed)
+static int32_t pad_plan(int32_t px, int32_t far, int32_t speed, int32_t d)   /* d: 1 rightward, -1 leftward (mirrored) */
 {
-    int32_t sl = land_sl(px), n = (int32_t)isqrt((uint32_t)(65536 + sl * sl)), tx = 65536 / n, ty = sl * 256 / n;
+    int32_t sl = d * land_sl(px), n = (int32_t)isqrt((uint32_t)(65536 + sl * sl)), tx = 65536 / n, ty = sl * 256 / n;
     int32_t y0 = land_y(px) - ROCK_RM, k, best = 0, best_sc = -0x7FFFFFFF;
     for (k = 0; k < 19; k++) {
         int32_t x = px, y = y0, vx = (speed * tx) >> 8, vy = imin((speed * ty) >> 8, 0) - Q8(JMIN) - Q8(JMAX - JMIN) * k / 18, t, s2, n2, vt, vn, sc;
         for (t = 0; t < 210; t++) {
-            vy += (GR * 273) >> 14; x += (vx * 273) >> 14; y += (vy * 273) >> 14;
+            vy += (GR * 273) >> 14; x += d * ((vx * 273) >> 14); y += (vy * 273) >> 14;
             if (t > 4 && y >= land_y(x) - ROCK_RM) break;
         }
-        s2 = land_sl(x); n2 = (int32_t)isqrt((uint32_t)(65536 + s2 * s2));
+        s2 = d * land_sl(x); n2 = (int32_t)isqrt((uint32_t)(65536 + s2 * s2));
         vt = (vx + ((vy * s2) >> 8)) * 256 / n2; vn = (-((vx * s2) >> 8) + vy) * 256 / n2;
-        sc = ((s2 > 26 && vn < vt / 2) ? (x > far ? Q8(2000) : Q8(1000)) : 0) + vt - vn * 6 / 10;
+        sc = ((s2 > 26 && vn < vt / 2) ? (d * (x - far) > 0 ? Q8(2000) : Q8(1000)) : 0) + vt - vn * 6 / 10;
         if (sc > best_sc) { best_sc = sc; best = k; }
     }
     return best;
@@ -141,6 +156,16 @@ static void intro_skip_to_end(void)              /* (tests) the last stretch bef
     G.r.x = Q8(CO_L - 700); G.r.y = land_y(G.r.x) - rock_rad(0); G.cam_y = G.r.y - Q8(130);
 }
 
+static void intro_race_start(void)               /* out of the Arcave's upper door: at the cave mouth, facing back */
+{
+    uint32_t i;
+    for (i = 0; i < sizeof G; i++) ((uint8_t *)&G)[i] = 0;
+    G.phase = IP_PLAY; G.eyes = 256; G.turned = 1; G.race = 1; G.fade = 256; G.c_off = Q8(156);
+    G.r.x = Q8(RACE_X0); G.r.y = land_y(G.r.x) - rock_rad(0); G.r.g = 1; G.cam_y = G.r.y - Q8(130);
+    G.camz = 256; G.camx = iclamp(G.r.x - G.c_off, Q8(CO_CAMMIN), CAMMAX); G.camy = G.cam_y;
+    race_new = 0;
+}
+
 static void intro_burst(int32_t x, int32_t y, int32_t c, int big, int label)
 {
     G.burst.x = x; G.burst.y = y; G.burst.t = 0; G.burst.c = (uint8_t)c; G.burst.big = (uint8_t)big; G.burst.label = (uint8_t)label; G.burst.on = 1;
@@ -150,8 +175,9 @@ static void intro_sky_hits(int32_t dt)
 {
     rock_t *r = &G.r;
     uint32_t i;
-    for (i = 0; i < CO_NSKY; i++) {
-        const co_sky_t *o = &CO_SKY[i];
+    int32_t d = I_DIR;
+    for (i = 0; i < (uint32_t)I_NSKY; i++) {
+        const co_sky_t *o = &I_SKY[i];
         int32_t dx = (r->x >> 8) - o->x, dy;
         if (G.sky_sq[i] > 0) G.sky_sq[i] = (int16_t)imax(0, G.sky_sq[i] - dt);
         if (dx < -40 || dx > 40) continue;
@@ -164,18 +190,19 @@ static void intro_sky_hits(int32_t dt)
         } else if (o->t == 1) {
             if (iabs(dx) < 17 && dy > -20 && dy < 6 && r->vy > -Q8(60) && G.sky_sq[i] <= 0) {
                 static const uint8_t JN[4] = {0, 4, 7, 12};
-                r->vy = -Q8(335); r->vx = imax(r->vx, Q8(150)) + Q8(15); r->g = 0; G.sky_sq[i] = 250;
+                r->vy = -Q8(335); r->vx = d * (imax(d * r->vx, Q8(150)) + Q8(15)); r->g = 0; G.sky_sq[i] = 250;
                 intro_burst(o->x << 8, o->y << 8, o->c, 0, 0);
                 sfx(72 + JN[o->c % 4], 0, 600, W_SINE, 2950, 6, 130);
             }
         } else if (!G.sky_used[i] && dx * dx + dy * dy < 400) {
-            G.sky_used[i] = 1; r->vx = imax(r->vx, 0) + Q8(170); r->vy = imin(r->vy, -Q8(150)); G.rings++;
+            G.sky_used[i] = 1; r->vx = d * (imax(d * r->vx, 0) + Q8(170)); r->vy = imin(r->vy, -Q8(150)); G.rings++;
             intro_burst(r->x, r->y, o->c, 1, T_SKYHIGH);
             snd_chime(1);
         }
     }
 }
 
+#define CTRL_X 96                                /* the controls box: its middle, in the course's pixels */
 static int intro_want_play(void) { return (G.phase == IP_WIDE && G.t > 1000) || (G.phase == IP_PLAY && G.cave_a > 128); }
 
 static void intro_press_play(void)
@@ -208,22 +235,28 @@ static int intro_tick(int32_t dt)
         if (t >= 3500) { G.phase = IP_PLAY; G.t = 0; G.eyes = 256; G.cam_y = r->y - Q8(130); }
     } else if (G.phase == IP_PLAY || G.phase == IP_OUT) {
         int live = G.phase == IP_PLAY, lock = 0, first = 1;
-        int32_t knob, jump = -1, pad = -1, ahead = Q8(999), win, i, bt;
+        int32_t knob, jump = -1, pad = -1, ahead = Q8(999), win, i, bt, d = I_DIR;
+        const co_pad_t *pads = I_PAD;
+        if (live && G.fade > 0) G.fade = imax(0, G.fade - dt * 256 / 900);   /* (out of the door: in from black) */
         if (live && in.any_knob) G.drag = iclamp(G.drag + in.any_knob * 115, -384, 384);
         knob = live ? iclamp(G.drag, -256, 256) : 0;
         if (iabs(knob) > 13) G.turned = 1;
         G.drag -= G.drag * imin(dt, 100) / 250;
         if (live && in.hikey >= 0) jump = in.hikey * 256 / 26;
         r->jumped = 0; r->touch = 0; r->thud = 0;
-        if (live)
+        if (live && d > 0) {
             for (i = 0; i < CO_NPAD; i++)
-                if (Q8(CO_PAD[i].x) > r->x - Q8(28) - iabs(r->vx) * 12 / 100) { pad = i; break; }
-        if (pad >= 0) ahead = Q8(CO_PAD[pad].x) - r->x;
+                if (Q8(pads[i].x) > r->x - Q8(28) - iabs(r->vx) * 12 / 100) { pad = i; break; }
+        } else if (live) {                       /* the race back: the next pad is to the left */
+            for (i = CO_NRPAD - 1; i >= 0; i--)
+                if (Q8(pads[i].x) < r->x + Q8(28) + iabs(r->vx) * 12 / 100) { pad = i; break; }
+        }
+        if (pad >= 0) ahead = d * (Q8(pads[pad].x) - r->x);
         win = Q8(20) + iabs(r->vx) * 12 / 100;
-        G.on_pad = pad >= 0 && !G.pad_used[pad] && iabs(ahead) < win && r->vx > Q8(30) && (r->g || r->coy > 0);
-        G.near = (pad >= 0 && !G.pad_used[pad] && ahead < Q8(170) && r->vx > Q8(30)) ? 256 - imax(0, ahead - win) / 170 : 0;
+        G.on_pad = pad >= 0 && !G.pad_used[pad] && iabs(ahead) < win && d * r->vx > Q8(30) && (r->g || r->coy > 0);
+        G.near = (pad >= 0 && !G.pad_used[pad] && ahead < Q8(170) && d * r->vx > Q8(30)) ? 256 - imax(0, ahead - win) / 170 : 0;
         if (jump >= 0 && G.on_pad && r->coy > 0) {   /* any key on the pad: the jump is set for the next downward slope */
-            int32_t k = pad_plan(r->x, Q8(CO_PAD[pad].far), (int32_t)isqrt((uint32_t)((r->vx >> 4) * (r->vx >> 4) + (r->vy >> 4) * (r->vy >> 4))) << 4);
+            int32_t k = pad_plan(r->x, Q8(pads[pad].far), (int32_t)isqrt((uint32_t)((r->vx >> 4) * (r->vx >> 4) + (r->vy >> 4) * (r->vy >> 4))) << 4, d);
             G.exact = iabs((jump * 18 + 128) / 256 - k) <= 2;
             jump = k * 256 / 18; lock = 1; G.pad_used[pad] = 1;
         }
@@ -245,7 +278,33 @@ static int intro_tick(int32_t dt)
             G.acc += dt * 128;
             while (G.acc >= 1000) { G.acc -= 1000; rock_phys(r, knob, first ? jump : -1); first = 0; }
         }
+        if (G.step_cd > 0) G.step_cd -= dt;
+        if (live && G.race && G.step_cd <= 0 && (r->g || r->coy > 0) && r->vx < -Q8(20))
+            for (i = 0; i < CO_NSTEP; i++)       /* a booster at the foot of a big step throws Rock up it */
+                if (iabs((r->x >> 8) - CO_STEP[i].x) < 13) {
+                    r->vx = -Q8(CO_STEP[i].vx); r->vy = -Q8(CO_STEP[i].vy); r->g = 0; r->coy = 0; G.step_cd = 1500; G.rocket = 900;
+                    snd_whoosh(); sfx_ex(50, 0, 500, W_SAW, 2600, 3, 200, 0, 0, 65750); intro_burst(r->x, r->y, i, 1, T_WHEEE);
+                    break;
+                }
         if (live) intro_sky_hits(dt);
+        if (live && G.race == 1 && r->x < Q8(RACE_START)) {   /* over the line: the clock runs */
+            G.race = 2; G.race_ms = 0;
+            sfx(72, 0, 200, W_SQUARE, 1800, 2, 100); sfx(79, 120, 200, W_SQUARE, 1800, 2, 100); sfx(84, 240, 500, W_SQUARE, 1800, 2, 100);
+        }
+        if (live && G.race == 2) {
+            G.race_ms += dt;
+            if (r->x < Q8(RACE_END)) {           /* home: the time, and the best one kept */
+                uint32_t k2;
+                race_last_cs = (uint32_t)G.race_ms / 10u; if (!race_last_cs) race_last_cs = 1;
+                race_new = !race_best_cs || race_last_cs < race_best_cs;
+                if (race_new) { race_best_cs = race_last_cs; race_save_due = 1; }
+                G.race = 0; G.race_show = 7000;   /* the course is the game's own again */
+                for (k2 = 0; k2 < sizeof G.pad_used; k2++) G.pad_used[k2] = 0;
+                for (k2 = 0; k2 < sizeof G.sky_used; k2++) { G.sky_used[k2] = 0; G.sky_sq[k2] = 0; }
+                snd_jingle(); intro_burst(r->x, r->y, 2, 1, T_FINISH);
+            }
+        }
+        if (G.race_show > 0) G.race_show -= dt;
         if (!G.found && r->x < Q8(CO_CARDX + 110)) { G.found = 1; snd_jingle(); }
         if (G.rocket > 0) {
             G.rocket -= dt;
@@ -258,8 +317,8 @@ static int intro_tick(int32_t dt)
             if (lock) { G.clean++; intro_burst(r->x, r->y, G.clean, 0, 0); snd_chime(0); }
         }
         if (r->touch) {
-            if (G.pad_jump && r->t_vt > 0) {
-                int32_t sl = r->t_sl, n = (int32_t)isqrt((uint32_t)(65536 + sl * sl)), b = G.exact ? Q8(150) : Q8(55);
+            if (G.pad_jump && d * r->t_vt > 0) {
+                int32_t sl = r->t_sl, n = (int32_t)isqrt((uint32_t)(65536 + sl * sl)), b = d * (G.exact ? Q8(150) : Q8(55));
                 r->vx += b * 256 / n; r->vy += ((b * sl) >> 8) * 256 / n;
                 if (G.exact) { G.bonus++; intro_burst(r->x, r->y, G.bonus, 1, T_BONUS); snd_chime(1); }
             }
@@ -271,12 +330,12 @@ static int intro_tick(int32_t dt)
         if (G.burst.on) { G.burst.t += dt; if (G.burst.t > 600) G.burst.on = 0; }
         bt = (G.t + (int32_t)(ihash((uint32_t)(G.t / 3700)) * 2000u >> 16)) % 3700;
         G.eyes = bt < 160 ? iabs(bt - 80) * 256 / 80 : 256;
-        G.c_off += ((r->vx < -Q8(25) ? Q8(150) : Q8(84)) - G.c_off) * imin(400, dt * 5 / 2) / 400;
+        G.c_off += (((G.race ? r->vx < Q8(25) : r->vx < -Q8(25)) ? (G.race ? Q8(156) : Q8(150)) : Q8(84)) - G.c_off) * imin(400, dt * 5 / 2) / 400;
         G.cam_y += (r->y - Q8(130) - G.cam_y) * imin(200, dt) / 200;
         G.camz = 256; G.camx = iclamp(r->x - G.c_off, Q8(CO_CAMMIN), CAMMAX); G.camy = G.cam_y;
         if (live) {
             if (!G.turned && G.t > 5000) G.hint = imin(256, G.hint + dt * 384 / 1000); else G.hint = imax(0, G.hint - dt * 512 / 1000);
-            if (r->x > Q8(CO_XS) && !G.done) G.on_course = 1;
+            if (r->x > Q8(CO_XS) && !G.done && !G.race) G.on_course = 1;
             if (r->x > Q8(CO_L - 64)) { G.done = 1; G.on_course = 0; G.cave_t += dt; G.cave_a = imin(256, G.cave_a + dt * 384 / 1000); }
             else { G.cave_a = imax(0, G.cave_a - dt * 512 / 1000); if (!G.cave_a) G.cave_t = 0; }
             if (G.on_course) G.course_t += dt;
@@ -288,6 +347,8 @@ static int intro_tick(int32_t dt)
     }
     /* the lights: PLAY breathes when it is wanted; near a pad every key calls */
     if (intro_want_play()) led_play_breathe = 1;
+    /* the controls box stands by the start: while it is on the screen HOME breathes (arcave.c opens the sheet) */
+    if (G.phase == IP_PLAY && !G.race && G.race_show <= 0 && (G.camx >> 8) < CTRL_X + 118 && (G.camx >> 8) + AC_W > CTRL_X - 118) led_breathe_want |= 1u << BTN_HOME;
     if (G.phase == IP_PLAY && G.near > 0) {
         if (G.on_pad || tsin(in_time, 120, 0) > 0) led_key_want = (1u << AC_NKEY) - 1u;
         else led_key_dim_want = (1u << AC_NKEY) - 1u;
@@ -297,6 +358,23 @@ static int intro_tick(int32_t dt)
 }
 
 /* ---------------------------------------------------------------- drawing */
+static void race_str(char *b, uint32_t cs)       /* hundredths of a second -> M:SS.CC */
+{
+    uint32_t m = cs / 6000u, n = 0;
+    if (m >= 10u) b[n++] = (char)('0' + m / 10u % 10u);
+    b[n++] = (char)('0' + m % 10u); b[n++] = ':';
+    b[n++] = (char)('0' + cs / 1000u % 6u); b[n++] = (char)('0' + cs / 100u % 10u); b[n++] = '.';
+    b[n++] = (char)('0' + cs / 10u % 10u); b[n++] = (char)('0' + cs % 10u); b[n] = 0;
+}
+/* a line across the course: a post of squares, its word on a flag */
+static void race_post(int32_t px, int32_t py, const char *s, col_t c)
+{
+    int32_t k, a = ts(1, 2), w = gtextw(s, a) + 8, h = 5 * a + 8;
+    for (k = 0; k < 9; k++) grect(px - 2 + (k & 1) * 2, py - 4 - k * 4, 2, 4, th->text);
+    for (k = 0; k < 9; k++) grect(px - (k & 1) * 2, py - 4 - k * 4, 2, 4, th->ground);
+    grect(px - 1, py - 42 - h, w, h, th->ground); gbox(px - 1, py - 42 - h, w, h, c);   /* the flag flies to the right of its post */
+    gtext(px + 3, py - 38 - h, s, c, a);
+}
 static void T8(const char *s, int32_t x, int32_t y, col_t c, int32_t a) { galpha(a); gtextc(x, y - 2, s, c, 1); galpha(256); }
 /* small print as a centred block with its top at y, in the size the settings ask for (two lines at most twice the
  * first build's: the intro's pictures need the room); its height */
@@ -551,20 +629,62 @@ static void intro_draw(void)
             garc(lx, ly, ZS(CO_LOOPR + 4), ZS(CO_LOOPR + 4), a, a + 7300, th->caps[k], 1);
         }
     }
-    for (i = 0; i < CO_NPAD; i++) {              /* launch pads, and a key tapping above the next one */
-        const co_pad_t *p = &CO_PAD[i];
-        int32_t d, ppx = 0, ppy = 0;
+    if (z == 256 && (G.race || G.race_show > 0)) {   /* the two lines of the race back */
+        if (x0 < RACE_START + 40 && x1 > RACE_START - 40) race_post(WX(Q8(RACE_START)), WY(land_y(Q8(RACE_START))), TR(T_RACE_START), th->pad);
+        if (x0 < RACE_END + 40 && x1 > RACE_END - 40) race_post(WX(Q8(RACE_END)), WY(land_y(Q8(RACE_END))), TR(T_FINISH), th->caps[3]);
+    }
+    if (G.race)
+        for (i = 0; i < CO_NSTEP; i++) {         /* the boosters: chevrons running up and to the left */
+            int32_t j;
+            if (CO_STEP[i].x < x0 || CO_STEP[i].x > x1) continue;
+            for (j = 0; j < 3; j++) {
+                int32_t bx = CO_STEP[i].x + 9 - j * 9, by = WY(land_y(Q8(bx))) - 4;
+                galpha(G.step_cd > 0 ? 256 : 90 + ((((int32_t)(tm / 120u) + 3 - j) % 3) == 0 ? 166 : 0));
+                gline2(WX(Q8(bx)) + 3, by - 4, WX(Q8(bx)), by, th->pad); gline2(WX(Q8(bx)), by, WX(Q8(bx)) + 3, by + 3, th->pad);
+            }
+            galpha(256);
+        }
+    if ((G.phase == IP_PLAY || G.phase == IP_OUT) && !G.race && G.race_show <= 0 && z == 256 && x0 < CTRL_X + 118 && x1 > CTRL_X - 118) {
+        /* "for controls press the HOME button", HOME drawn as the button is; it stands in the land, so rolling on leaves it behind */
+        const char *s = TR(T_CTRL_TIP), *p;
+        char l1[40], pre[24], post[24];
+        int32_t n = 0, a = ts(1, 2), w1, wp, wh, wq, w2, w, h, bx, by, lx;
+        for (p = s; *p && *p != '|' && n < 38; ) l1[n++] = *p++;
+        l1[n] = 0; if (*p == '|') p++;
+        for (n = 0; *p && *p != '@' && n < 22; ) pre[n++] = *p++;
+        pre[n] = 0; if (*p == '@') p++;
+        for (n = 0; *p && n < 22; ) post[n++] = *p++;
+        post[n] = 0;
+        for (;; a--) {
+            w1 = gtextw(l1, a); wp = gtextw(pre, a); wh = gtextw("HOME", a) + 6 * a; wq = gtextw(post, a);
+            w2 = wp + wh + wq + (wp ? a : 0) + (wq ? a : 0);
+            w = imax(w1, w2) + 12;
+            if (w <= 232 || a == 1) break;
+        }
+        h = 2 * TLH(a) + 4 * a + 6;
+        bx = WX(Q8(CTRL_X)) - w / 2; by = WY(land_y(Q8(CTRL_X))) - 58 - h;
+        grect(bx, by, w, h, th->panel); gbox(bx, by, w, h, th->rim);
+        gtext(bx + (w - w1) / 2, by + 4 + 2 * a, l1, th->text, a);
+        lx = bx + (w - w2) / 2; 
+        gtext(lx, by + 4 + TLH(a) + 4 * a, pre, th->text, a); lx += wp + (wp ? a : 0);
+        grect(lx, by + 4 + TLH(a) + 2 * a, wh, 9 * a, th->bg); gbox(lx, by + 4 + TLH(a) + 2 * a, wh, 9 * a, th->pad);   /* the button */
+        gtext(lx + 3 * a, by + 4 + TLH(a) + 4 * a, "HOME", th->pad, a); lx += wh + (wq ? a : 0);
+        gtext(lx, by + 4 + TLH(a) + 4 * a, post, th->text, a);
+    }
+    for (i = 0; i < I_NPAD; i++) {               /* launch pads, and a key tapping above the next one */
+        const co_pad_t *p = &I_PAD[i];
+        int32_t d, ppx = 0, ppy = 0, dir = I_DIR;
         if (p->x < x0 || p->x > x1) continue;
         galpha(G.pad_used[i] ? 77 : 256);
         for (d = -16; d <= 8; d += 4) {
-            int32_t X = WX((p->x + d) << 8), Yv = WY(land_y((p->x + d) << 8)) - 1;
+            int32_t X = WX((p->x + dir * d) << 8), Yv = WY(land_y((p->x + dir * d) << 8)) - 1;
             if (d > -16) gline2(ppx, ppy, X, Yv, th->pad);
             ppx = X; ppy = Yv;
         }
-        if (!G.pad_used[i] && G.phase == IP_PLAY && p->x > (r->x >> 8) - 40) {
-            int next = G.near > 0 && p->x - (r->x >> 8) < 200, on = next && G.on_pad;
+        if (!G.pad_used[i] && G.phase == IP_PLAY && dir * (p->x - (r->x >> 8)) > -40) {
+            int next = G.near > 0 && dir * (p->x - (r->x >> 8)) < 200, on = next && G.on_pad;
             int32_t bob = on ? (tsin(tm, 300, 0) > 0 ? 3 : 0) : next ? iabs(tsin(tm, 60, 0)) * 5 >> 14 : 0;
-            int32_t kx = WX((p->x - 4) << 8), ky = WY(land_y((p->x - 4) << 8)) - 16 + bob;
+            int32_t kx = WX((p->x - dir * 4) << 8), ky = WY(land_y((p->x - dir * 4) << 8)) - 16 + bob;
             galpha(next ? 256 : 115);
             if (on) { grect(kx - 2, ky - 8, 5, 12, th->pad); grect(kx - 3, ky - 6, 7, 8, th->pad); grect(kx, ky - 6, 1, 4, th->ground); }
             else { ghl(kx - 2, kx + 3, ky - 9, th->pad); ghl(kx - 2, kx + 3, ky + 3, th->pad); grect(kx - 4, ky - 7, 1, 9, th->pad); grect(kx + 4, ky - 7, 1, 9, th->pad);
@@ -596,8 +716,8 @@ static void intro_draw(void)
         for (i = 0; i < 4; i++)
             mush_draw(WX(Q8(CO_L + MM[i][0])), WY(yend + Q8(MM[i][1])), ZS(MM[i][2]), th->caps[(i + 1) % 5], th->stem, 128 + (tsin(tm, 20, i * 10430) >> 7));
     }
-    for (i = 0; i < CO_NSKY; i++) {
-        const co_sky_t *o = &CO_SKY[i];
+    for (i = 0; i < I_NSKY; i++) {
+        const co_sky_t *o = &I_SKY[i];
         int32_t px, py;
         if (o->x < x0) continue;
         if (o->x > x1) break;
@@ -639,8 +759,28 @@ static void intro_draw(void)
             if (ts(1, 2) == 1) { T8(TR(T_WAKE1), 156, 34, th->text, a); T8(TR(T_WAKE2), 156, 46, th->text, a); }
             else { int32_t h = TB(TR(T_WAKE1), 3, 8, th->text, a); TB(TR(T_WAKE2), 3, 8 + h, th->text, a); }
         }
+        if (G.phase == IP_PLAY && G.race == 1 && G.cave_a <= 0)
+            TB(TR(T_RACE_GO), 3, 20, th->text, pulse);
+        if (G.phase == IP_PLAY && G.race == 2) {  /* the clock, top middle */
+            char b[12];
+            int32_t a = ts(2, 3), w;
+            race_str(b, (uint32_t)G.race_ms / 10u); b[6] = 0;   /* (tenths while it runs) */
+            w = gtextw("0:00.0", a) + 12;
+            grect(120 - w / 2, 4, w, 5 * a + 8, th->panel); gbox(120 - w / 2, 4, w, 5 * a + 8, th->pad);
+            gtext(120 - w / 2 + 6, 8, b, th->text, a);
+        }
+        if (G.phase == IP_PLAY && G.race_show > 0) {   /* home: the time */
+            char b[12];
+            int32_t a = ts(2, 4), al = imin(256, G.race_show * 256 / 600), h;
+            race_str(b, race_last_cs);
+            galpha(al);
+            h = TB(TR(T_RACE_TIME), 3, 18, th->mute, al);
+            galpha(al); gtextc(120, 22 + h, b, th->text, a);
+            if (race_new) gfit(120, 22 + h + 5 * a + 8 + 2 * ts(1, 3), 232, TR(T_NEWBEST), th->caps[3], ts(1, 3));
+            galpha(256);
+        }
         if (G.phase == IP_PLAY) {
-            if (G.hint > 0) { int32_t h = TB(TR(T_ROLL), 3, 10, th->text, G.hint * pulse / 256); TB(TR(T_JUMP), 3, 12 + h, th->text, G.hint * pulse / 256); }
+            if (G.hint > 0) { int32_t h = TB(TR(T_ROLL), 2, 150, th->text, G.hint * pulse / 256); TB(TR(T_JUMP), 2, 152 + h, th->text, G.hint * pulse / 256); }
             if (G.cave_a > 0) {
                 int32_t h = TB(TR(T_ENTER), 3, 24, th->text, G.cave_a * pulse / 256);
                 if (G.cave_t > 600) TB(TR(T_PRESSPLAY), 3, 26 + h, th->text, G.cave_a * pulse / 256);

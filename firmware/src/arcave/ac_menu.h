@@ -3,7 +3,7 @@
  * KNOB 2) changes; PLAY or OCT+ confirms or steps on (OCT- steps back: in here they do not change the language);
  * GLO closes. ABOUT tells what the Mystic Arcave is. */
 
-enum { MI_LANG, MI_TEXT, MI_LOOK, MI_LINK, MI_ABOUT, MI_REPLAY, MI_SKIP, MI_RESET, MI_N };
+enum { MI_LANG, MI_TEXT, MI_EAR, MI_LOOK, MI_LINK, MI_ABOUT, MI_REPLAY, MI_SKIP, MI_RESET, MI_N };
 enum { MA_NONE, MA_REPLAY, MA_RESET, MA_CHANGED, MA_SKIP };
 static struct { uint8_t on, sel, about, sure; int32_t t, win, rest; } mn;
 #ifndef APP_VER
@@ -39,6 +39,7 @@ static int menu_tick(int32_t dt)
         switch (mn.sel) {
         case MI_LANG: set_lang(lang + d); act = MA_CHANGED; break;
         case MI_TEXT: tsize = (uint8_t)((tsize + 3 + d) % 3); act = MA_CHANGED; break;
+        case MI_EAR: sy_ear = !sy_ear; act = MA_CHANGED; break;
         case MI_LOOK: set_look(look_i + 1); act = MA_CHANGED; break;
         case MI_LINK: link_id = (uint8_t)((link_id + 5 + d) % 5); act = MA_CHANGED; break;
         case MI_ABOUT: mn.about = 1; mn.win = 0; break;
@@ -53,7 +54,7 @@ static int menu_tick(int32_t dt)
 }
 static void menu_draw(void)
 {
-    static const int LAB[MI_N] = {T_LANGUAGE, T_TEXTSIZE, T_LOOK, T_LINK, T_ABOUT, T_REPLAY, T_SKIP, T_RESET};
+    static const int LAB[MI_N] = {T_LANGUAGE, T_TEXTSIZE, T_EAR, T_LOOK, T_LINK, T_ABOUT, T_REPLAY, T_SKIP, T_RESET};
     static const int LKS[4] = {T_LINK_ALONE, T_LINK_FOLLOW, T_LINK_LEAD, T_LINK_CLOCK};
     int32_t i, y, sh = ts(2, 4), sf = ts(1, 2), rh, vis, first, y0, foot;
     gveil(th->bg, 25);
@@ -80,21 +81,36 @@ static void menu_draw(void)
     foot -= TLH(sf);
     gfit(120, foot + 2 * sf, 232, mn.sel == MI_LINK && link_id ? TR(LKS[lk.state]) : mn.sel == MI_RESET && mn.sure ? TR(T_SURE)
          : "SELECT \xE2\x86\x91\xE2\x86\x93   OCT+ OK", mn.sel == MI_RESET && mn.sure ? th->caps[0] : mn.sel == MI_LINK && link_id ? th->caps[3] : th->mute, sf);
-    /* the lines: as many as fit, the list moving under the selected one */
-    rh = TLH(sh) + 6; vis = imax(1, (foot - 4 - y0) / rh);
-    first = iclamp(mn.sel - vis / 2, 0, imax(0, MI_N - vis));
-    for (i = first, y = y0; i < MI_N && i < first + vis; i++, y += rh) {
-        const char *lab = TR(LAB[i]), *val = "";
-        char idb[2] = {0, 0};
-        int32_t sc = sh, sel = i == mn.sel;
-        if (i == MI_LANG) val = TR(T_LANG);
-        else if (i == MI_TEXT) val = TR(T_SMALL + tsize);
-        else if (i == MI_LOOK) val = look_i ? "SLOW GLASS" : "BLACK OPAL";
-        else if (i == MI_LINK) { if (link_id) { idb[0] = (char)('0' + link_id); val = idb; } else val = TR(T_OFF); }
-        while (sc > 1 && gtextw(lab, sc) + gtextw(val, sc) + 14 > 216) sc--;
-        if (sel) { grect(6, y, 228, rh - 2, th->panel); gbox(6, y, 228, rh - 2, th->pad); }
-        gtext(12, y + (rh - 2 - 5 * sc) / 2 + 1, lab, sel ? th->text : th->mute, sc);
-        gtextr(228, y + (rh - 2 - 5 * sc) / 2 + 1, val, sel ? th->pad : th->mute, sc);
+    /* the lines: as many as fit, the list moving under the selected one. A line too long for the size wraps its
+     * name onto a second row rather than shrink (small print is what the size setting is there to avoid) */
+    {
+        int32_t hs[MI_N], scs[MI_N], lw[MI_N], smin = imin(sh, ts(1, 2)), room = foot - 4 - y0, tot;
+        const char *vals[MI_N];
+        static char idb[2];
+        rh = TLH(sh) + 6;
+        for (i = 0; i < MI_N; i++) {
+            const char *lab = TR(LAB[i]), *val = "";
+            int32_t sc = sh;
+            if (i == MI_LANG) val = TR(T_LANG);
+            else if (i == MI_TEXT) val = TR(T_SMALL + tsize);
+            else if (i == MI_EAR) val = TR(sy_ear ? T_ON : T_OFF);
+            else if (i == MI_LOOK) val = look_i ? "SLOW GLASS" : "BLACK OPAL";
+            else if (i == MI_LINK) { if (link_id) { idb[0] = (char)('0' + link_id); idb[1] = 0; val = idb; } else val = TR(T_OFF); }
+            while (sc > smin && gtextw(lab, sc) + gtextw(val, sc) + 14 > 216) sc--;
+            vals[i] = val; scs[i] = sc; lw[i] = 216 - (val[0] ? gtextw(val, sc) + 10 : 0);
+            hs[i] = imax(rh, gblock_h(lw[i], lab, sc) + 8);
+        }
+        first = mn.sel;                          /* the selected line, then lines after it, then before it, while there is room */
+        tot = hs[mn.sel]; vis = 1;
+        while (first + vis < MI_N && tot + hs[first + vis] <= room && first + vis <= mn.sel + 1) { tot += hs[first + vis]; vis++; }
+        while (first > 0 && tot + hs[first - 1] <= room) { first--; tot += hs[first]; vis++; }
+        while (first + vis < MI_N && tot + hs[first + vis] <= room) { tot += hs[first + vis]; vis++; }
+        for (i = first, y = y0; i < first + vis; y += hs[i], i++) {
+            int32_t sel = i == mn.sel, bh = gblock_h(lw[i], TR(LAB[i]), scs[i]);
+            if (sel) { grect(6, y, 228, hs[i] - 2, th->panel); gbox(6, y, 228, hs[i] - 2, th->pad); }
+            gblock(12, y + (hs[i] - 2 - bh) / 2, lw[i], TR(LAB[i]), sel ? th->text : th->mute, scs[i], 0);
+            gtextr(228, y + (hs[i] - 2 - 5 * scs[i]) / 2 + 1, vals[i], sel ? th->pad : th->mute, scs[i]);
+        }
     }
     if (first > 0) gtextc(120, y0 - 6, "\xE2\x86\x91", th->mute, 1);
     if (first + vis < MI_N) gtextc(120, foot - 5, "\xE2\x86\x93", th->mute, 1);

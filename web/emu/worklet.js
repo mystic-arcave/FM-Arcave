@@ -43,7 +43,7 @@ class FmArcave extends AudioWorkletProcessor {
     this.count += n;
     if (this.count >= (this.hidden ? 11025 : 1470)) {            // 30 times a second; 4 when the tab is hidden
       this.count = 0;
-      const msg = { type: "frame", leds: [ex.web_lit_buttons(), ex.web_lit_keys(), ex.web_dim_keys()], midi: [],
+      const msg = { type: "frame", leds: [ex.web_lit_buttons(), ex.web_lit_keys(), ex.web_dim_keys(), ex.web_breath_buttons()], midi: [],
                     clock: ex.web_clock_q8(), bpm: ex.web_bpm_q8(), state: ex.web_scene() };
       for (let v; (v = ex.web_midi_out()) >= 0;) msg.midi.push(v);
       const d = ex.web_screen_draws();

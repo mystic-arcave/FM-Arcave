@@ -96,6 +96,8 @@ static void dlg_draw(void)
 /* ---------------------------------------------------------------- the cave */
 #define CV_W 880
 #define CV_GROUND 400
+#define CV_XL (-104)                             /* the left wall of the room up on the left */
+#define CV_DOOR_X (-82)                          /* the door outside, in that wall */
 typedef struct { int16_t x0, x1, y; uint8_t kind; } cv_plat_t;   /* kind 0: a ledge; 1: a springy cap */
 static const cv_plat_t CV_PLAT[] = {
     {0, CV_W, CV_GROUND, 0},
@@ -104,7 +106,8 @@ static const cv_plat_t CV_PLAT[] = {
     {612, 800, 232, 0},                          /* machine 3 */
     {578, 606, 384, 1},                          /* a cap by the first ledge */
     {586, 612, 312, 1},                          /* one between the first and second, for the third */
-    {14, 132, 190, 0},                           /* high on the left wall: only the booster reaches it */
+    {CV_XL, 132, 190, 0},                        /* high on the left wall: only the booster reaches it; its far end is
+                                                    a small room with the door back outside */
     {788, 866, 176, 0},                          /* high on the right wall */
     {98, 126, 178, 1},                           /* a cap up there, toward the chimes */
 };
@@ -116,7 +119,7 @@ static int32_t cave_floor_q8(int32_t x)          /* the ground's height under x 
 }
 #define CV_NCHIME 5
 #define CHIME_X(i) (176 + (i) * 34)
-#define CHIME_Y(i) (118 + ((i) & 1) * 16)
+#define CHIME_Y(i) (116 + (i) * (i) * 2)          /* an arch: the far ones hang lower */
 #define CV_FRIEND_X 44
 #define CV_RING_X 746
 #define CV_RING_Y 116
@@ -126,6 +129,7 @@ static const cv_shroom_t CV_SHROOM[] = {
     {100, 400, 90, 3}, {118, 400, 50, 0}, {214, 400, 120, 1}, {262, 400, 60, 4}, {340, 400, 80, 2}, {430, 400, 150, 0},
     {470, 400, 70, 3}, {700, 400, 100, 4}, {776, 400, 140, 1}, {662, 344, 70, 2}, {812, 344, 90, 0}, {392, 288, 80, 4},
     {536, 288, 60, 1}, {634, 232, 70, 3}, {782, 232, 100, 2}, {122, 190, 50, 1}, {854, 176, 50, 4},
+    {-30, 190, 70, 2}, {-56, 190, 40, 0},
 };
 #define CV_NSHROOM (sizeof CV_SHROOM / sizeof CV_SHROOM[0])
 #define CV_JUKE_X 300
@@ -133,7 +137,8 @@ static const cv_shroom_t CV_SHROOM[] = {
 static const int16_t CV_MACH[3][2] = {{740, 344}, {466, 288}, {706, 232}};
 static const char *const MACH_NAME[3] = {"MYSTIC RUN", "THE LIGHT TABLE", "NIGHT BLOOM"};
 
-enum { CVA_NONE, CVA_LAMP, CVA_M1, CVA_M2, CVA_M3 };
+enum { CVA_NONE, CVA_LAMP, CVA_M1, CVA_M2, CVA_M3, CVA_SCORES, CVA_EXIT };
+#define CV_BOARD_X 522                           /* the scores board, on the ground past the Hat */
 static struct {
     int32_t x, y, vx, vy, th, coy, drag, acc, camx, camy, t, fade, roll_px, sq[5], psst, power_t, boost_t, chime_t[CV_NCHIME], ring_t;
     uint8_t secrets, chimes, friend_awake;       /* secrets: bit 0 the sleeper, 1 the chimes, 2 the ring */
@@ -143,7 +148,7 @@ static uint8_t story;                            /* 0 the intro, 1 in the cave, 
 
 static void cave_enter(int fresh)
 {
-    if (!cv.inited || fresh) { cv.x = Q8(26); cv.y = cave_floor_q8(Q8(26)) - Q8(9); cv.vx = 0; cv.vy = 0; cv.th = 0; cv.inited = 1; cv.camx = 0; cv.camy = Q8(CV_GROUND - 250); cv.psst = 0; }
+    if (!cv.inited || fresh) { cv.x = Q8(134); cv.y = cave_floor_q8(Q8(134)) - Q8(9); cv.vx = 0; cv.vy = 0; cv.th = 0; cv.inited = 1; cv.camx = 0; cv.camy = Q8(CV_GROUND - 250); cv.psst = 0; }
     cv.fade = 256; cv.drag = 0; cv.t = 0;
     if (story >= 2) cv.met = 1;                  /* the Hat has said its piece: no calling from off the screen */
     sy_drone_want = story >= 4 ? 0 : 150;
@@ -217,7 +222,10 @@ static int cave_tick(int32_t dt)
         }
         first = 0;
         cv.x += cv.vx >> 7; cv.y += cv.vy >> 7;
-        if (cv.x < Q8(14)) { cv.x = Q8(14); cv.vx = imax(0, cv.vx); }
+        {   /* the left wall: below the high ledge it stands at the ramp's end, above it the room goes on to its own */
+            int32_t wl = cv.y + rad > Q8(190) + 256 ? Q8(14) : Q8(CV_XL + 12);
+            if (cv.x < wl) { if (wl - cv.x > Q8(6)) cv.y = imin(cv.y, Q8(190) - rad); else cv.x = wl; cv.vx = imax(0, cv.vx); if (cv.x < Q8(CV_XL + 12)) cv.x = Q8(CV_XL + 12); }
+        }
         if (cv.x > Q8(CV_W - 14)) { cv.x = Q8(CV_W - 14); cv.vx = imin(0, cv.vx); }
         bot = cv.y + rad;
         cv.g = 0;
@@ -258,7 +266,7 @@ static int cave_tick(int32_t dt)
     }
     for (i = 0; i < CV_NCHIME; i++) {
         if (cv.chime_t[i] > 0) cv.chime_t[i] -= dt;
-        else if (iabs(hx - CHIME_X(i)) < 10 && iabs(hy - CHIME_Y(i)) < 15) {
+        else if (iabs(hx - CHIME_X(i)) < 13 && iabs(hy - CHIME_Y(i)) < 18) {
             cv.chime_t[i] = 450; cv.chimes |= (uint8_t)(1u << i);
             sfx(84 + SC_PEN[i], 0, 1600, W_SINE, 3400, 2, 230); sfx(96 + SC_PEN[i], 0, 700, W_SINE, 1200, 2, 230);
             if (cv.chimes == (1u << CV_NCHIME) - 1u) cave_secret(1);
@@ -271,7 +279,7 @@ static int cave_tick(int32_t dt)
     }
     /* the camera keeps Rock a third of the way up, and never shows past the walls */
     {
-        int32_t tx = iclamp(cv.x - Q8(120) + cv.vx / 3, 0, Q8(CV_W - 240)), ty = iclamp(cv.y - Q8(176), Q8(CV_GROUND - 372), Q8(CV_GROUND - 214));
+        int32_t tx = iclamp(cv.x - Q8(120) + cv.vx / 3, cv.y < Q8(200) ? Q8(CV_XL - 8) : 0, Q8(CV_W - 240)), ty = iclamp(cv.y - Q8(176), Q8(CV_GROUND - 372), Q8(CV_GROUND - 214));
         cv.camx += (tx - cv.camx) * imin(160, dt) / 160;
         cv.camy += (ty - cv.camy) * imin(240, dt) / 240;
     }
@@ -288,11 +296,15 @@ static int cave_tick(int32_t dt)
     cv.near = 0;
     if (iabs(hx - CV_HAT_X) < 40 && hy > CV_GROUND - 40) cv.near = 1;
     if (iabs(hx - CV_JUKE_X) < 30 && hy > CV_GROUND - 40) cv.near = 2;
+    if (iabs(hx - CV_BOARD_X) < 22 && hy > CV_GROUND - 40) cv.near = 6;
+    if (hx < CV_DOOR_X + 26 && hy > 190 - 40 && hy < 190) cv.near = 7;
     for (i = 0; i < 3; i++) if (iabs(hx - CV_MACH[i][0]) < 26 && iabs(hy - (CV_MACH[i][1] - 8)) < 22) cv.near = (uint8_t)(3 + i);
     if (cv.near) led_play_breathe = 1;
     if (BDOWN(BTN_PLAY) && cv.near) {
         if (cv.near == 1) dlg_open(T_HAT, story < 4 ? T_HAT_REMIND : T_HAT_FREE);
         else if (cv.near == 2) { if (story < 4) act = CVA_LAMP; else snd_ui(79); }
+        else if (cv.near == 6) act = CVA_SCORES;
+        else if (cv.near == 7) act = CVA_EXIT;
         else if (story >= 4) act = CVA_M1 + cv.near - 3;
         else { banner_show("", TR(T_NOPOWER), 0); sfx_ex(43, 0, 260, W_SAW, 2400, 2, 120, 0, 0, 65300); }
     }
@@ -365,7 +377,7 @@ static void cave_draw(void)
             continue;
         }
         if (i == 0) {                            /* the ground: flat, and curving up at both ends */
-            for (x = imax(p->x0, cx - 4) & ~3; x < imin(p->x1, cx + 244); x += 4) {
+            for (x = imax(4, cx - 4) & ~3; x < imin(CV_W - 4, cx + 244); x += 4) {
                 int32_t y0 = cave_floor_q8(x << 8) >> 8, y1 = cave_floor_q8((x + 4) << 8) >> 8;
                 lit = cave_light(x, y0);
                 galpha(lit);
@@ -373,7 +385,8 @@ static void cave_draw(void)
                 for (k = 0; k < 3; k++)
                     if (((x / 4 + k * 3) % (5 + k * 2)) < 3 + k) { galpha(lit * (150 - k * 40) / 256); gline(SX(x), SY(y0 + 3 + k * 4), SX(x + 4), SY(y1 + 3 + k * 4), th->bands[k % 5]); }
             }
-            for (k = 0; k < 2; k++) {            /* the boosters: three chevrons running up each ramp */
+            for (k = 1; k < 2; k++) {            /* the right booster shows itself: three chevrons running up the ramp
+                                                    (the left one does not: rolling onto it is a surprise) */
                 int32_t j;
                 for (j = 0; j < 3; j++) {
                     int32_t bx = k ? CV_W - 82 + j * 9 : 82 - j * 9, by = (cave_floor_q8(bx << 8) >> 8) - 4, d = k ? 3 : -3;
@@ -392,8 +405,34 @@ static void cave_draw(void)
                 if (((x / 4 + k * 3) % (5 + k * 2)) < 3 + k) { galpha(lit * (150 - k * 40) / 256); ghl(SX(x), SX(x + 4), SY(p->y + 3 + k * 4), th->bands[(k + i) % 5]); }
         }
         if (i) {                                 /* a ledge's ends hang as rock */
-            galpha(cave_light(p->x0, p->y)); gline(SX(p->x0), SY(p->y), SX(p->x0 + 10), SY(p->y + 16), th->rim);
+            if (p->x0 != CV_XL) { galpha(cave_light(p->x0, p->y)); gline(SX(p->x0), SY(p->y), SX(p->x0 + 10), SY(p->y + 16), th->rim); }
             galpha(cave_light(p->x1, p->y)); gline(SX(p->x1), SY(p->y), SX(p->x1 - 10), SY(p->y + 16), th->rim);
+        }
+    }
+    {   /* the walls, up to the roof: ragged, lit like the floors. Left: from the ramp's end to the high ledge, then the
+           room's own wall; right: from the ramp's end all the way */
+        static const int16_t WL[3][3] = {{4, 190, 0}, {CV_XL, CV_GROUND - 360, 190}, {CV_W - 4, CV_GROUND - 360, 0}};
+        for (i = 0; i < 3; i++) {
+            int32_t wx = WL[i][0], ya = WL[i][1], yb = WL[i][2] ? WL[i][2] : cave_floor_q8(wx << 8) >> 8, y, px = wx;
+            if (SX(wx) < -8 || SX(wx) > 248) continue;
+            for (y = ya; y < yb; y += 8) {
+                int32_t nx = wx + (int32_t)(ihash((uint32_t)(y / 8 + i * 77 + 31)) * 5u >> 16) - 2, y1 = imin(yb, y + 8);
+                if (y1 == yb) nx = wx;
+                galpha(imax(on ? 140 : 40, cave_light(wx, y)));
+                gline(SX(px), SY(y), SX(nx), SY(y1), th->rim);
+                px = nx;
+            }
+        }
+    }
+    {   /* the door outside: an arch of the five colours with the evening in it, seen in any light */
+        int32_t x = SX(CV_DOOR_X), y = SY(190);
+        if (x > -40 && x < 280) {
+            galpha(256);
+            gellf(x, y, 15, 30, th->far1, 1); grect(x - 15, y, 31, 1, th->rim);
+            for (k = 0; k < 4; k++) { galpha(230 - k * 45); garc(x, y, 18 + k * 4, 33 + k * 5, 32768, 65536, th->caps[(k + (int32_t)(tm / 800u)) % 5], 1); }
+            galpha(40 + (tsin(tm, 20, 0) >> 10)); gdisc(x, y - 14, 34, th->pad);
+            galpha(256);
+            for (k = 0; k < 3; k++) gp(x - 8 + k * 7, y - 20 + ((k * 5) % 7) - 3, th->pad);   /* stars */
         }
     }
     galpha(256);
@@ -412,11 +451,15 @@ static void cave_draw(void)
     for (i = 0; i < CV_NCHIME; i++) {
         int32_t x = SX(CHIME_X(i)), y = SY(CHIME_Y(i)), on_ = cv.chime_t[i] > 0, xy[8];
         col_t c = th->caps[i % 5];
-        galpha(on_ ? 256 : (cv.chimes >> i & 1) ? 150 : 70);
-        gline(x, SY(CV_GROUND - 372), x + (on_ ? (tsin(tm, 300, 0) >> 13) : 0), y - 7, th->stem);
-        xy[0] = x; xy[1] = y - 7; xy[2] = x + 4; xy[3] = y; xy[4] = x; xy[5] = y + 8; xy[6] = x - 4; xy[7] = y;
-        gpoly(xy, 4, th->dark ? 0 : th->panel); gpolyline(xy, 4, 1, c);
-        if (on_) { galpha(cv.chime_t[i] * 200 / 450); gdisc(x, y, 12, c); }
+        int32_t got = cv.chimes >> i & 1;
+        galpha(got ? 200 : 60);
+        gline(x, SY(CV_GROUND - 372), x + (on_ ? (tsin(tm, 300, 0) >> 13) : 0), y - 8, th->stem);
+        xy[0] = x; xy[1] = y - 8; xy[2] = x + 5; xy[3] = y; xy[4] = x; xy[5] = y + 9; xy[6] = x - 5; xy[7] = y;
+        if (got) {                               /* rung: it stays lit, full of its colour, in a glow */
+            galpha(70 + (tsin(tm, 25, i * 13000) >> 9)); gdisc(x, y, 13, c);
+            galpha(256); gpoly(xy, 4, c); gpolyline(xy, 4, 1, th->text);
+        } else { galpha(256); gpoly(xy, 4, th->bg); galpha(80); gpolyline(xy, 4, 1, th->mute); }
+        if (on_) { galpha(cv.chime_t[i] * 200 / 450); gdisc(x, y, 16, c); }
     }
     galpha(256);
     if (cv.ring_t <= 0) {
@@ -449,6 +492,15 @@ static void cave_draw(void)
             galpha(256);
         } else if (cv.power_t == 0 && (tm % 3100u) < 90u) { galpha(200); gline(x - 3, y - 26, x + 2, y - 22, th->pad); gline(x + 2, y - 22, x - 1, y - 20, th->pad); galpha(256); }   /* a spark */
     }
+    {   /* the scores board: a little sign with a cup on it, readable in any light */
+        int32_t x = SX(CV_BOARD_X), y = SY(CV_GROUND);
+        galpha(imax(110, cave_light(CV_BOARD_X, CV_GROUND - 20)));
+        gline(x, y, x, y - 14, th->stem);
+        grect(x - 13, y - 34, 26, 20, th->panel); gbox(x - 13, y - 34, 26, 20, th->pad);
+        grect(x - 4, y - 30, 8, 6, th->caps[3]); grect(x - 1, y - 24, 2, 3, th->caps[3]); grect(x - 4, y - 21, 8, 2, th->caps[3]);   /* the cup */
+        gp(x - 6, y - 29, th->caps[3]); gp(x + 5, y - 29, th->caps[3]);
+        galpha(256);
+    }
     for (i = 0; i < 3; i++) cave_cabinet(SX(CV_MACH[i][0]), SY(CV_MACH[i][1]), i, cave_light(CV_MACH[i][0], CV_MACH[i][1] - 20), tm);
     /* the Hat, a little off the ground, watching */
     {
@@ -471,10 +523,10 @@ static void cave_draw(void)
         galpha(256);
     }
     if (cv.near && !dlg.on) {
-        const char *s = cv.near == 1 ? TR(T_TALK) : cv.near == 2 ? (on ? "" : TR(T_FIX)) : TR(T_START);
+        const char *s = cv.near == 1 ? TR(T_TALK) : cv.near == 2 ? (on ? "" : TR(T_FIX)) : cv.near == 6 ? TR(T_SCORES_PROMPT) : cv.near == 7 ? TR(T_EXIT) : TR(T_START);
         int32_t px = SX(cv.x >> 8), py = SY(cv.y >> 8) - 30;
-        if (cv.near >= 3) gfit(SX(CV_MACH[cv.near - 3][0]), SY(CV_MACH[cv.near - 3][1]) - 58 - 5 * ts(1, 3), 232, MACH_NAME[cv.near - 3], on ? th->caps[(cv.near - 3) * 2 % 5] : th->mute, ts(1, 3));
-        if (cv.near >= 3 && !on) s = TR(T_NOPOWER);
+        if (cv.near >= 3 && cv.near <= 5) gfit(SX(CV_MACH[cv.near - 3][0]), SY(CV_MACH[cv.near - 3][1]) - 58 - 5 * ts(1, 3), 232, MACH_NAME[cv.near - 3], on ? th->caps[(cv.near - 3) * 2 % 5] : th->mute, ts(1, 3));
+        if (cv.near >= 3 && cv.near <= 5 && !on) s = TR(T_NOPOWER);
         galpha(160 + ipulse(tm, 1400) * 96 / 256);
         gfit(px, py + 6 - 6 * ts(1, 3), 232, s, th->text, ts(1, 3));
         galpha(256);

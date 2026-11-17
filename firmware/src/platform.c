@@ -56,6 +56,7 @@ enum { ENC_SELECT = 0, ENC_ALGORITHM = 1, ENC_KNOB1 = 2, ENC_KNOB2 = 3, ENC_KNOB
 #include "smk_input.h"                          /* keys with velocity, buttons, 8 encoders, LEDs, pads, faders, wheels */
 static void fm1_led_key_glow(uint32_t id, int on) { (void)id; (void)on; }   /* (no key LEDs: the pads glow) */
 static void fm1_play_led(uint32_t mode) { fm1_led_key(BTN_PLAY, mode != 0u); }   /* (the SMK-37: PLAY's one LED) */
+static void fm1_led_key_breathe(uint32_t id, int on) { fm1_led_key(id, on); }    /* (the SMK-37: lit) */
 #else
 #define FM1_SETTLE_US 100u                      /* the boot scan (OCT- for the rescue): 10 us read no key on an FM-1, the tick waits 100 too */
 #include "fm1_input.h"
@@ -67,6 +68,17 @@ static void fm1_led_key_glow(uint32_t id, int on)   /* as fm1_led_key, the dim l
             if (FM1_KEYMAP[r][p] == (int8_t)id) {
                 if (on) fm1_led_dim[p] |= (uint8_t)(1u << r);
                 else fm1_led_dim[p] &= (uint8_t)~(1u << r);
+            }
+}
+/* (FM ARCAVE) as fm1_led_key, the breathing layer (hal/fm1_input.h fm1_led_breath): "press me" */
+static void fm1_led_key_breathe(uint32_t id, int on)
+{
+    uint32_t p, r;
+    for (p = 0; p < FM1_NCOL; p++)
+        for (r = 1; r < 5u; r++)
+            if (FM1_KEYMAP[r][p] == (int8_t)id) {
+                if (on) fm1_led_breath[p] |= (uint8_t)(1u << r);
+                else fm1_led_breath[p] &= (uint8_t)~(1u << r);
             }
 }
 /* (FM ARCAVE) PLAY's second, green LED: not in the key matrix (no key there), on the hardware at column 8, row bit 1

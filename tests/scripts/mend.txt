@@ -1,9 +1,10 @@
-# the rings solved, the dish stirred, a song recorded and kept, the power back
+# the four rings solved (outer first), the dish stirred, a song recorded and kept, the power back
 500 shot
-700 enc 4 -1
-1000 enc 3 -5
+700 enc 5 -3
+900 enc 4 -4
+1100 enc 3 4
 1500 shot
-1800 enc 2 2
+1800 enc 2 3
 2200 shot
 5000 shot
 6900 enc 2 4

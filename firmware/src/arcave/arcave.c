@@ -7,7 +7,8 @@
  *   the mending  three rings of glass, then the dish and your first song            ac_juke.h
  *   the machines MYSTIC RUN, THE LIGHT TABLE, NIGHT BLOOM                           ac_mach.h
  *   everywhere   GLO: settings (the game pauses); OCT- OCT+: the language; ALGORITHM: the jukebox;
- *                LINK: several FM-1s on one clock                                   ac_menu.h, ac_sync.h */
+ *                LINK: several FM-1s on one clock                                   ac_menu.h, ac_sync.h
+ *                HOME: how to play; EDIT: the scores and the time played; FX: an effect     ac_sheet.h */
 #include "ac_base.h"
 #include "ac_synth.h"
 #include "ac_music.h"
@@ -17,6 +18,7 @@
 #include "ac_cave.h"
 #include "ac_juke.h"
 #include "ac_mach.h"
+#include "ac_sheet.h"
 #include "ac_sync.h"
 #include "ac_menu.h"
 
@@ -25,13 +27,21 @@ static uint8_t scene, replay, thanks_due;
 static uint32_t ac_last_ms, save_at;
 static uint8_t ac_started, juke_track;
 static int32_t thanks_t, algo_quiet, tip_t, glo_t, wipe_show, wipe_hold;
-static uint8_t glo_used;
+static uint8_t glo_used, was_paused;
+static uint32_t pause_tick, play_saved_s;
 
-typedef struct {
+typedef struct {                                 /* the save of 0.1 and 0.2: still read, so an update keeps the story */
     uint32_t magic;
     uint8_t lang, look, story, link, track, take_n, take_bpm, tsize1;   /* tsize1: the text size + 1 (0: never set) */
     uint8_t take[TAKE_MAX][2];
     uint32_t best[3];
+} save1_t;
+typedef struct {
+    save1_t v1;
+    uint32_t play_s;                             /* the time played, seconds */
+    uint8_t ear, secrets, rsv[2];
+    uint32_t race_cs;                            /* the best race back, hundredths of a second (0: never run) */
+    uint8_t rsv2[4];
 } save_t;
 #define SAVE_MAGIC 0x41434156u                   /* "ACAV" */
 static save_t sv;
@@ -39,10 +49,13 @@ static save_t sv;
 static void save_now(void)
 {
     uint32_t i;
-    sv.magic = SAVE_MAGIC; sv.lang = lang; sv.look = look_i; sv.story = story; sv.link = link_id; sv.track = juke_track;
-    sv.take_n = take_n; sv.take_bpm = take_bpm; sv.tsize1 = (uint8_t)(tsize + 1u);
-    for (i = 0; i < TAKE_MAX; i++) { sv.take[i][0] = take_ev[i][0]; sv.take[i][1] = take_ev[i][1]; }
-    for (i = 0; i < 3u; i++) sv.best[i] = best[i];
+    save1_t *v = &sv.v1;
+    v->magic = SAVE_MAGIC; v->lang = lang; v->look = look_i; v->story = story; v->link = link_id; v->track = juke_track;
+    v->take_n = take_n; v->take_bpm = take_bpm; v->tsize1 = (uint8_t)(tsize + 1u);
+    for (i = 0; i < TAKE_MAX; i++) { v->take[i][0] = take_ev[i][0]; v->take[i][1] = take_ev[i][1]; }
+    for (i = 0; i < 3u; i++) v->best[i] = best[i];
+    sv.play_s = play_s; sv.ear = sy_ear; sv.secrets = cv.secrets; sv.race_cs = race_best_cs;
+    play_saved_s = play_s;
     settings_save(&sv, sizeof sv);
 }
 static void save_soon(void) { save_dirty = 1; save_at = fm1_ms + 1500u; }
@@ -56,7 +69,9 @@ static void to_cave(int fresh)
 static void story_reset(void)
 {
     uint32_t i;
+    uint8_t keep = cv.secrets;                   /* (starting the story over keeps what was found; wiping the save does not) */
     for (i = 0; i < sizeof cv; i++) ((uint8_t *)&cv)[i] = 0;
+    cv.secrets = keep;
     story = 0; take_n = 0; juke_track = 0; replay = 0; thanks_due = 0; dlg.on = 0;
     scene = SC_INTRO; intro_reset(); mus_set(MUS_INTRO, 0);
     sy_drone_want = 0; sy_music_want = 256;
@@ -66,8 +81,8 @@ static void story_reset(void)
 /* GLO held: the whole save goes, scores and settings too (the language stays: you are reading it) */
 static void save_wipe(void)
 {
-    best[0] = best[1] = best[2] = 0;
-    link_id = 0; set_look(0); mn.on = 0; tsize = 1;
+    best[0] = best[1] = best[2] = 0; cv.secrets = 0; race_best_cs = 0;
+    link_id = 0; set_look(0); mn.on = 0; tsize = 1; sy_ear = 0; play_s = 0; play_ms = 0; sh.on = SH_NONE;
     story_reset();
     banner_show("", TR(T_WIPED), 0);
     sfx(60, 0, 400, W_TRI, 3000, 4, 150); sfx(48, 200, 900, W_TRI, 3000, 4, 150);
@@ -77,13 +92,20 @@ static void arcave_init(void)
 {
     uint32_t i;
     hat_init();
-    if (settings_load(&sv, sizeof sv) == 0 && sv.magic == SAVE_MAGIC) {
-        set_lang(sv.lang); set_look(sv.look); story = sv.story > 4u ? 0u : sv.story; link_id = sv.link % 5u; juke_track = sv.track % JUKE_N;
-        take_bpm = sv.take_bpm ? sv.take_bpm : 90u;
-        tsize = sv.tsize1 >= 1u && sv.tsize1 <= 3u ? (uint8_t)(sv.tsize1 - 1u) : 1u;
-        for (i = 0; i < TAKE_MAX; i++) { take_ev[i][0] = sv.take[i][0] % 32u; take_ev[i][1] = sv.take[i][1] % AC_NKEY; }
-        take_n = sv.take_n > TAKE_MAX ? 0u : sv.take_n;
-        for (i = 0; i < 3u; i++) best[i] = sv.best[i];
+    int have = settings_load(&sv, sizeof sv) == 0;
+    if (!have) {                                 /* a save from 0.1 or 0.2 (shorter): its story, with the new things at their start */
+        for (i = 0; i < sizeof sv; i++) ((uint8_t *)&sv)[i] = 0;
+        have = settings_load(&sv.v1, sizeof sv.v1) == 0;
+    }
+    if (have && sv.v1.magic == SAVE_MAGIC) {
+        const save1_t *v = &sv.v1;
+        set_lang(v->lang); set_look(v->look); story = v->story > 4u ? 0u : v->story; link_id = v->link % 5u; juke_track = v->track % JUKE_N;
+        take_bpm = v->take_bpm ? v->take_bpm : 90u;
+        tsize = v->tsize1 >= 1u && v->tsize1 <= 3u ? (uint8_t)(v->tsize1 - 1u) : 1u;
+        for (i = 0; i < TAKE_MAX; i++) { take_ev[i][0] = v->take[i][0] % 32u; take_ev[i][1] = v->take[i][1] % AC_NKEY; }
+        take_n = v->take_n > TAKE_MAX ? 0u : v->take_n;
+        for (i = 0; i < 3u; i++) best[i] = v->best[i];
+        play_s = play_saved_s = sv.play_s; sy_ear = sv.ear ? 1u : 0u; cv.secrets = sv.secrets & 7u; race_best_cs = sv.race_cs;
         if (story == 3u) story = 2u;             /* the light was back but no song yet: the rings again (they are quick) */
     }
 #ifdef AC_TEST_TSIZE                             /* (tests) the text size: 0 small, 1 medium, 2 large */
@@ -100,6 +122,8 @@ static void arcave_init(void)
 #ifdef AC_TEST_SCENE                             /* (tests) straight to a scene: 1 the rings, 2 the dish, 3-5 a machine */
     if (AC_TEST_SCENE == 1) { scene = SC_LAMP; lamp_reset(); }
     else if (AC_TEST_SCENE == 2) { scene = SC_DISH; dish_reset(); }
+    else if (AC_TEST_SCENE == 6) intro_race_start();                 /* (6: out of the upper door, the race back) */
+    else if (AC_TEST_SCENE == 7) { scene = SC_CAVE; cave_enter(1); cv.x = Q8(-20); cv.y = Q8(181); }   /* (7: in the room by the door) */
     else { scene = SC_MACH; mach_enter(AC_TEST_SCENE - 3); mus_set(MUS_JUKE, 2); }
 #endif
 }
@@ -155,6 +179,13 @@ static void arcave_frame(void)
         if (wipe_show > 0) wipe_show -= dt;
         if ((in.bup >> BTN_GLO & 1u) && !glo_used && glo_t < 700) menu_open();
     }
+    /* the time played; kept with every save, and by itself when a quarter of an hour has gone by in the Arcave */
+    play_ms += (uint32_t)dt;
+    if (play_ms >= 1000u) { play_ms -= 1000u; play_s++; }
+    if (scene == SC_CAVE && play_s - play_saved_s >= 900u && !save_dirty) save_soon();
+    /* a machine on the clock (the run, the bloom) holds still while a sheet or the settings are up: its start moves on */
+    if ((mn.on || sh.on) && !was_paused) { was_paused = 1; pause_tick = tr_now_q8() >> 8; }
+    if (!(mn.on || sh.on) && was_paused) { uint32_t d = (tr_now_q8() >> 8) - pause_tick; was_paused = 0; mr.t0 += d; nb.t0 += d; }
     if (mn.on) {
         r = menu_tick(dt);
         if (r == MA_REPLAY) { replay = 1; scene = SC_INTRO; intro_reset(); mus_set(MUS_INTRO, 0); sy_drone_want = 0; sy_music_want = 256; }
@@ -166,17 +197,31 @@ static void arcave_frame(void)
         }
         else if (r == MA_CHANGED) save_soon();
         sy_rumble_want = 0;
+    } else if (sh.on) {
+        r = sheet_tick(dt);
+        if (r == SA_LEAVE) to_cave(0);
     } else {
-        if (in.enc[ENC_ALGORITHM] && scene != SC_INTRO && scene != SC_LAMP && scene != SC_DISH) juke_change(in.enc[ENC_ALGORITHM]);
-        switch (scene) {
+        /* (in NIGHT BLOOM the ALGORITHM knob turns a ring: the jukebox waits) */
+        if (in.enc[ENC_ALGORITHM] && scene != SC_INTRO && scene != SC_LAMP && scene != SC_DISH
+            && !(scene == SC_MACH && mc.which == 2 && mc.state == MS_PLAY)) juke_change(in.enc[ENC_ALGORITHM]);
+        if (BDOWN(BTN_FX)) fx_trigger();
+        if (BDOWN(BTN_EDIT) && !(scene == SC_INTRO && G.phase == IP_TITLE)) { sheet_open(SH_SCORES); in.bdown &= ~(1u << BTN_EDIT); }
+        else if (scene == SC_INTRO && G.phase == IP_PLAY && BDOWN(BTN_HOME)) sheet_open(SH_INTRO);
+        if (!sh.on) switch (scene) {
         case SC_INTRO:
             if (G.phase == IP_WIDE && story >= 1u && !replay) { to_cave(0); break; }   /* the story is further on: straight in */
             if (intro_tick(dt)) { if (story < 1u) story = 1; replay = 0; to_cave(1); save_soon(); }
+            if (race_save_due) { race_save_due = 0; save_soon(); }
             break;
         case SC_CAVE:
             r = cave_tick(dt);
             if (thanks_due && !dlg.on) { thanks_t -= dt; if (thanks_t <= 0) { thanks_due = 0; dlg_open(T_HAT, T_HAT_THANKS); } }
             if (r == CVA_LAMP) { scene = SC_LAMP; lamp_reset(); sy_rumble_want = 0; }
+            else if (r == CVA_SCORES) sheet_open(SH_SCORES);
+            else if (r == CVA_EXIT) {            /* out of the upper door: the course again, to be raced back */
+                scene = SC_INTRO; replay = 1; intro_race_start(); mus_set(MUS_INTRO, 0); sy_drone_want = 0; sy_music_want = 256; sy_rumble_want = 0;
+                snd_ui(79);
+            }
             else if (r >= CVA_M1) { scene = SC_MACH; mach_enter(r - CVA_M1); sy_rumble_want = 0; }
             break;
         case SC_LAMP:
@@ -197,7 +242,8 @@ static void arcave_frame(void)
             }
             break;
         case SC_MACH:
-            if (mach_tick(dt) < 0) to_cave(0);
+            r = mach_tick(dt);
+            if (r < 0) to_cave(0); else if (r > 0) sheet_open(SH_MACH);
             break;
         }
     }
@@ -210,6 +256,8 @@ static void arcave_frame(void)
     }
     if (scene == SC_INTRO && G.phase == IP_TITLE) { tip_t = 3600; lang_tip_draw(smooth8(3200, 3900, G.t)); }
     else if (tip_t > 0) { tip_t -= dt; if (!mn.on) lang_tip_draw(imin(256, tip_t * 256 / 600)); }   /* three seconds more, then it fades */
+    fx_apply(dt);
+    if (sh.on && !mn.on) sheet_draw();
     if (mn.on) menu_draw();
     if (wipe_show > 0) {                         /* the notice, and a bar that fills while GLO is held */
         int32_t a = ts(1, 3), h = gblock_h(204, TR(T_WIPE), a), y = 120 - (h + 30) / 2;

@@ -21,7 +21,8 @@ const BLACK = [1, 3, 5, 8, 10, 13, 15, 17, 20, 22, 25];
 const KEYMAP = { KeyZ: 0, KeyX: 2, KeyC: 4, KeyV: 6, KeyB: 7, KeyN: 9, KeyM: 11, Comma: 12, Period: 14, Slash: 16,
   KeyS: 1, KeyD: 3, KeyF: 5, KeyH: 8, KeyJ: 10, KeyL: 13, Semicolon: 15, Quote: 17,
   KeyQ: 18, KeyW: 19, KeyE: 20, KeyR: 21, KeyT: 22, KeyY: 23, KeyU: 24, KeyI: 25, KeyO: 26 };
-const BTNMAP = { Space: 12, Enter: 12, KeyG: 7, Escape: 7, KeyA: 8, Backspace: 8, KeyP: 13, BracketLeft: 0, BracketRight: 1 };
+const BTNMAP = { Space: 12, Enter: 12, KeyG: 7, Escape: 7, KeyA: 8, Backspace: 8, KeyP: 13, BracketLeft: 0, BracketRight: 1,
+  Digit5: 2, Digit6: 3, Digit7: 4, Digit8: 5, Digit9: 6, Digit0: 9, Minus: 10, Equal: 11 };   // FX SCL ENV LFO EDIT, SAVE ARP SEQ
 
 function el(tag, attrs, parent) {
   const e = document.createElementNS(NS, tag);
@@ -121,8 +122,8 @@ export function mountFm1(host, on) {
       }
       ctx.putImageData(img, 0, 0);
     },
-    leds(b, k, dim) {
-      for (const id in btnEls) btnEls[id].classList.toggle("lit", !!(b >> id & 1));
+    leds(b, k, dim, br = 0) {
+      for (const id in btnEls) { btnEls[id].classList.toggle("lit", !!(b >> id & 1)); if (+id !== 12) btnEls[id].classList.toggle("pulse", !!(br >> id & 1)); }
       btnEls[12].classList.toggle("green", !!(b >> 14 & 1));          // PLAY's green light: lit, or breathing
       btnEls[12].classList.toggle("breathe", !!(b >> 15 & 1));
       keyEls.forEach((g, i) => { g.classList.toggle("lit", !!(k >> i & 1)); g.classList.toggle("dim", !!(dim >> i & 1) && !(k >> i & 1)); });
@@ -157,6 +158,7 @@ export const FM1_CSS = `
 .fm1-btn.green .fm1-lamp{fill:#5fe08a;filter:drop-shadow(0 0 6px #5fe08a)}
 .fm1-btn.breathe .fm1-lamp{fill:#5fe08a;filter:drop-shadow(0 0 6px #5fe08a);animation:fm1breath 2.25s ease-in-out infinite}
 @keyframes fm1breath{0%,100%{opacity:.05}50%{opacity:1}}
+.fm1-btn.pulse .fm1-lamp{fill:#fff1d6;filter:drop-shadow(0 0 6px #fff1d6);animation:fm1breath 2.25s ease-in-out infinite}
 .fm1-btn.down rect:first-child{fill:#2a2d33}
 .fm1-slit{fill:#7d776a;opacity:.35}
 .fm1-key.black .fm1-slit{fill:#55524a}

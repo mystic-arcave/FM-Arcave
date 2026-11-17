@@ -100,6 +100,38 @@ for i, (px, far) in enumerate(PADS):
         for k in range(5):
             SKYOBJ.append((0, bx + 60 + k * 70, gy - 140 - k * 45, (i + k) % 5))
 
+# the race back (out of the cave's upper door, to where the game began): the pads stand on the other side of each
+# crest, the sky things hang to the left of them, and a booster waits at the foot of each of the four big steps
+RPADS = []
+x = XE - 320
+while x > XS + 420:
+    if Y(x) < Y(x + 2) and Y(x) <= Y(x - 2) and Y(x + 40) - Y(x) > 5:
+        f = x - 20
+        while f > x - 400 and Y(f - 2) >= Y(f):
+            f -= 2
+        RPADS.append((x + 24, f))
+        x -= 120
+    x -= 2
+RSKY = []
+for i, (px, far) in enumerate(RPADS):
+    gy = Y(far)
+    for k in range(1, 5):
+        RSKY.append((0, px + k * (far - px - 60) / 5, Y(px) - 20 - 50 * math.sin(math.pi * k / 5) + k * 2, (i + k) % 5))
+    if i % 3 == 1:
+        bx = far - 10
+        for j, q in enumerate([[0, 95], [120, 175], [245, 250]]):
+            RSKY.append((1 if j < 2 else 2, bx - q[0], gy - q[1], (i + j) % 5))
+        for k in range(5):
+            RSKY.append((0, bx - 60 - k * 70, gy - 140 - k * 45, (i + k) % 5))
+RPADS.sort(key=lambda p: p[0])
+RSKY.sort(key=lambda o: o[1])
+STEPS = []    # the foot, the throw (px/s leftward, px/s upward)
+for a, wd in [(XS, 120), (L * .3, 170), (L * .58, 170), (L * .84, 190)]:
+    foot = a + wd + 16
+    top = min(Y(q) for q in range(int(a) - 40, int(foot)))
+    vy = math.sqrt(2 * 520 * (Y(foot) - top + 26))
+    STEPS.append((foot, (foot - (a - 24)) / (vy / 520), vy))
+
 # on the ground: 0 pal, 1 crystal, 2 gate, 3 lamp, 4 sign
 PROPS = []
 x, i = 900, 0
@@ -182,6 +214,22 @@ w("static const co_sky_t CO_SKY[CO_NSKY] = {")
 for o in SKYOBJ:
     w(f"    {{{round(o[1])},{round(o[2])},{o[0]},{o[3]}}},")
 w("};")
+w(f"#define CO_NRPAD {len(RPADS)}")
+w("static const co_pad_t CO_RPAD[CO_NRPAD] = {   /* the race back: far is to the left */")
+for p in RPADS:
+    w(f"    {{{round(p[0])},{round(p[1])}}},")
+w("};")
+w(f"#define CO_NRSKY {len(RSKY)}")
+w("static const co_sky_t CO_RSKY[CO_NRSKY] = {")
+for o in RSKY:
+    w(f"    {{{round(o[1])},{round(o[2])},{o[0]},{o[3]}}},")
+w("};")
+w("typedef struct { int16_t x, vx, vy; } co_step_t;   /* a booster at the foot of a big step: where, and its throw */")
+w(f"#define CO_NSTEP {len(STEPS)}")
+w("static const co_step_t CO_STEP[CO_NSTEP] = {")
+for o in STEPS:
+    w(f"    {{{round(o[0])},{round(o[1])},{round(o[2])}}},")
+w("};")
 w("typedef struct { int16_t x; uint8_t t, c; uint16_t n; } co_prop_t;   /* t: 0 pal (n: size*256), 1 crystal (n), 2 gate, 3 lamp, 4 sign (n: which) */")
 w(f"#define CO_NPROP {len(PROPS)}")
 w("static const co_prop_t CO_PROP[CO_NPROP] = {")
@@ -197,4 +245,4 @@ w("};")
 
 dst = Path(__file__).resolve().parent.parent / "firmware" / "gen" / "arcave_course.h"
 dst.write_text("\n".join(out) + "\n")
-print(f"{dst}: land {len(ht)} px, {len(SHROOMS)} mushrooms, {len(PADS)} pads, {len(SKYOBJ)} sky, {len(PROPS)} props, {len(POOLS)} pools")
+print(f"{dst}: land {len(ht)} px, {len(SHROOMS)} mushrooms, {len(PADS)} pads, {len(SKYOBJ)} sky, {len(PROPS)} props, {len(POOLS)} pools; back: {len(RPADS)} pads, {len(RSKY)} sky, {len(STEPS)} steps")

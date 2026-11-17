@@ -28,6 +28,8 @@ static void fm1_led_key(uint32_t id, int on)
 }
 static uint32_t w_play_led;                     /* PLAY's green LED: 0 dark, 1 lit, 2 breathing */
 static void fm1_play_led(uint32_t mode) { w_play_led = mode; }
+static uint32_t w_breathe;                      /* breathing buttons, bit = BTN_... */
+static void fm1_led_key_breathe(uint32_t id, int on) { if (on) w_breathe |= 1u << id; else w_breathe &= ~(1u << id); }
 static void fm1_led_key_glow(uint32_t id, int on)
 {
     if (id >= 14u && id < 41u) { if (on) w_dim_keys |= 1u << (id - 14u); else w_dim_keys &= ~(1u << (id - 14u)); }
@@ -128,6 +130,7 @@ EXPORT int32_t web_midi_out(void)               /* the next message out: st | d1
 }
 EXPORT uint32_t web_lit_buttons(void) { return w_led | (w_play_led == 1u ? 1u << 14 : 0u) | (w_play_led == 2u ? 1u << 15 : 0u); }   /* bit 14: PLAY green; 15: it breathes */
 EXPORT uint32_t web_lit_keys(void) { return w_led_keys; }
+EXPORT uint32_t web_breath_buttons(void) { return w_breathe; }
 EXPORT uint32_t web_dim_keys(void) { return w_dim_keys; }
 EXPORT uint8_t *web_store(void) { return w_store; }
 EXPORT uint32_t web_store_len(void) { return w_store_n; }

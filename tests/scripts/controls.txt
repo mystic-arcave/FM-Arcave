@@ -1,0 +1,25 @@
+# the controls box by the start, HOME: the controls sheet, HOME again, then rolling past the box
+600 btn 12
+2600 btn 12
+6800 shot
+7000 btn 8
+7600 shot
+8600 btn 8
+9000 shot
+9200 enc 2 8
+9450 enc 2 8
+9700 enc 2 8
+9950 enc 2 8
+10200 enc 2 8
+10450 enc 2 8
+10700 enc 2 8
+10950 enc 2 8
+11000 shot
+11200 enc 2 8
+11450 enc 2 8
+11700 enc 2 8
+11950 enc 2 8
+12200 enc 2 8
+12450 enc 2 8
+13500 shot
+14000 end

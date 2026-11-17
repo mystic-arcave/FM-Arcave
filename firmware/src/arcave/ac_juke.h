@@ -1,34 +1,35 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /* Mending the jukebox, in two parts, both after UMBRA OBSCURA:
- *   the lamp   three rings of glass, each with a crack. KNOB 1, 2 and 3 turn a ring each, a notch a click, and each
+ *   the lamp   four rings of glass, each with a crack. KNOB 1, 2, 3 and 4 turn a ring each, a notch a click, and each
  *              outer ring drags the one inside it the other way. Light gets out only where the cracks line up.
  *   the dish   a flywheel. Sweep along the keys (or turn a knob) to spin it; its speed is the tempo, four beats to the
  *              turn. Hold a speed for eight beats and it is yours. Then REC, and two bars of keys are your song. */
 
 /* ---------------------------------------------------------------- the lamp */
-static const uint8_t LP_N[3] = {8, 12, 16}, LP_R[3] = {38, 60, 82}, LP_MUL[3] = {6, 4, 3};
-static const int16_t LP_GW[3] = {3129, 2295, 1773};   /* a crack's half width, angle units */
-static struct { int32_t pos[3], hold, spin, flash[3], t, done_t, idle; uint8_t done; } lp;
+#define LP_RINGS 4                               /* one to a numbered knob */
+static const uint8_t LP_N[LP_RINGS] = {8, 12, 16, 24}, LP_R[LP_RINGS] = {28, 46, 64, 82}, LP_MUL[LP_RINGS] = {6, 4, 3, 2};
+static const int16_t LP_GW[LP_RINGS] = {3400, 2700, 2100, 1700};   /* a crack's half width, angle units */
+static struct { int32_t pos[LP_RINGS], hold, spin, flash[LP_RINGS], t, done_t, idle; uint8_t done; } lp;
 
 static void lamp_reset(void)
 {
-    lp.pos[0] = 3; lp.pos[1] = 7; lp.pos[2] = 5;
+    lp.pos[0] = 3; lp.pos[1] = 7; lp.pos[2] = 5; lp.pos[3] = 9;
     lp.hold = 0; lp.spin = 0; lp.t = 0; lp.done = 0; lp.done_t = 0; lp.idle = 0;
-    lp.flash[0] = lp.flash[1] = lp.flash[2] = 0;
+    lp.flash[0] = lp.flash[1] = lp.flash[2] = lp.flash[3] = 0;
     sy_drone_want = 110;
 }
 static int32_t lamp_ang(int i) { return lp.pos[i] * 65536 / LP_N[i] - 16384 + lp.spin; }
 static int lamp_eq(int i, int j) { return lp.pos[i] * LP_MUL[i] == lp.pos[j] * LP_MUL[j]; }
 static void lamp_turn(int n, int32_t d)
 {
-    static const uint8_t DEG[3] = {0, 2, 4};
+    static const uint8_t DEG[LP_RINGS] = {0, 2, 4, 6};
     if (lp.done || !d) return;
     if (d > 1) { lamp_turn(n, d - 1); d = 1; }   /* a quick turn: every notch counts */
     if (d < -1) { lamp_turn(n, d + 1); d = -1; }
     lp.pos[n] = ((lp.pos[n] + d) % LP_N[n] + LP_N[n]) % LP_N[n];
     lp.flash[n] = 200;
     if (n > 0) { lp.pos[n - 1] = ((lp.pos[n - 1] - d) % LP_N[n - 1] + LP_N[n - 1]) % LP_N[n - 1]; lp.flash[n - 1] = 120; }
-    sfx_ex(60 + SC_PEN[(DEG[n] + lp.pos[n] % 3) % 5] + 12 * ((DEG[n] + lp.pos[n] % 3) / 5), 0, 320, W_TRI, 3200, 3, 150, 0, (n - 1) * 60, 0);
+    sfx_ex(60 + SC_PEN[(DEG[n] + lp.pos[n] % 3) % 5] + 12 * ((DEG[n] + lp.pos[n] % 3) / 5), 0, 320, W_TRI, 3200, 3, 150, 0, (2 * n - 3) * 25, 0);
     lp.idle = 0;
 }
 /* 0: still at it; 1: the light is back; -1: HOME, back to the cave */
@@ -37,11 +38,11 @@ static int lamp_tick(int32_t dt)
     int i;
     lp.t += dt; lp.idle += dt;
     if (BDOWN(BTN_HOME) && !lp.done) return -1;
-    lamp_turn(0, in.enc[ENC_KNOB1]); lamp_turn(1, in.enc[ENC_KNOB2]); lamp_turn(2, in.enc[ENC_KNOB3]);
-    for (i = 0; i < 3; i++) lp.flash[i] = imax(0, lp.flash[i] - dt);
+    lamp_turn(0, in.enc[ENC_KNOB1]); lamp_turn(1, in.enc[ENC_KNOB2]); lamp_turn(2, in.enc[ENC_KNOB3]); lamp_turn(3, in.enc[ENC_KNOB4]);
+    for (i = 0; i < LP_RINGS; i++) lp.flash[i] = imax(0, lp.flash[i] - dt);
     lp.spin += (lp.done ? 9000 : 420) * dt / 1000;
     if (!lp.done) {
-        lp.hold = (lamp_eq(0, 1) && lamp_eq(1, 2)) ? lp.hold + dt : 0;
+        lp.hold = (lamp_eq(0, 1) && lamp_eq(1, 2) && lamp_eq(2, 3)) ? lp.hold + dt : 0;
         if (lp.hold > 700) {
             static const uint8_t ARP[8] = {60, 64, 67, 72, 76, 79, 84, 88};
             lp.done = 1;
@@ -57,21 +58,21 @@ static int lamp_tick(int32_t dt)
 }
 static void lamp_draw(void)
 {
-    int32_t cx = 120, cy = 116, i, k, agree = (lamp_eq(0, 1) ? 1 : 0) + (lamp_eq(1, 2) ? 1 : 0) + (lamp_eq(0, 2) ? 1 : 0);
+    int32_t cx = 120, cy = 116, i, k, agree = (lamp_eq(0, 1) ? 1 : 0) + (lamp_eq(1, 2) ? 1 : 0) + (lamp_eq(2, 3) ? 1 : 0);
     uint32_t tm = (uint32_t)lp.t;
     gclear(th->bg);
     for (k = 0; k < 72; k++) {                   /* the light: each ray goes as far as the first glass that stops it */
         int32_t a = k * 65536 / 72, len = 120, out = 1;
-        for (i = 0; i < 3; i++) {
+        for (i = 0; i < LP_RINGS; i++) {
             int32_t d = (int32_t)(int16_t)(uint16_t)(a - lamp_ang(i));
             if (iabs(d) > LP_GW[i]) { len = LP_R[i] - 1; out = 0; break; }
         }
-        galpha(out ? 230 : 46 + (i * 26));
+        galpha(out ? 230 : 46 + (i * 20));
         gline(cx + ((7 * icos(a)) >> 14), cy + ((7 * isin(a)) >> 14), cx + ((len * icos(a)) >> 14), cy + ((len * isin(a)) >> 14),
               out ? th->caps[(k + (int32_t)(tm / 120u)) % 5] : th->pad);
     }
     galpha(256);
-    for (i = 0; i < 3; i++) {
+    for (i = 0; i < LP_RINGS; i++) {
         int32_t a = lamp_ang(i);
         col_t c = lp.flash[i] > 0 ? th->pad : th->caps[i + 1];
         garc(cx, cy, LP_R[i], LP_R[i], a + LP_GW[i], a + 65536 - LP_GW[i], c, lp.flash[i] > 0 || lp.done);
@@ -82,7 +83,7 @@ static void lamp_draw(void)
         for (k = -1; k <= 1; k += 2)             /* the crack's two edges */
             gdisc(cx + ((LP_R[i] * icos(a + k * LP_GW[i])) >> 14), cy + ((LP_R[i] * isin(a + k * LP_GW[i])) >> 14), 1, th->pad);
     }
-    galpha(90 + (tsin(tm, 30, 0) >> 9)); gdisc(cx, cy, 12, th->pad); galpha(256); gdisc(cx, cy, 6, th->pad);
+    galpha(90 + (tsin(tm, 30, 0) >> 9)); gdisc(cx, cy, 10, th->pad); galpha(256); gdisc(cx, cy, 5, th->pad);
     if (lp.done) {
         grect(0, 0, 240, 8 + TLH(ts(2, 4)), th->bg);
         gfit(120, 6 + 2 * ts(2, 4), 232, TR(T_LAMP_DONE), th->text, ts(2, 4));

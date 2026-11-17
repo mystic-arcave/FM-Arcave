@@ -1,0 +1,20 @@
+# the settings, line by line
+2000 btn 7
+2400 shot
+2600 enc 0 1
+2850 shot
+3100 enc 0 1
+3350 shot
+3600 enc 0 1
+3850 shot
+4100 enc 0 1
+4350 shot
+4600 enc 0 1
+4850 shot
+5100 enc 0 1
+5350 shot
+5600 enc 0 1
+5850 shot
+6100 enc 0 1
+6350 shot
+6800 end

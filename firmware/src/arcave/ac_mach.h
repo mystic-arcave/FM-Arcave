@@ -28,36 +28,30 @@ static void mach_hud(void)
     for (i = 0; i < mc.lives; i++) gtext(8 + i * 9, 8, "\xE2\x99\xA5", th->caps[0], 1);
     if (mc.msg_t > 0) { galpha(imin(256, mc.msg_t * 256 / 300)); gfit(120, 40 - (700 - mc.msg_t) / 60, 232, TR(mc.msg), mc.msg == T_MISS ? th->caps[0] : th->pad, ts(2, 4)); galpha(256); }
 }
-static void mach_card(const char *name, int t1, col_t c)
+/* the start (and the end) of a machine: its name; PLAY starts; HOME shows how it is played; REC goes back */
+static void mach_card(const char *name, col_t c)
 {
     char b[40]; const char *p;
-    int32_t y, k, a = ts(1, 2), used, foot, n = 0;
+    int32_t y, a = ts(1, 3), used, n = 0;
     gveil(th->bg, 24);
-    used = gfit(120, 12 + 2 * ts(3, 4), 232, name, c, tsize ? 3 : 2);
-    y = 12 + 2 * ts(3, 4) + 5 * used + 8;
-    /* the foot, from the bottom up: HOME, PLAY, the best score */
-    foot = gfoot(238, TR(T_HOME_BACK), th->mute, th->bg, a);
-    if (ipulse((uint32_t)mc.t, 1200) > 60) foot = gfoot(foot - 2, TR(mc.state == MS_OVER ? T_PLAY_AGAIN : T_PLAY_START), th->pad, th->bg, a);
-    else foot -= gblock_h(232, TR(mc.state == MS_OVER ? T_PLAY_AGAIN : T_PLAY_START), a) + 2;
+    used = gfit(120, 14 + 2 * ts(3, 4), 232, name, c, tsize ? 3 : 2);
+    y = 14 + 2 * ts(3, 4) + 5 * used + 10;
+    if (mc.state == MS_OVER) {                   /* how it went */
+        y += gblock(4, y, 232, TR(T_GAMEOVER), th->caps[0], ts(2, 3), 1);
+        num_str(b, mc.score); gtextc(120, y + 4, b, th->text, 4); y += 30;
+    }
+    while (a > 1 && y + gblock_h(232, TR(mc.state == MS_OVER ? T_PLAY_AGAIN : T_PLAY_START), a) + gblock_h(232, TR(T_HOME_CONTROLS), a)
+           + (best[mc.which] ? TLH(a) : 0) + 12 > 238 - gblock_h(232, TR(T_REC_BACK), ts(1, 2))) a--;
+    galpha(140 + ipulse((uint32_t)mc.t, 1600) * 116 / 256);
+    y += gblock(4, y, 232, TR(mc.state == MS_OVER ? T_PLAY_AGAIN : T_PLAY_START), th->pad, a, 1) + 6;
+    galpha(256);
+    y += gblock(4, y, 232, TR(T_HOME_CONTROLS), th->text, a, 1) + 6;
     if (best[mc.which]) {
         for (p = TR(T_BEST); *p && n < 24; ) b[n++] = *p++;
         b[n++] = ' '; num_str(b + n, (int32_t)best[mc.which]);
-        foot -= TLH(a) + 2;
-        gfit(120, foot + 2 * a, 232, b, th->pad, a);
+        gfit(120, y + 2 * a, 232, b, th->mute, a);
     }
-    if (mc.state == MS_OVER) {                   /* how it went, in place of how to play */
-        gfit(120, y + 8, 232, TR(T_GAMEOVER), th->caps[0], ts(2, 3));
-        num_str(b, mc.score); gtextc(120, y + 14 + 5 * ts(2, 3), b, th->text, 4);
-        return;
-    }
-    a = ts(1, 3);
-    while (a > 1) {                              /* the three lines of how to play, as large as the room allows */
-        int32_t h = 0;
-        for (k = 0; k < 3; k++) h += gblock_h(224, TR(t1 + k), a) + 4;
-        if (y + h <= foot) break;
-        a--;
-    }
-    for (k = 0; k < 3; k++) y += gblock(8, y, 224, TR(t1 + k), th->text, a, 1) + 4;
+    gfoot(238, TR(T_REC_BACK), th->mute, th->bg, ts(1, 2));
 }
 static void mach_over(void)
 {
@@ -67,12 +61,25 @@ static void mach_over(void)
 }
 
 /* ---------------------------------------------------------------- MYSTIC RUN */
-static struct { uint32_t t0, done_h; int32_t hop_t, hop_h, hop_k; uint32_t seed; } mr;
+static struct { uint32_t t0, done_h, blk_h; int32_t hop_t, hop_h, hop_k; uint32_t seed; uint8_t blk_done; } mr;
+/* the buttons a block may ask for (not the ones that mean something everywhere: FX, EDIT, GLO, HOME, PLAY, REC) */
+static const uint8_t MR_BTN[6] = {BTN_SEL, BTN_ENV, BTN_LFO, BTN_SAVE, BTN_ARP, BTN_SEQ};
+static const char *const MR_BTN_NAME[6] = {"SCL", "ENV", "LFO", "SAVE", "ARP", "SEQ"};
+static int mr_blk_btn(uint32_t h, int which)     /* a block's button (its second, for a double) */
+{
+    int b1 = (int)(ihash(h * 17u + mr.seed) % 6u);
+    return which ? (b1 + 1 + (int)(ihash(h * 19u + mr.seed) % 5u)) % 6 : b1;
+}
 #define MR_HOP 62                                /* ticks in the air */
-static int mr_obs(uint32_t h)                    /* what stands at half-beat h: 0 nothing, 1 a crystal, 2 a tall one, 3 a spore */
+static int mr_obs(uint32_t h)                    /* what stands at half-beat h: 0 nothing, 1 a crystal, 2 a tall one, 3 a spore,
+                                                    4 a block (its button makes it go), 5 a double block (two buttons) */
 {
     uint32_t r;
     if (h < 8u) return 0;
+    if (h >= 24u && !(h & 7u)) {                 /* every fourth beat may be a block: never two on the screen at once */
+        uint32_t rb = ihash(h * 13u + mr.seed);
+        if (rb < (h < 72u ? 24000u : 36000u)) return (h >= 88u && !(rb & 3u)) ? 5 : 4;
+    }
     r = ihash(h * 7u + mr.seed);
     if (!(h & 1u)) {
         uint32_t dens = 26000u + imin(26000, (int32_t)h * 120);
@@ -95,9 +102,34 @@ static void run_tick(void)
         mr.hop_t = (int32_t)now; mr.hop_k = in.hikey; mr.hop_h = 24 + in.hikey * 40 / 26;
         sfx(key_note(in.hikey) + 12, 0, 300, W_TRI, 3000, 3, 120);
     }
+    for (h = mr.done_h + 1u; h * 48u <= now + 281u; h++) {   /* a block coming into view: its button lights, and pressed, counts */
+        int o = mr_obs(h), need, k;
+        if (o < 4) continue;
+        if (mr.blk_h != h) { mr.blk_h = h; mr.blk_done = 0; }
+        need = o == 5 ? 3 : 1;
+        for (k = 0; k < 2; k++) {
+            int b = MR_BTN[mr_blk_btn(h, k)];
+            if (!(need >> k & 1) || (mr.blk_done >> k & 1)) continue;
+            led_btn_want |= 1u << b;
+            if (BDOWN(b)) {
+                mr.blk_done |= (uint8_t)(1u << k); mc.score += 15;
+                sfx(67 + 5 * k, 0, 300, W_SQUARE, 1800, 2, 140); sfx(96, 0, 120, W_NOISE, 1200, 1, 100);
+                if (mr.blk_done == need) { mc.combo++; mach_msg(T_GOOD); snd_chime(0); }
+            }
+        }
+        break;
+    }
     for (h = mr.done_h + 1u; h * 48u <= now; h++) {
         int o = mr_obs(h), ht = mr_height(h * 48u);
         mr.done_h = h;
+        if (o >= 4) {                            /* a block reaches Rock: gone, or it hurts */
+            if (!(mr.blk_h == h && mr.blk_done == (o == 5 ? 3 : 1))) {
+                mc.combo = 0; mc.lives--; mc.flash = 300; mach_msg(T_MISS);
+                sfx_ex(41, 0, 400, W_SAW, 4000, 2, 100, 0, 0, 65000);
+                if (mc.lives <= 0) { mach_over(); return; }
+            }
+            continue;
+        }
         if (o == 1 || o == 2) {
             if (ht > (o == 1 ? 11 : 30)) {
                 int32_t off = iabs((int32_t)(h * 48u) - (mr.hop_t + MR_HOP / 2));
@@ -143,11 +175,26 @@ static void run_draw(void)
         int o = mr_obs(h), x = MRX(h * 48u);
         if (h <= mr.done_h || !o) continue;
         if (o == 3) { galpha(70); gdisc(x, gy - 34, 5, th->caps[h % 5u]); galpha(256); grect(x - 1, gy - 35, 2, 2, th->caps[h % 5u]); }
-        else {
-            int32_t hh = o == 1 ? 13 : 30, xy[6], k;
+        else if (o >= 4) {                       /* a block (or two, stacked), each with its button's name on it */
+            int32_t k, need = o == 5 ? 3 : 1, done = mr.blk_h == h ? mr.blk_done : 0, row = 0;
+            for (k = 0; k < 2; k++) {
+                const char *nm = MR_BTN_NAME[mr_blk_btn(h, k)];
+                int32_t by;
+                if (!(need >> k & 1) || (done >> k & 1)) continue;
+                by = gy - 30 - row * 30; row++;
+                grect(x - 26, by, 52, 30, th->panel); gbox(x - 26, by, 52, 30, th->pad); gbox(x - 24, by + 2, 48, 26, th->caps[(h + (uint32_t)k) % 5u]);
+                gfit(x, by + 10, 46, nm, th->text, 2);
+            }
+        }
+        else {                                   /* crystals: plain to see at first, then less and less so */
+            int32_t hh = o == 1 ? 13 : 30, xy[6], k, vis = iclamp(256 - ((int32_t)h - 8) * 2, 84, 256);
+            if (vis > 100) { galpha((vis - 84) * 150 / 172); gdisc(x, gy - hh / 2, hh / 2 + 9, th->caps[h % 5u]); }
             for (k = 0; k < (o == 1 ? 2 : 3); k++) {
                 xy[0] = x - 5 + k * 5 - 4; xy[1] = gy; xy[2] = x - 5 + k * 5 + (k - 1); xy[3] = gy - hh + iabs(k - 1) * 5; xy[4] = x - 5 + k * 5 + 4; xy[5] = gy;
-                gpoly(xy, 3, th->dark ? 0 : th->bands[k]); gpolyline(xy, 3, 1, th->caps[(h + (uint32_t)k) % 5u]);
+                galpha(256); gpoly(xy, 3, th->dark ? 0 : th->bands[k]);
+                if (vis > 128) { galpha((vis - 128) * 2); gpoly(xy, 3, th->caps[(h + (uint32_t)k) % 5u]); }
+                galpha(vis); gpolyline(xy, 3, 1, vis > 190 ? th->pad : th->caps[(h + (uint32_t)k) % 5u]);
+                galpha(256);
             }
         }
     }
@@ -246,6 +293,9 @@ static void table_draw(void)
 static const uint8_t NB_R[4] = {26, 42, 58, 74};   /* drawn in from the frame: the spores have room to be seen coming */
 #define NB_ARC 7000                              /* a petal's half width */
 /* a ring, its petal and its spores share one colour no other ring could be taken for: yellow, white, green, blue */
+/* the four rings' knobs, in the order they join: two from the right hand's side of the panel, two from the left */
+static const uint8_t NB_ENC[4] = {ENC_KNOB1, ENC_SELECT, ENC_KNOB2, ENC_ALGORITHM};
+static const char *const NB_KNOB[4] = {"KNOB 1", "SELECT", "KNOB 2", "ALGORITHM"};
 static const col_t NB_COL[4] = {AC_RGB(255, 214, 40), AC_RGB(255, 255, 255), AC_RGB(40, 224, 96), AC_RGB(48, 112, 255)};
 static struct {
     int32_t ang[4], hit[4];
@@ -277,7 +327,7 @@ static void bloom_tick(int32_t dt)
     uint32_t now = (tr_now_q8() >> 8) - nb.t0, i, beat2;
     int32_t k, hard = nb.caught >= 30;
     for (k = 0; k < 4; k++) {
-        if (in.enc[ENC_KNOB1 + k]) nb.ang[k] += in.enc[ENC_KNOB1 + k] * 2731;   /* a click of the knob: a twenty-fourth of a turn */
+        if (k < nb.rings && in.enc[NB_ENC[k]]) nb.ang[k] += in.enc[NB_ENC[k]] * 2731;   /* a click of the knob: a twenty-fourth of a turn */
         if (nb.hit[k] > 0) nb.hit[k] -= dt;
     }
     if (in.kdown && nb.breath >= 1000) {         /* a breath: a ripple goes out and every spore is pushed back a beat */
@@ -377,10 +427,8 @@ static void bloom_draw(void)
     galpha(256); gdisc(cx, cy, 4 + beat / 100, th->pad);
     for (k = 0; k < 3; k++) grect(100 + k * 14, 232, 12, 3, nb.breath >= (k + 1) * 1000 ? th->pad : th->mute);   /* breaths in hand */
     if (nb.ring_t > 0) {                         /* a new ring: which knob turns it, in the ring's own colour */
-        char b[8] = "KNOB 1";
-        b[5] = (char)('0' + nb.rings);
         galpha(imin(256, nb.ring_t));
-        gfit(120, 30 + 2 * ts(2, 4), 232, b, NB_COL[nb.rings - 1], ts(2, 4));
+        gfit(120, 30 + 2 * ts(2, 4), 232, NB_KNOB[nb.rings - 1], NB_COL[nb.rings - 1], ts(2, 4));
         galpha(256);
     }
     if (mc.flash > 0 && mc.msg == T_MISS && mc.msg_t > 0) { galpha(mc.flash * 110 / 300); grect(0, 0, 240, 240, th->caps[0]); galpha(256); }
@@ -394,12 +442,15 @@ static void mach_start(void)
     if (mc.which == 0) {
         mc.lives = 3; mr.t0 = (now / 96u + 1u) * 96u - 96u; mr.done_h = (now - mr.t0) / 48u; mr.hop_h = 0; mr.seed = now * 31u;
         /* nothing for the first beats: mr_obs keeps the first eight half-beats clear from where the clock stands */
-        mr.t0 = (now / 96u) * 96u; mr.done_h = 0;
+        mr.t0 = (now / 96u) * 96u; mr.done_h = 0; mr.blk_h = 0; mr.blk_done = 0;
     } else if (mc.which == 2) {
         for (i = 0; i < sizeof nb; i++) ((uint8_t *)&nb)[i] = 0;
         mc.lives = 5; nb.t0 = (now / 96u) * 96u; nb.breath = 3000; nb.rings = 1; nb.ring_t = 2200;
         for (i = 0; i < 4u; i++) nb.ang[i] = (int32_t)i * 16384 - 16384;
     }
+#ifdef AC_TEST_CATCH                             /* (tests) lives enough to see a long way in */
+    mc.lives = 99;
+#endif
     snd_chime(0);
 }
 static void mach_enter(int which)
@@ -411,16 +462,17 @@ static void mach_enter(int which)
         if (!lt.rate[0] && !lt.rate[1] && !lt.rate[2]) { lt.rate[0] = 2; lt.rate[1] = 3; lt.rate[2] = 4; lt.heat = 3; }
     }
 }
-/* -1: HOME, back to the cave */
+/* -1: REC at its start or end, back to the Arcave; 1: HOME, how it is played (arcave.c opens the sheet) */
 static int mach_tick(int32_t dt)
 {
     mc.t += dt;
     if (mc.msg_t > 0) mc.msg_t -= dt;
     if (mc.flash > 0) mc.flash -= dt;
-    if (BDOWN(BTN_HOME)) return -1;
+    if (BDOWN(BTN_HOME)) return 1;
     if (mc.state != MS_PLAY) {
+        if (BDOWN(BTN_REC)) return -1;
         if (BDOWN(BTN_PLAY)) mach_start();
-        else led_play_breathe = 1;
+        else { led_play_breathe = 1; led_breathe_want |= 1u << BTN_HOME; }
         return 0;
     }
     if (mc.which == 0) run_tick(); else if (mc.which == 1) table_tick(dt); else bloom_tick(dt);
@@ -428,8 +480,7 @@ static int mach_tick(int32_t dt)
 }
 static void mach_draw(void)
 {
-    static const int T1[3] = {T_RUN_1, T_TABLE_1, T_BLOOM_1};
     if (mc.which == 0) run_draw(); else if (mc.which == 1) table_draw(); else bloom_draw();
     if (mc.state == MS_PLAY) { if (mc.which != 1) mach_hud(); }
-    else mach_card(MACH_NAME[mc.which], T1[mc.which], th->caps[mc.which * 2 % 5]);
+    else mach_card(MACH_NAME[mc.which], th->caps[mc.which * 2 % 5]);
 }

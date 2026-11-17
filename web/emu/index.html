@@ -49,6 +49,8 @@ main{padding:28px 0 0;display:grid;gap:22px}
     <div><b>Settings (GLO)</b><span><kbd>G</kbd> or <kbd>Esc</kbd></span></div>
     <div><b>Language (OCT- OCT+)</b><span><kbd>[</kbd> <kbd>]</kbd></span></div>
     <div><b>HOME, REC</b><span><kbd>A</kbd>, <kbd>P</kbd></span></div>
+    <div><b>FX SCL ENV LFO EDIT</b><span><kbd>5</kbd> <kbd>6</kbd> <kbd>7</kbd> <kbd>8</kbd> <kbd>9</kbd></span></div>
+    <div><b>SAVE ARP SEQ</b><span><kbd>0</kbd> <kbd>-</kbd> <kbd>=</kbd></span></div>
     <div><b>SELECT, PRESETS</b><span><kbd>↑</kbd> <kbd>↓</kbd>, with <kbd>Shift</kbd></span></div>
   </div>
 </main>
@@ -88,7 +90,7 @@ async function start() {
       else if (m.type === "error") $("status").textContent = "Could not start: " + m.text;
       else if (m.type === "frame") {
         if (m.fb) fm.screen(m.fb);
-        fm.leds(m.leds[0], m.leds[1], m.leds[2]);
+        fm.leds(m.leds[0], m.leds[1], m.leds[2], m.leds[3]);
         if (window.__fm) window.__fm.last = { state: m.state, clock: m.clock, bpm: m.bpm };
         if (m.store) { try { localStorage.setItem(SAVE, btoa(String.fromCharCode(...m.store))); } catch (e) {} }
         if (midiOn && midi) for (const v of m.midi) for (const o of midi.outputs.values()) o.send([v & 255, v >> 8 & 127, v >> 16 & 127]);

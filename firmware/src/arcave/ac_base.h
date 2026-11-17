@@ -4,7 +4,7 @@
  *
  * The platform under it (Dinghy's platform.c on the FM-1, tests/host.c on a computer, web/emu/web_host.c in a
  * browser) supplies: fm1_ms, fm1_in, fm1_input_edges, fm1_input_note_edges, fm1_enc_take, fm1_led_key,
- * fm1_led_key_glow, fm1_play_led, lcd_blit, lcd_sync, midi_get, midi_send, settings_load, settings_save. */
+ * fm1_led_key_glow, fm1_led_key_breathe, fm1_play_led, lcd_blit, lcd_sync, midi_get, midi_send, settings_load, settings_save. */
 #include "arcave_tab.h"
 
 #define AC_W 240
@@ -415,7 +415,8 @@ static void ac_input(void)
 /* the lights: set what should be lit each frame; only changes reach the panel */
 static uint32_t led_key_want, led_key_dim_want, led_btn_want, led_key_now, led_key_dim_now, led_btn_now;
 static uint8_t led_play_breathe, led_play_now = 255;   /* PLAY: its green light, breathing when it is wanted */
-static void ac_leds_begin(void) { led_key_want = led_key_dim_want = led_btn_want = 0; led_play_breathe = 0; }
+static uint32_t led_breathe_want, led_breathe_now;      /* buttons that breathe (bit = BTN_...): "press me" */
+static void ac_leds_begin(void) { led_key_want = led_key_dim_want = led_btn_want = 0; led_play_breathe = 0; led_breathe_want = 0; }
 static void ac_leds_end(void)
 {
     uint32_t k;
@@ -428,7 +429,11 @@ static void ac_leds_end(void)
         if (m != led_play_now) { fm1_play_led(m); led_play_now = m; }
         led_btn_want &= ~(1u << BTN_PLAY);
     }
-    for (k = 0; k < 14u; k++)
+    led_breathe_want &= ~led_btn_want & ~(1u << BTN_PLAY);       /* (lit outranks breathing; PLAY has its own) */
+    for (k = 0; k < 14u; k++) {
         if ((led_btn_want ^ led_btn_now) >> k & 1u) fm1_led_key(k, (int)(led_btn_want >> k & 1u));
+        if ((led_breathe_want ^ led_breathe_now) >> k & 1u) fm1_led_key_breathe(k, (int)(led_breathe_want >> k & 1u));
+    }
+    led_breathe_now = led_breathe_want;
     led_key_now = led_key_want; led_key_dim_now = led_key_dim_want; led_btn_now = led_btn_want;
 }

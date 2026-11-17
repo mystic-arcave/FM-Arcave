@@ -38,6 +38,7 @@ static int16_t sy_dl[SY_DLN] AC_POOL;
 static uint32_t sy_dlw;
 static int32_t sy_dllp;
 static volatile int32_t sy_echo_fb = 115;        /* Q8 */
+static volatile uint8_t sy_ear;                  /* child ear protection: everything 12 dB down and capped well under full scale */
 
 static volatile int32_t sy_drone_want, sy_rumble_want, sy_rumble_pitch = 256, sy_music_want = 256;   /* 0..256 */
 static int32_t sy_drone, sy_rumble, sy_music;
@@ -238,6 +239,7 @@ static void arcave_audio(int32_t *out, uint32_t n)
             int32_t s = mix[i];
             if (s > 20000) s = 20000 + ((s - 20000) >> 2);   /* a soft knee before the platform's clip */
             else if (s < -20000) s = -20000 + ((s + 20000) >> 2);
+            if (sy_ear) { s >>= 2; s = s > 5000 ? 5000 : s < -5000 ? -5000 : s; }
             out[2u * b + i] += s;
         }
         sy_t = t + 32u;
