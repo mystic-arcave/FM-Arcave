@@ -26,7 +26,7 @@ run "a booster, a secret high up, then GLO held: the save wiped (and saved)" sh 
 run "the room up on the left, its door, outside: over the start line" play door 4 7
 run "the race back, start to finish (and the time saved)" sh -c 'tests/run_arcave.sh race 4 6 > build/host/race.log 2>&1 && grep -q "settings 0 saved" build/host/race.log'
 run "MYSTIC RUN" play run 4 3
-run "THE LIGHT TABLE" play table 4 4
+run "JUICE WORKS: a drink poured and served, a glass moved, a spill" env CATCH=1 sh -c 'tests/run_arcave.sh table 4 4 > build/host/table.log 2>&1 && grep -q "^sound" build/host/table.log'
 run "MYSTIC RUN a long way in: the start card, the controls, blocks and their buttons, EDIT: the scores" env CATCH=1 sh -c 'tests/run_arcave.sh run2 4 3 > build/host/run2.log 2>&1 && grep -q "^sound" build/host/run2.log'
 run "FX a dozen times; child ear protection (and saved)" sh -c 'tests/run_arcave.sh fx 4 > build/host/fx.log 2>&1 && grep -q "settings 0 saved" build/host/fx.log'
 run "NIGHT BLOOM" play bloom 4 5

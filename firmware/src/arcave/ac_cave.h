@@ -135,7 +135,7 @@ static const cv_shroom_t CV_SHROOM[] = {
 #define CV_JUKE_X 300
 #define CV_HAT_X 392
 static const int16_t CV_MACH[3][2] = {{740, 344}, {466, 288}, {706, 232}};
-static const char *const MACH_NAME[3] = {"MYSTIC RUN", "THE LIGHT TABLE", "NIGHT BLOOM"};
+static const char *const MACH_NAME[3] = {"MYSTIC RUN", "JUICE WORKS", "NIGHT BLOOM"};
 
 enum { CVA_NONE, CVA_LAMP, CVA_M1, CVA_M2, CVA_M3, CVA_SCORES, CVA_EXIT };
 #define CV_BOARD_X 522                           /* the scores board, on the ground past the Hat */
@@ -327,7 +327,7 @@ static void cave_cabinet(int32_t x, int32_t y, int which, int32_t lit, uint32_t 
         galpha(256);
         grect(x - 15, y - 49, 30, 6, c);
         if (which == 0) for (k = 0; k < 4; k++) grect(x - 8 + ((k * 5 + (int32_t)(tm / 90u)) % 17), y - 26 - (k & 1) * 4, 2, 3, th->caps[k]);
-        else if (which == 1) for (k = 0; k < 3; k++) garc(x, y - 30, 2 + k * 2, 2 + k * 2, (int32_t)(tm * (8u + (uint32_t)k * 5u)), (int32_t)(tm * (8u + (uint32_t)k * 5u)) + 40000, th->caps[k + 1], 0);
+        else if (which == 1) for (k = 0; k < 4; k++) grect(x - 7 + k * 4, y - 37 + (int32_t)((tm / 70u + (uint32_t)k * 5u) % 13u), 2, 3, th->caps[k + 1]);   /* drips */
         else for (k = 0; k < 4; k++) { int32_t a = (int32_t)(tm * 9u) + k * 16384; gp(x + ((6 * icos(a)) >> 14), y - 30 + ((6 * isin(a)) >> 14), th->caps[k]); gp(x, y - 30, th->pad); }
         galpha(60 + (tsin(tm, 30, which * 20000) >> 9)); gdisc(x, y - 30, 22, c);
     }

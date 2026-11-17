@@ -72,7 +72,8 @@ static void sheet_draw(void)
         num_str(b[0], (int32_t)best[0]); num_str(b[1], (int32_t)best[2]);
         sheet_row(y, MACH_NAME[0], b[0], th->caps[0]); y += rh;
         sheet_row(y, MACH_NAME[2], b[1], th->caps[4]); y += rh;
-        sheet_row(y, MACH_NAME[1], "-", th->caps[2]); y += rh;
+        num_str(b[3], (int32_t)best[1]);
+        sheet_row(y, MACH_NAME[1], b[3], th->caps[2]); y += rh;
         if (race_best_cs) race_str(b[4], race_best_cs); else { b[4][0] = '-'; b[4][1] = 0; }
         sheet_row(y, TR(T_RACE), b[4], th->caps[3]); y += rh + 2;
         num_str(b[2], t / 3600); for (n = 0; b[2][n]; n++) ;

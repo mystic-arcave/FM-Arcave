@@ -1,8 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /* FM ARCAVE's three machines. All three run on the jukebox's clock, so what you do in them lands in the music.
  *   MYSTIC RUN        Rock runs on the beat; a key hops a crystal, a higher key hops higher. KNOB 1 is the tempo.
- *   THE LIGHT TABLE   three rings turn under a needle; keys drop light on them, and each drop sounds as it comes
- *                     round. KNOB 1-3 set how fast each ring turns, KNOB 4 the heat. REC wipes the table.
+ *   JUICE WORKS       four taps of mushroom juice (KNOB 1-4), glasses put under them, moved and served with the
+ *                     keys, tickets that say what to pour: many things to keep going at once.
  *   NIGHT BLOOM       new here: four knobs turn four petals round a flower, one to a ring, a click a twenty-fourth
  *                     of a turn, as the knob itself. Spores drift in; catch each on the petal of its own colour. */
 
@@ -25,7 +25,7 @@ static void mach_hud(void)
     char b[16]; int32_t i;
     num_str(b, mc.score);
     gtextr(234, 8, b, th->text, 2);
-    for (i = 0; i < mc.lives; i++) gtext(8 + i * 9, 8, "\xE2\x99\xA5", th->caps[0], 1);
+    for (i = 0; i < imin(mc.lives, 8); i++) gtext(8 + i * 9, 8, "\xE2\x99\xA5", th->caps[0], 1);
     if (mc.msg_t > 0) { galpha(imin(256, mc.msg_t * 256 / 300)); gfit(120, 40 - (700 - mc.msg_t) / 60, 232, TR(mc.msg), mc.msg == T_MISS ? th->caps[0] : th->pad, ts(2, 4)); galpha(256); }
 }
 /* the start (and the end) of a machine: its name; PLAY starts; HOME shows how it is played; REC goes back */
@@ -210,82 +210,217 @@ static void run_draw(void)
 #undef MRX
 }
 
-/* ---------------------------------------------------------------- THE LIGHT TABLE */
-static const uint8_t LT_N[3] = {8, 12, 16}, LT_R[3] = {38, 64, 90}, LT_SPB[6] = {4, 6, 8, 12, 16, 24};
-static struct { uint8_t note[3][16], rate[3], heat; int32_t glow[3][16]; int32_t last[3]; int32_t wipe; } lt;
-static int32_t lt_slot(int r, uint32_t now_q8)   /* which slot of ring r is under the needle; also its turn so far */
+/* ---------------------------------------------------------------- JUICE WORKS */
+/* Four taps of mushroom juice over a counter with four bays. KNOB 1-4 open and close the taps (three clicks:
+ * a trickle, a pour, a gush). The keys under a tap put a glass in its bay; pressed again (as they are let go) the
+ * glass is served; held while a key under another tap is pressed, the glass moves there. Tickets hang between the
+ * taps: each shows the drink to make, layer by layer, a mark on the glass to a part. Juice on the floor, a glass
+ * run over, a wrong drink or a ticket left too long costs a drop of the five. */
+#define JW_NTK 3
+#define JW_UPX 6                                 /* px to a part, on a glass and on a ticket alike */
+#define JW_CAP 6                                 /* parts a glass holds */
+#define JW_FLOOR 204
+#define JW_X(k) (30 + (k) * 60)
+static const col_t JW_COL[4] = {AC_RGB(255, 214, 40), AC_RGB(255, 255, 255), AC_RGB(40, 224, 96), AC_RGB(48, 112, 255)};
+static const uint16_t JW_RATE[4] = {0, 150, 330, 700};   /* parts (Q8) a second, by how far the tap is open */
+typedef struct { uint8_t n, c[3]; int32_t v[3]; } jw_glass_t;   /* layers from the bottom: colour, parts (Q8) */
+static struct {
+    uint8_t valve[4], has[4], used[4];
+    jw_glass_t g[4], out;
+    int32_t puddle[4], splash[4], out_t, out_x, out_ok;
+    struct { uint8_t on, n, c[3], u[3]; int32_t t, life; } tk[JW_NTK];
+    int32_t spawn_t, served;
+    uint32_t prev_keys, seed, nseed;
+} jw;
+static int jw_zone(int key) { return key * 4 / AC_NKEY; }
+static int32_t jw_total(const jw_glass_t *g) { return (g->n > 0 ? g->v[0] : 0) + (g->n > 1 ? g->v[1] : 0) + (g->n > 2 ? g->v[2] : 0); }
+static void jw_hurt(int k)                       /* a drop lost; k: the bay it happened in, or -1 */
 {
-    return (int32_t)(((now_q8 >> 8) * LT_SPB[lt.rate[r]] / TICKS_BAR) % LT_N[r]);
+    mc.combo = 0; mc.lives--; mc.flash = 300; mach_msg(T_MISS);
+    if (k >= 0) jw.splash[k] = 500;
+    sfx_ex(43, 0, 400, W_SAW, 3400, 2, 120, 0, 0, 65150);
+    if (mc.lives <= 0) mach_over();
 }
-static void table_tick(int32_t dt)
+static void jw_ticket(void)
 {
-    uint32_t now = tr_now_q8();
-    int32_t r, k;
-    for (r = 0; r < 3; r++) {
-        int32_t d = in.enc[ENC_KNOB1 + r], s;
-        if (d) { lt.rate[r] = (uint8_t)iclamp(lt.rate[r] + (d > 0 ? 1 : -1), 0, 5); snd_ui(60 + lt.rate[r] * 2 + r * 7); }
-        s = lt_slot(r, now);
-        if (s != lt.last[r]) {                   /* a slot comes under the needle: its drop sounds */
-            lt.last[r] = s;
-            if (lt.note[r][s]) {
-                int32_t n = key_note(lt.note[r][s] - 1) + (r == 0 ? 0 : 12), dur = 250 + lt.heat * 160;
-                sfx_ex(n, 0, (uint32_t)dur, r == 2 ? W_SINE : W_TRI, 3000, lt.heat > 4 ? 30 : 4, 120 + lt.heat * 12, 0, (r - 1) * 50, 0);
-                if (lt.heat >= 3) sfx_ex(n + 7, 0, (uint32_t)dur, W_SINE, 1500, 20, 150, 0, (1 - r) * 50, 0);
-                if (lt.heat >= 6) sfx_ex(n + 12, 30, (uint32_t)dur, W_SINE, 1200, 40, 180, 0, 0, 0);
-                lt.glow[r][s] = 256;
+    uint32_t i, r, k;
+    for (i = 0; i < JW_NTK; i++) if (!jw.tk[i].on) break;
+    if (i == JW_NTK) return;
+    r = ihash(jw.seed + jw.nseed * 7u); jw.nseed++;
+    jw.tk[i].n = (uint8_t)(jw.served >= 12 && (r & 7u) < 2u ? 3 : jw.served >= 3 && (r & 7u) < 5u ? 2 : 1);
+    for (k = 0; k < jw.tk[i].n; k++) {
+        uint32_t c = ihash(r + k * 31u) % 4u, u;
+        if (k && c == jw.tk[i].c[k - 1]) c = (c + 1u + ihash(r + k * 5u) % 3u) % 4u;   /* a layer is never its neighbour's colour */
+        u = 1u + ihash(r + k * 13u + 3u) % (jw.tk[i].n == 1 ? 4u : jw.tk[i].n == 2 ? 3u : 2u);
+        jw.tk[i].c[k] = (uint8_t)c; jw.tk[i].u[k] = (uint8_t)u;
+    }
+    jw.tk[i].life = imax(20000, 42000 - jw.served * 1100) + (jw.tk[i].n - 1) * 9000;
+    jw.tk[i].t = jw.tk[i].life; jw.tk[i].on = 1;
+    sfx(79, 0, 120, W_SQUARE, 1400, 2, 120); sfx(86, 90, 200, W_SQUARE, 1400, 2, 120);   /* a bell: an order */
+}
+static void jw_serve(int z)
+{
+    jw_glass_t *g = &jw.g[z];
+    int32_t i, k, best_i = -1, best_e = 0x7FFFFFFF;
+    jw.has[z] = 0; jw.out = *g; jw.out_t = 500; jw.out_x = JW_X(z); jw.out_ok = 0;
+    if (!g->n) { snd_ui(60); return; }           /* an empty glass back on the shelf: nothing lost */
+    for (i = 0; i < JW_NTK; i++) {
+        int32_t e = 0;
+        if (!jw.tk[i].on || jw.tk[i].n != g->n) continue;
+        for (k = 0; k < g->n; k++) {
+            if (jw.tk[i].c[k] != g->c[k]) break;
+            e = imax(e, iabs(g->v[k] - Q8(jw.tk[i].u[k])));
+        }
+        if (k == g->n && e <= 128 && e < best_e) { best_e = e; best_i = i; }
+    }
+    if (best_i < 0) { jw_hurt(z); return; }      /* nobody asked for that */
+    mc.combo++; jw.served++; jw.out_ok = 1;
+    mc.score += 10 * g->n + (best_e < 48 ? 10 : 0) + jw.tk[best_i].t * 10 / jw.tk[best_i].life + imin(mc.combo, 10);
+    mach_msg(best_e < 48 ? T_PERFECT : T_GOOD);
+    jw.tk[best_i].on = 0;
+    for (k = 0; k < g->n; k++) sfx(72 + SC_PEN[(g->c[k] + k) % 5], (uint32_t)k * 90u, 500, W_SINE, 2600, 3, 170);
+    snd_chime(best_e < 48);
+}
+static void juice_tick(int32_t dt)
+{
+    uint32_t down = in.kdown, up = jw.prev_keys & ~in.keys, zheld = 0;
+    int32_t k, i;
+    for (k = 0; k < 4; k++) {                    /* the taps */
+        int32_t d = in.enc[ENC_KNOB1 + k];
+        if (d) {
+            int v = iclamp(jw.valve[k] + d, 0, 3);
+            if (v != jw.valve[k]) { jw.valve[k] = (uint8_t)v; sfx(48 + v * 5 + k * 2, 0, 90, W_SQUARE, 1300, 1, 60); }
+        }
+    }
+    for (k = 0; k < AC_NKEY; k++) if (in.keys >> k & 1u) zheld |= 1u << jw_zone(k);
+    for (k = 0; k < AC_NKEY; k++)                /* a key let go over a glass that was there when it went down: served */
+        if (up >> k & 1u) {
+            int z = jw_zone(k);
+            if (jw.has[z] && !jw.used[z] && !(zheld >> z & 1u)) { jw_serve(z); jw.used[z] = 1; if (mc.state != MS_PLAY) return; }
+        }
+    for (k = 0; k < 4; k++) if (!(zheld >> k & 1u)) jw.used[k] = 0;
+    for (k = 0; k < AC_NKEY; k++)
+        if (down >> k & 1u) {
+            int z = jw_zone(k), a = -1;
+            if (!jw.has[z]) {
+                for (i = 0; i < 4; i++) if (i != z && jw.has[i] && (zheld >> i & 1u)) a = i;
+                if (a >= 0) {                    /* held there, pressed here: the glass moves */
+                    jw.g[z] = jw.g[a]; jw.has[z] = 1; jw.has[a] = 0; jw.used[a] = 1; jw.used[z] = 1;
+                    sfx(76, 0, 120, W_TRI, 2200, 2, 120); sfx(96, 0, 60, W_NOISE, 500, 1, 60);
+                } else {                         /* a fresh glass */
+                    jw.has[z] = 1; jw.g[z].n = 0; jw.used[z] = 1;
+                    sfx(88 + z * 2, 0, 160, W_SINE, 1800, 1, 160);
+                }
             }
         }
-        for (k = 0; k < LT_N[r]; k++) if (lt.glow[r][k] > 0) lt.glow[r][k] = imax(0, lt.glow[r][k] - dt);
-    }
-    if (in.enc[ENC_KNOB4]) lt.heat = (uint8_t)iclamp(lt.heat + in.enc[ENC_KNOB4], 0, 8);
-    for (k = 0; k < AC_NKEY; k++)
-        if (in.kdown >> k & 1u) {                /* low keys the inner ring, middle keys the middle, high keys the outer */
-            r = k / 9;
-            lt.note[r][lt_slot(r, now + (TICKS_STEP << 7))] = (uint8_t)(k + 1);
-            lt.glow[r][lt_slot(r, now + (TICKS_STEP << 7))] = 256;
-            sfx(key_note(k) + (r == 0 ? 0 : 12), 0, 500, W_TRI, 3200, 4, 140);
+    jw.prev_keys = in.keys;
+    for (k = 0; k < 4; k++) {                    /* what is open, flows */
+        int32_t add = (int32_t)JW_RATE[jw.valve[k]] * dt / 1000;
+        if (jw.splash[k] > 0) jw.splash[k] -= dt;
+        if (!add) { jw.puddle[k] = imax(0, jw.puddle[k] - dt / 8); continue; }
+        if (jw.has[k]) {
+            jw_glass_t *g = &jw.g[k];
+            int32_t was = jw_total(g), now;
+            if (!g->n || (g->c[g->n - 1] != k && g->n < 3)) { g->c[g->n] = (uint8_t)k; g->v[g->n] = 0; g->n++; }
+            g->v[g->n - 1] += add;
+            now = was + add;
+            if ((now >> 8) != (was >> 8) && (now >> 8) <= JW_CAP)   /* each part reached, a note higher: the ear can count */
+                sfx_ex(60 + SC_PEN[(now >> 8) % 5] + 12 * ((now >> 8) / 5), 0, 220, W_TRI, 2400, 2, 150, 0, (k * 2 - 3) * 25, 0);
+            if (now > Q8(JW_CAP) + 80) { jw.has[k] = 0; jw_hurt(k); if (mc.state != MS_PLAY) return; }   /* over the brim: lost */
+        } else {
+            jw.puddle[k] += add;
+            if (jw.puddle[k] > 384) { jw.puddle[k] = 0; jw_hurt(k); if (mc.state != MS_PLAY) return; }
         }
-    if (BDOWN(BTN_REC)) {
-        for (r = 0; r < 3; r++) for (k = 0; k < 16; k++) lt.note[r][k] = 0;
-        lt.wipe = 500; mach_msg(T_CLEARED); sfx(96, 0, 400, W_NOISE, 1600, 2, 200);
     }
-    if (lt.wipe > 0) lt.wipe -= dt;
-    led_key_want |= in.keys;
-    led_btn_want |= 1u << BTN_REC;
+    for (i = 0; i < JW_NTK; i++)                 /* the tickets: each waits only so long */
+        if (jw.tk[i].on) {
+            jw.tk[i].t -= dt;
+#ifdef AC_TEST_CATCH
+            if (jw.tk[i].t < 2000) jw.tk[i].t = 2000;
+#endif
+            if (jw.tk[i].t <= 0) { jw.tk[i].on = 0; jw_hurt(-1); if (mc.state != MS_PLAY) return; }
+        }
+    jw.spawn_t -= dt;
+    if (jw.spawn_t <= 0) { jw_ticket(); jw.spawn_t = imax(3800, 8500 - jw.served * 260); }
+    if (jw.out_t > 0) jw.out_t -= dt;
+    for (k = 0; k < AC_NKEY; k++) {              /* the keys under a glass are lit, the rest glow */
+        if (jw.has[jw_zone(k)]) led_key_want |= 1u << k; else led_key_dim_want |= 1u << k;
+    }
 }
-static void table_draw(void)
+static void jw_glass_draw(int32_t x, int32_t y, int32_t hw, const jw_glass_t *g, col_t rim)   /* y: its foot */
 {
-    uint32_t now = tr_now_q8(), tm = (uint32_t)mc.t;
-    int32_t cx = 120, cy = 124, r, k;
+    int32_t k, yy = y - 1, h = JW_CAP * JW_UPX + 4;
+    for (k = 0; k < g->n; k++) {
+        int32_t lh = imin(g->v[k] * JW_UPX >> 8, yy - (y - h));
+        if (lh > 0) { grect(x - hw + 1, yy - lh, hw * 2 - 1, lh, JW_COL[g->c[k]]); yy -= lh; }
+    }
+    gline(x - hw, y - h, x - hw, y, rim); gline(x + hw, y - h, x + hw, y, rim); ghl(x - hw, x + hw + 1, y, rim);
+    for (k = 1; k <= JW_CAP; k++) ghl(x - hw + 1, x - hw + (k % 3 ? 3 : 5), y - 1 - k * JW_UPX, rim);   /* a mark to a part */
+}
+static void juice_draw(void)
+{
+    uint32_t tm = (uint32_t)mc.t;
+    int32_t k, i;
     gclear(th->bg);
-    for (k = 5; k >= 0; k--) {                   /* the table: warm light that breathes with the heat */
-        galpha(18 + lt.heat * 5 + k * 3);
-        gdisc(cx + (tsin(tm, 7, k * 9000) >> 11), cy + (tsin(tm, 9, k * 7000) >> 11), 30 + k * 15, th->bands[(k + (int32_t)(tm / 900u)) % 5]);
+    for (k = 0; k < 10; k++) {                   /* the cellar wall: slow bubbles of the four juices */
+        int32_t q = (int32_t)((tm / 14u + (uint32_t)k * 97u) % 260u);
+        galpha(26); gdisc(12 + (k * 53) % 220 + (tsin(tm, 9, k * 7000) >> 12), 250 - q, 3 + k % 4, JW_COL[k % 4]);
     }
     galpha(256);
-    for (r = 0; r < 3; r++) {
-        uint32_t per = (TICKS_BAR / LT_SPB[lt.rate[r]]) * LT_N[r] * 16u;   /* ticks (Q4) in one turn of this ring */
-        int32_t turn = (int32_t)(((now >> 4) % per) * 65536u / per);
-        galpha(120); gcirc(cx, cy, LT_R[r], th->rim); galpha(256);
-        for (k = 0; k < LT_N[r]; k++) {
-            int32_t a = k * 65536 / LT_N[r] - turn - 16384, x = cx + ((LT_R[r] * icos(a)) >> 14), y = cy + ((LT_R[r] * isin(a)) >> 14);
-            if (lt.note[r][k]) {
-                col_t c = th->caps[(lt.note[r][k] - 1) % 5];
-                int32_t g = lt.glow[r][k];
-                galpha(60 + g / 3); gdisc(x, y, 5 + lt.heat / 2 + g / 40, c);
-                galpha(256); gdisc(x, y, 2 + (g > 128), g > 128 ? th->text : c);
-            } else gp(x, y, th->mute);
+    ghl(0, 240, 16, th->rim);                    /* the main pipe the four tanks hang from */
+    for (k = 0; k < 4; k++) {
+        int32_t x = JW_X(k), v = jw.valve[k], top = JW_FLOOR;
+        col_t c = JW_COL[k];
+        char nm[2] = {(char)('1' + k), 0};
+        grect(x - 1, 16, 3, 6, th->rim);
+        galpha(70 + (tsin(tm, 18, k * 15000) >> 9)); gdisc(x, 36, 24, c);          /* its glow */
+        galpha(256);
+        gellf(x, 40, 21, 18, th->bg, 1); grect(x - 21, 40, 43, 9, th->bg);         /* the tank: a cap of glass, juice in it */
+        galpha(190); gellf(x, 40, 19, 15, c, 1); grect(x - 19, 40, 39, 7, c); galpha(256);
+        garc(x, 40, 21, 18, 32768, 65536, th->text, 0); gline(x - 21, 40, x - 21, 48, th->text); gline(x + 21, 40, x + 21, 48, th->text); ghl(x - 21, x + 22, 48, th->text);
+        gtextc(x + 1, 33, nm, th->bg, 2);
+        grect(x - 3, 49, 7, 11, th->panel); gbox(x - 3, 49, 7, 11, th->text);      /* the tap, and how far it is open */
+        for (i = 0; i < 3; i++) grect(x + 8 + i * 5, 52, 3, 6, i < v ? c : th->mute);
+        if (jw.has[k]) top = JW_FLOOR - 1 - imin(JW_CAP * JW_UPX + 3, jw_total(&jw.g[k]) * JW_UPX >> 8);
+        if (v) {                                 /* the stream */
+            int32_t w = v + 1, y;
+            for (y = 60; y < top; y += 4) grect(x - w / 2 + ((tsin(tm, 90, y * 900) > 9000) ? 1 : 0), y, w, imin(4, top - y), c);
+            galpha(150); gdisc(x, top, 3 + v + (int32_t)((tm / 60u) & 1u), c); galpha(256);
         }
+        if (jw.puddle[k] > 0) { galpha(200); gellf(x, JW_FLOOR, 4 + jw.puddle[k] / 22, 2, c, 1); galpha(256); }
+        if (jw.has[k]) jw_glass_draw(x, JW_FLOOR, 13, &jw.g[k], th->text);
+        else { galpha(70); gbox(x - 13, JW_FLOOR - 4, 27, 4, th->mute); galpha(256); }   /* where a glass goes */
+        if (jw.splash[k] > 0)
+            for (i = 0; i < 7; i++) {
+                int32_t a = 34000 + i * 4700, r = (500 - jw.splash[k]) * 30 / 500 + 4;
+                galpha(jw.splash[k] * 256 / 500); grect(x + ((r * icos(a)) >> 14), JW_FLOOR - 6 + ((r * isin(a)) >> 14), 3, 3, c);
+            }
+        galpha(256);
+        grect(x - 24, JW_FLOOR + 10, 49, 3, jw.has[k] ? c : th->mute);             /* the keys under this tap */
+        for (i = 0; i < 7; i++) grect(x - 24 + i * 7, JW_FLOOR + 15, 6, 9, (in.keys && jw_zone(in.hikey < 0 ? 0 : in.hikey) == k) ? c : th->panel);
+        for (i = 0; i < 7; i++) gbox(x - 24 + i * 7, JW_FLOOR + 15, 6, 9, jw.has[k] ? c : th->mute);
     }
-    gline(cx, cy - 16, cx, cy - 100, th->text); gdisc(cx, cy - 102, 2, th->pad);   /* the needle */
-    gdisc(cx, cy, 6, th->panel); gcirc(cx, cy, 6, th->pad);
-    for (r = 0; r < 3; r++) {                    /* how many steps a bar each ring takes */
-        char b[4]; num_str(b, LT_SPB[lt.rate[r]]);
-        gtextc(34 + r * 46, 236 - 5 * ts(1, 2), b, th->caps[r + 1], ts(1, 2));
+    ghl(0, 240, JW_FLOOR + 1, th->rim); ghl(0, 240, JW_FLOOR + 4, th->mute);
+    for (i = 0; i < JW_NTK; i++)                 /* the tickets: the drink as it should stand in the glass */
+        if (jw.tk[i].on) {
+            int32_t x = 60 + i * 60, left = jw.tk[i].t * 256 / jw.tk[i].life, sway = tsin(tm, 14, i * 20000) >> 13;
+            jw_glass_t g;
+            g.n = jw.tk[i].n;
+            for (k = 0; k < g.n; k++) { g.c[k] = jw.tk[i].c[k]; g.v[k] = Q8(jw.tk[i].u[k]); }
+            if (left < 64 && (tm / 160u) & 1u) galpha(120);
+            gline(x, 16, x + sway, 78, th->mute);
+            grect(x - 13 + sway, 78, 27, 62, th->panel); gbox(x - 13 + sway, 78, 27, 62, left < 64 ? th->caps[0] : th->text);
+            grect(x - 11 + sway, 81, 23 * left / 256, 3, left < 64 ? th->caps[0] : left < 128 ? JW_COL[0] : JW_COL[2]);
+            jw_glass_draw(x + sway, 135, 8, &g, th->text);
+            galpha(256);
+        }
+    if (jw.out_t > 0) {                          /* a glass on its way out: up and off if it was right, dropped if not */
+        int32_t q = 500 - jw.out_t;
+        galpha(jw.out_t * 256 / 500);
+        jw_glass_draw(jw.out_x, JW_FLOOR + (jw.out_ok ? -q * 40 / 500 : q * 30 / 500), 13, &jw.out, jw.out_ok ? th->pad : th->caps[0]);
+        galpha(256);
     }
-    for (k = 0; k < 8; k++) grect(170 + k * 7, 224 + (k < lt.heat ? 0 : 3), 5, k < lt.heat ? 7 : 1, k < lt.heat ? th->caps[0] : th->mute);
-    if (lt.wipe > 0) { galpha(lt.wipe * 200 / 500); grect(0, 0, 240, 240, th->pad); galpha(256); }
-    if (mc.msg_t > 0) gfit(120, 6 + 2 * ts(2, 4), 232, TR(mc.msg), th->pad, ts(2, 4));
+    if (mc.flash > 0) { galpha(mc.flash * 110 / 300); grect(0, 0, 240, 240, th->caps[0]); galpha(256); }
 }
 
 /* ---------------------------------------------------------------- NIGHT BLOOM */
@@ -443,6 +578,12 @@ static void mach_start(void)
         mc.lives = 3; mr.t0 = (now / 96u + 1u) * 96u - 96u; mr.done_h = (now - mr.t0) / 48u; mr.hop_h = 0; mr.seed = now * 31u;
         /* nothing for the first beats: mr_obs keeps the first eight half-beats clear from where the clock stands */
         mr.t0 = (now / 96u) * 96u; mr.done_h = 0; mr.blk_h = 0; mr.blk_done = 0;
+    } else if (mc.which == 1) {
+        for (i = 0; i < sizeof jw; i++) ((uint8_t *)&jw)[i] = 0;
+        mc.lives = 5; jw.seed = now * 31u + 7u; jw.spawn_t = 700; jw.prev_keys = in.keys;
+#ifdef AC_TEST_CATCH
+        jw.seed = 1;
+#endif
     } else if (mc.which == 2) {
         for (i = 0; i < sizeof nb; i++) ((uint8_t *)&nb)[i] = 0;
         mc.lives = 5; nb.t0 = (now / 96u) * 96u; nb.breath = 3000; nb.rings = 1; nb.ring_t = 2200;
@@ -457,10 +598,7 @@ static void mach_enter(int which)
 {
     uint32_t i;
     mc.which = (uint8_t)which; mc.state = MS_TITLE; mc.t = 0; mc.msg_t = 0; mc.flash = 0; mc.score = 0; mc.lives = 0;
-    if (which == 1) {
-        for (i = 0; i < 3u; i++) lt.last[i] = -1;
-        if (!lt.rate[0] && !lt.rate[1] && !lt.rate[2]) { lt.rate[0] = 2; lt.rate[1] = 3; lt.rate[2] = 4; lt.heat = 3; }
-    }
+    (void)i;
 }
 /* -1: REC at its start or end, back to the Arcave; 1: HOME, how it is played (arcave.c opens the sheet) */
 static int mach_tick(int32_t dt)
@@ -475,12 +613,12 @@ static int mach_tick(int32_t dt)
         else { led_play_breathe = 1; led_breathe_want |= 1u << BTN_HOME; }
         return 0;
     }
-    if (mc.which == 0) run_tick(); else if (mc.which == 1) table_tick(dt); else bloom_tick(dt);
+    if (mc.which == 0) run_tick(); else if (mc.which == 1) juice_tick(dt); else bloom_tick(dt);
     return 0;
 }
 static void mach_draw(void)
 {
-    if (mc.which == 0) run_draw(); else if (mc.which == 1) table_draw(); else bloom_draw();
-    if (mc.state == MS_PLAY) { if (mc.which != 1) mach_hud(); }
+    if (mc.which == 0) run_draw(); else if (mc.which == 1) juice_draw(); else bloom_draw();
+    if (mc.state == MS_PLAY) mach_hud();
     else mach_card(MACH_NAME[mc.which], th->caps[mc.which * 2 % 5]);
 }

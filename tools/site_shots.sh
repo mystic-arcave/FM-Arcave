@@ -11,14 +11,14 @@ tests/run_arcave.sh story 1 >/dev/null
 tests/run_arcave.sh lit 4 >/dev/null
 tests/run_arcave.sh mend 2 1 >/dev/null
 tests/run_arcave.sh run 4 3 >/dev/null
-tests/run_arcave.sh table 4 4 >/dev/null
+CATCH=1 tests/run_arcave.sh table 4 4 >/dev/null
 tests/run_arcave.sh bloom 4 5 >/dev/null
 mkdir -p web/site/img
 "${PYTHON:-python3}" - <<'PY'
 from PIL import Image
 S = {"title": "lang-4600", "wake": "intro-9200", "course": "intro-24000", "pad": "intro-19000", "psst": "story-3600", "hat": "story-7600",
      "cave": "lit-4300", "jukebox": "lit-7600", "rings": "mend-1500", "dish": "mend-12100", "run": "run-6000",
-     "table": "table-12000", "bloom": "bloom-2500", "screen": "intro-1500"}
+     "table": "table-7800", "bloom": "bloom-2500", "screen": "intro-1500"}
 for name, src in S.items():
     Image.open(f"build/host/{src}.ppm").convert("RGB").save(f"web/site/img/{name}.png", optimize=True)
     print("web/site/img/" + name + ".png <- " + src)

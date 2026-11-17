@@ -5,7 +5,7 @@
  *   the intro    title, "press PLAY to wake up Rock", the roll to the cave          ac_intro.h
  *   the cave     a platforming hub: the Hat, the dark jukebox, three machines       ac_cave.h
  *   the mending  three rings of glass, then the dish and your first song            ac_juke.h
- *   the machines MYSTIC RUN, THE LIGHT TABLE, NIGHT BLOOM                           ac_mach.h
+ *   the machines MYSTIC RUN, JUICE WORKS, NIGHT BLOOM                           ac_mach.h
  *   everywhere   GLO: settings (the game pauses); OCT- OCT+: the language; ALGORITHM: the jukebox;
  *                LINK: several FM-1s on one clock                                   ac_menu.h, ac_sync.h
  *                HOME: how to play; EDIT: the scores and the time played; FX: an effect     ac_sheet.h */
