@@ -90,7 +90,7 @@ static void dlg_draw(void)
     gbox(4, y, 232, h, th->rim);
     gtext(12, y + 5 + 2 * sn, TR(dlg.name_id), th->caps[3], sn);
     dlg_layout(1, y + 6 + TLH(sn) + 2 + 2 * sc);
-    if (dlg.shown >= dlg.total && ipulse((uint32_t)dlg.t, 900) > 128) gtextr(228, y + 5 + 2 * sn, dlg.rest ? "PLAY \xE2\x86\x93" : "PLAY \xE2\x86\x92", th->pad, sn);
+    if (dlg.shown >= dlg.total && ipulse((uint32_t)dlg.t, 900) > 128) gtextr(228, y + 5 + 2 * sn, dlg.rest ? PB " \xE2\x86\x93" : PB " \xE2\x86\x92", th->pad, sn);
 }
 
 /* ---------------------------------------------------------------- the cave */

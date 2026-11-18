@@ -1,0 +1,4 @@
+# the PLAY button drawn as the green button wherever a text names it: the wake line, a machine's start card
+600 btn 12
+4200 shot
+4600 end

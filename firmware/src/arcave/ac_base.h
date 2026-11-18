@@ -235,17 +235,38 @@ static uint32_t fnt_glyph(uint32_t cp)
     }
     return fnt_glyph('?');
 }
+/* the PLAY button in a line of text (PB in a string): the green button as it is on the panel, PLAY over a line over
+ * STOP. At the smallest scale there is no room for the words: a green key with its line */
+#define CP_PLAY 0xE000u
+#define PB "\xEE\x80\x80"
+#define PLAY_GREEN HEXC(0x35d05c)
+static int32_t gtextw(const char *s, int32_t sc);
+static int32_t play_w(int32_t sc) { return sc == 1 ? 11 : gtextw("PLAY", sc / 2) + 4 * (sc / 2); }
+static int32_t glyph_adv(uint32_t cp, int32_t sc) { return cp == CP_PLAY ? play_w(sc) + sc : (FNT_W[fnt_glyph(cp)] + 1) * sc; }
 static int32_t gtextw(const char *s, int32_t sc)
 {
     int32_t w = 0;
-    while (*s) w += (FNT_W[fnt_glyph(utf8_next(&s))] + 1) * sc;
+    while (*s) w += glyph_adv(utf8_next(&s), sc);
     return w ? w - sc : 0;
+}
+static int32_t gtext(int32_t x, int32_t y, const char *s, col_t c, int32_t sc);
+static void play_draw(int32_t x, int32_t y, int32_t sc)   /* y: the capitals' top of the line it stands in */
+{
+    int32_t u = sc / 2, w = play_w(sc), h, top;
+    if (sc == 1) { grect(x, y - 1, w, 7, PLAY_GREEN); grect(x + 2, y + 2, w - 4, 1, 0); return; }
+    h = 15 * u; top = y + (5 * sc - h) / 2;
+    grect(x + u, top, w - 2 * u, h, PLAY_GREEN); grect(x, top + u, w, h - 2 * u, PLAY_GREEN);   /* (its corners off) */
+    gtext(x + 2 * u, top + u, "PLAY", 0, u);
+    grect(x + 2 * u, top + 7 * u, w - 4 * u, u, 0);
+    gtext(x + 2 * u, top + 9 * u, "STOP", 0, u);
 }
 /* text with its capitals' top at y (accents reach 2 * sc above); returns the x after it */
 static int32_t gtext(int32_t x, int32_t y, const char *s, col_t c, int32_t sc)
 {
     while (*s) {
-        uint32_t g = fnt_glyph(utf8_next(&s)), r, b;
+        uint32_t cp = utf8_next(&s), g, r, b;
+        if (cp == CP_PLAY) { play_draw(x, y, sc); x += play_w(sc) + sc; continue; }
+        g = fnt_glyph(cp);
         for (r = 0; r < 8u; r++) {
             uint32_t row = FNT_ROW[g][r];
             for (b = 0; row; b++, row = (row << 1) & 0xFFu)
@@ -275,7 +296,7 @@ static int32_t gtext_wrap(int32_t x, int32_t y, int32_t w, const char *s, col_t 
         while (*p && *p != '\n') {
             const char *q = p;
             uint32_t cp = utf8_next(&q);
-            int32_t gw = (FNT_W[fnt_glyph(cp)] + 1) * sc;
+            int32_t gw = glyph_adv(cp, sc);
             if (lw + gw - sc > w && (brk || p > s)) break;
             if (cp == ' ') brk = p;
             lw += gw;

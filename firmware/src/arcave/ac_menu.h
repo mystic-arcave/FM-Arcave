@@ -70,7 +70,7 @@ static void menu_draw(void)
         gtext_wrap(12, top + 2 * sc, 216, buf + imin(mn.win, n), th->text, sc, TLH(sc), -1, 0, 0, 1, imax(1, room / TLH(sc)), &rest);
         mn.rest = *rest ? (int32_t)(rest - (buf + imin(mn.win, n))) : 0;
         for (i = 0; i < 4; i++) grect(10 + i * 10, 232 - 2 * sf, 6, 2 * sf, i == mn.about - 1 ? th->pad : th->mute);
-        gtextr(230, 238 - TLH(sf) + 2 * sf, mn.rest ? "PLAY \xE2\x86\x93" : "PLAY \xE2\x86\x92", th->pad, sf);
+        gtextr(230, 238 - TLH(sf) + 2 * sf, mn.rest ? PB " \xE2\x86\x93" : PB " \xE2\x86\x92", th->pad, sf);
         return;
     }
     gfit(120, 6 + 2 * sh, 232, TR(T_SETTINGS), th->text, sh);
