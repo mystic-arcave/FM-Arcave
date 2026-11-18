@@ -137,7 +137,7 @@ static const cv_shroom_t CV_SHROOM[] = {
 static const int16_t CV_MACH[3][2] = {{740, 344}, {466, 288}, {706, 232}};
 static const char *const MACH_NAME[3] = {"MYSTIC RUN", "JUICE WORKS", "NIGHT BLOOM"};
 
-enum { CVA_NONE, CVA_LAMP, CVA_M1, CVA_M2, CVA_M3, CVA_SCORES, CVA_EXIT };
+enum { CVA_NONE, CVA_LAMP, CVA_M1, CVA_M2, CVA_M3, CVA_SCORES, CVA_EXIT, CVA_DISH };
 #define CV_BOARD_X 522                           /* the scores board, on the ground past the Hat */
 static struct {
     int32_t x, y, vx, vy, th, coy, drag, acc, camx, camy, t, fade, roll_px, sq[5], psst, power_t, boost_t, chime_t[CV_NCHIME], ring_t;
@@ -192,7 +192,7 @@ static int cave_tick(int32_t dt)
     if (i) cv.drag = iclamp(cv.drag + i * 115, -384, 384);
     knob = iclamp(cv.drag, -256, 256);
     cv.drag -= cv.drag * imin(dt, 100) / 250;
-    if (in.hikey >= 0) jump = in.hikey * 256 / 26;
+    jump = in.hop;
     cv.acc += dt * 128;
     while (cv.acc >= 1000) {
         int32_t py = cv.y, rad = rock_rad(cv.th), bot, a;
@@ -302,7 +302,7 @@ static int cave_tick(int32_t dt)
     if (cv.near) led_play_breathe = 1;
     if (BDOWN(BTN_PLAY) && cv.near) {
         if (cv.near == 1) dlg_open(T_HAT, story < 4 ? T_HAT_REMIND : T_HAT_FREE);
-        else if (cv.near == 2) { if (story < 4) act = CVA_LAMP; else snd_ui(79); }
+        else if (cv.near == 2) act = story < 4 ? CVA_LAMP : CVA_DISH;   /* mended: the dish again, for a new song */
         else if (cv.near == 6) act = CVA_SCORES;
         else if (cv.near == 7) act = CVA_EXIT;
         else if (story >= 4) act = CVA_M1 + cv.near - 3;
@@ -523,7 +523,7 @@ static void cave_draw(void)
         galpha(256);
     }
     if (cv.near && !dlg.on) {
-        const char *s = cv.near == 1 ? TR(T_TALK) : cv.near == 2 ? (on ? "" : TR(T_FIX)) : cv.near == 6 ? TR(T_SCORES_PROMPT) : cv.near == 7 ? TR(T_EXIT) : TR(T_START);
+        const char *s = cv.near == 1 ? TR(T_TALK) : cv.near == 2 ? TR(on ? T_NEWSONG : T_FIX) : cv.near == 6 ? TR(T_SCORES_PROMPT) : cv.near == 7 ? TR(T_EXIT) : TR(T_START);
         int32_t px = SX(cv.x >> 8), py = SY(cv.y >> 8) - 30;
         if (cv.near >= 3 && cv.near <= 5) gfit(SX(CV_MACH[cv.near - 3][0]), SY(CV_MACH[cv.near - 3][1]) - 58 - 5 * ts(1, 3), 232, MACH_NAME[cv.near - 3], on ? th->caps[(cv.near - 3) * 2 % 5] : th->mute, ts(1, 3));
         if (cv.near >= 3 && cv.near <= 5 && !on) s = TR(T_NOPOWER);

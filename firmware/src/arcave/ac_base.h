@@ -391,7 +391,11 @@ static struct {
     int32_t enc[8];                              /* detents turned this frame, by ENC_... */
     int32_t any_knob;                            /* all seven together */
     int32_t hikey;                               /* the highest key pressed this frame, -1 none */
+    int32_t hop;                                 /* a key pressed this frame as a hop: -1 none, else its strength of 256:
+                                                    the bottom row a medium one, the top row a big one, wherever along it */
 } in;
+#define HOP_MID 128                              /* (what the middle key gave when the hop grew along the keyboard) */
+#define HOP_BIG 236                              /* (and the third key from the top) */
 static uint32_t in_prev_keys;
 
 static void ac_input(void)
@@ -407,7 +411,9 @@ static void ac_input(void)
     in.any_knob = 0;
     for (e = 0; e < 7u; e++) { in.enc[e] = fm1_enc_take(e); in.any_knob += in.enc[e]; }
     in.hikey = -1;
-    for (k = 0; k < AC_NKEY; k++) if (in.kdown >> k & 1u) in.hikey = (int32_t)k;
+    in.hop = -1;
+    for (k = 0; k < AC_NKEY; k++)
+        if (in.kdown >> k & 1u) { in.hikey = (int32_t)k; in.hop = (KEY_IS_SHARP[k] || in.hop == HOP_BIG) ? HOP_BIG : HOP_MID; }
 }
 #define BDOWN(b) (in.bdown >> (b) & 1u)
 #define BHELD(b) (in.btn >> (b) & 1u)

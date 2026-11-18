@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /* FM ARCAVE's three machines. All three run on the jukebox's clock, so what you do in them lands in the music.
- *   MYSTIC RUN        Rock runs on the beat; a key hops a crystal, a higher key hops higher. KNOB 1 is the tempo.
+ *   MYSTIC RUN        Rock runs on the beat; a key hops a crystal, the top row hops higher. KNOB 1 is the tempo.
  *   JUICE WORKS       four taps of mushroom juice (KNOB 1-4), glasses put under them, moved and served with the
  *                     keys, tickets that say what to pour: many things to keep going at once.
  *   NIGHT BLOOM       new here: four knobs turn four petals round a flower, one to a ring, a click a twenty-fourth
@@ -45,13 +45,13 @@ static void mach_card(const char *name, col_t c)
     galpha(140 + ipulse((uint32_t)mc.t, 1600) * 116 / 256);
     y += gblock(4, y, 232, TR(mc.state == MS_OVER ? T_PLAY_AGAIN : T_PLAY_START), th->pad, a, 1) + 6;
     galpha(256);
-    y += gblock(4, y, 232, TR(T_HOME_CONTROLS), th->text, a, 1) + 6;
     if (best[mc.which]) {
         for (p = TR(T_BEST); *p && n < 24; ) b[n++] = *p++;
         b[n++] = ' '; num_str(b + n, (int32_t)best[mc.which]);
         gfit(120, y + 2 * a, 232, b, th->mute, a);
     }
-    gfoot(238, TR(T_REC_BACK), th->mute, th->bg, ts(1, 2));
+    y = gfoot(238, TR(T_REC_BACK), th->mute, th->bg, ts(1, 2));   /* at the foot: HOME, and under it REC */
+    gfoot(y - 2, TR(T_HOME_CONTROLS), th->text, th->bg, a);
 }
 static void mach_over(void)
 {
@@ -99,7 +99,7 @@ static void run_tick(void)
     uint32_t now = (tr_now_q8() >> 8) - mr.t0, h;
     if (in.enc[ENC_KNOB1] && !tr_follow) tr_bpm_q8 = (uint32_t)iclamp((int32_t)(tr_bpm_q8 >> 8) + in.enc[ENC_KNOB1] * 2, 70, 180) << 8;
     if (in.hikey >= 0 && mr_height(now) < 4) {
-        mr.hop_t = (int32_t)now; mr.hop_k = in.hikey; mr.hop_h = 24 + in.hikey * 40 / 26;
+        mr.hop_t = (int32_t)now; mr.hop_k = in.hikey; mr.hop_h = 24 + in.hop * 40 / 256;
         sfx(key_note(in.hikey) + 12, 0, 300, W_TRI, 3000, 3, 120);
     }
     for (h = mr.done_h + 1u; h * 48u <= now + 281u; h++) {   /* a block coming into view: its button lights, and pressed, counts */
@@ -143,11 +143,11 @@ static void run_tick(void)
             }
         } else if (o == 3 && ht > 16) { mc.score += 5; sfx(84, 0, 300, W_SINE, 2400, 3, 180); }
     }
-    {   /* low keys for a crystal, high ones for a tall one: the lights say which is next */
+    {   /* any key for a crystal, the top row for a tall one: the lights say which is next */
         uint32_t nh = (now / 96u + 1u) * 2u;
         int o = mr_obs(nh);
         if (o == 1) led_key_dim_want = (1u << AC_NKEY) - 1u;
-        if (o == 2) led_key_want = ((1u << AC_NKEY) - 1u) & ~((1u << 14) - 1u);
+        if (o == 2) { int k2; for (k2 = 0; k2 < AC_NKEY; k2++) if (KEY_IS_SHARP[k2]) led_key_want |= 1u << k2; }
     }
     if (now % 96u < 12u) led_btn_want |= 1u << BTN_PLAY;   /* (PLAY's green light, on the beat) */
 }
@@ -222,6 +222,7 @@ static void run_draw(void)
 #define JW_FLOOR 204
 #define JW_X(k) (30 + (k) * 60)
 static const col_t JW_COL[4] = {AC_RGB(255, 214, 40), AC_RGB(255, 255, 255), AC_RGB(40, 224, 96), AC_RGB(48, 112, 255)};
+#define JW_TOL 184                               /* how far off a mark still serves (Q8 parts): nearly three quarters of one */
 static const uint16_t JW_RATE[4] = {0, 150, 330, 700};   /* parts (Q8) a second, by how far the tap is open */
 typedef struct { uint8_t n, c[3]; int32_t v[3]; } jw_glass_t;   /* layers from the bottom: colour, parts (Q8) */
 static struct {
@@ -271,15 +272,15 @@ static void jw_serve(int z)
             if (jw.tk[i].c[k] != g->c[k]) break;
             e = imax(e, iabs(g->v[k] - Q8(jw.tk[i].u[k])));
         }
-        if (k == g->n && e <= 128 && e < best_e) { best_e = e; best_i = i; }
+        if (k == g->n && e <= JW_TOL && e < best_e) { best_e = e; best_i = i; }
     }
     if (best_i < 0) { jw_hurt(z); return; }      /* nobody asked for that */
     mc.combo++; jw.served++; jw.out_ok = 1;
-    mc.score += 10 * g->n + (best_e < 48 ? 10 : 0) + jw.tk[best_i].t * 10 / jw.tk[best_i].life + imin(mc.combo, 10);
-    mach_msg(best_e < 48 ? T_PERFECT : T_GOOD);
+    mc.score += 10 * g->n + (best_e < 64 ? 10 : 0) + jw.tk[best_i].t * 10 / jw.tk[best_i].life + imin(mc.combo, 10);
+    mach_msg(best_e < 64 ? T_PERFECT : T_GOOD);
     jw.tk[best_i].on = 0;
     for (k = 0; k < g->n; k++) sfx(72 + SC_PEN[(g->c[k] + k) % 5], (uint32_t)k * 90u, 500, W_SINE, 2600, 3, 170);
-    snd_chime(best_e < 48);
+    snd_chime(best_e < 64);
 }
 static void juice_tick(int32_t dt)
 {
@@ -610,7 +611,7 @@ static int mach_tick(int32_t dt)
     if (mc.state != MS_PLAY) {
         if (BDOWN(BTN_REC)) return -1;
         if (BDOWN(BTN_PLAY)) mach_start();
-        else { led_play_breathe = 1; led_breathe_want |= 1u << BTN_HOME; }
+        else { led_play_breathe = 1; led_breathe_want |= 1u << BTN_HOME | 1u << BTN_REC; }
         return 0;
     }
     if (mc.which == 0) run_tick(); else if (mc.which == 1) juice_tick(dt); else bloom_tick(dt);

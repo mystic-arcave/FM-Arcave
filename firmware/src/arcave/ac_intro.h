@@ -242,7 +242,7 @@ static int intro_tick(int32_t dt)
         knob = live ? iclamp(G.drag, -256, 256) : 0;
         if (iabs(knob) > 13) G.turned = 1;
         G.drag -= G.drag * imin(dt, 100) / 250;
-        if (live && in.hikey >= 0) jump = in.hikey * 256 / 26;
+        if (live) jump = in.hop;
         r->jumped = 0; r->touch = 0; r->thud = 0;
         if (live && d > 0) {
             for (i = 0; i < CO_NPAD; i++)
@@ -257,7 +257,7 @@ static int intro_tick(int32_t dt)
         G.near = (pad >= 0 && !G.pad_used[pad] && ahead < Q8(170) && d * r->vx > Q8(30)) ? 256 - imax(0, ahead - win) / 170 : 0;
         if (jump >= 0 && G.on_pad && r->coy > 0) {   /* any key on the pad: the jump is set for the next downward slope */
             int32_t k = pad_plan(r->x, Q8(pads[pad].far), (int32_t)isqrt((uint32_t)((r->vx >> 4) * (r->vx >> 4) + (r->vy >> 4) * (r->vy >> 4))) << 4, d);
-            G.exact = iabs((jump * 18 + 128) / 256 - k) <= 2;
+            G.exact = (jump == HOP_BIG) == (k >= 13);   /* the row that suits this pad: a bonus on landing */
             jump = k * 256 / 18; lock = 1; G.pad_used[pad] = 1;
         }
         if (live && !G.loop_on && r->x < Q8(CO_LOOPX + 6) && r->y > land_y(Q8(CO_LOOPX)) - Q8(26)) {

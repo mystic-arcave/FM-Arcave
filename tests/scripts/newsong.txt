@@ -1,0 +1,135 @@
+# a new song at the mended jukebox: a short slide does nothing, a long one spins the dish at the hand's speed, the tempo locks,
+# KNOB 2 3 4 set effects, HOME: the effects' page (a knob scrolls it), REC, notes, PLAY keeps it (and it is saved)
+500 keys 1
+540 keys 2
+580 keys 4
+620 keys 8
+660 keys 16
+700 keys 0
+1000 shot
+1600 keys 1
+1640 keys 2
+1680 keys 4
+1720 keys 8
+1760 keys 16
+1800 keys 32
+1840 keys 64
+1880 keys 128
+1920 keys 256
+1960 keys 512
+2000 keys 1024
+2040 keys 2048
+2080 keys 4096
+2120 keys 8192
+2160 keys 16384
+2200 keys 32768
+2240 keys 65536
+2280 keys 131072
+2320 keys 262144
+2360 keys 524288
+2400 keys 1048576
+2440 keys 2097152
+2480 keys 4194304
+2520 keys 8388608
+2560 keys 16777216
+2600 keys 33554432
+2640 keys 67108864
+2680 keys 0
+2880 shot
+11880 shot
+12180 enc 3 5
+12480 enc 4 3
+12780 enc 5 6
+13080 shot
+15580 btn 8
+16080 shot
+16280 enc 2 30
+16680 shot
+16880 btn 8
+17380 shot
+17580 btn 13
+17980 keys 8
+18130 keys 0
+18380 keys 256
+18530 keys 0
+18780 keys 8192
+18930 keys 0
+19180 keys 262144
+19330 keys 0
+19580 keys 8
+19730 keys 0
+19980 keys 256
+20130 keys 0
+20380 keys 8192
+20530 keys 0
+20780 keys 262144
+20930 keys 0
+21180 keys 8
+21330 keys 0
+21580 keys 256
+21730 keys 0
+21980 keys 8192
+22130 keys 0
+22380 keys 262144
+22530 keys 0
+22780 keys 8
+22930 keys 0
+23180 keys 256
+23330 keys 0
+23580 keys 8192
+23730 keys 0
+23980 keys 262144
+24130 keys 0
+24380 keys 8
+24530 keys 0
+24780 keys 256
+24930 keys 0
+25180 keys 8192
+25330 keys 0
+25580 keys 262144
+25730 keys 0
+25980 keys 8
+26130 keys 0
+26180 shot
+26380 keys 256
+26530 keys 0
+26780 keys 8192
+26930 keys 0
+27180 keys 262144
+27330 keys 0
+27580 keys 8
+27730 keys 0
+27980 keys 256
+28130 keys 0
+28380 keys 8192
+28530 keys 0
+28780 keys 262144
+28930 keys 0
+29180 keys 8
+29330 keys 0
+29580 keys 256
+29730 keys 0
+29980 keys 8192
+30130 keys 0
+30380 keys 262144
+30530 keys 0
+30780 keys 8
+30930 keys 0
+31180 keys 256
+31330 keys 0
+31580 keys 8192
+31730 keys 0
+31980 keys 262144
+32130 keys 0
+32380 keys 8
+32530 keys 0
+32780 keys 256
+32930 keys 0
+33180 keys 8192
+33330 keys 0
+33580 keys 262144
+33730 keys 0
+34180 shot
+34380 btn 12
+36880 shot
+40380 end

@@ -1,0 +1,13 @@
+# a machine's start card (HOME above REC at the foot), HOME: its help page over black, a knob scrolls it down and back
+600 shot
+900 btn 8
+1400 shot
+1700 enc 2 3
+2200 shot
+2500 enc 3 6
+3000 shot
+3300 enc 2 -20
+3800 shot
+4100 btn 8
+4600 shot
+4800 end

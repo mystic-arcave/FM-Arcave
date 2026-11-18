@@ -41,7 +41,7 @@ typedef struct {
     uint32_t play_s;                             /* the time played, seconds */
     uint8_t ear, secrets, rsv[2];
     uint32_t race_cs;                            /* the best race back, hundredths of a second (0: never run) */
-    uint8_t rsv2[4];
+    uint8_t fx1[4];                              /* the song's effects, each + 1 (0: a save from before them) */
 } save_t;
 #define SAVE_MAGIC 0x41434156u                   /* "ACAV" */
 static save_t sv;
@@ -55,6 +55,7 @@ static void save_now(void)
     for (i = 0; i < TAKE_MAX; i++) { v->take[i][0] = take_ev[i][0]; v->take[i][1] = take_ev[i][1]; }
     for (i = 0; i < 3u; i++) v->best[i] = best[i];
     sv.play_s = play_s; sv.ear = sy_ear; sv.secrets = cv.secrets; sv.race_cs = race_best_cs;
+    for (i = 0; i < 4u; i++) sv.fx1[i] = (uint8_t)(take_fx[i] + 1u);
     play_saved_s = play_s;
     settings_save(&sv, sizeof sv);
 }
@@ -72,6 +73,7 @@ static void story_reset(void)
     uint8_t keep = cv.secrets;                   /* (starting the story over keeps what was found; wiping the save does not) */
     for (i = 0; i < sizeof cv; i++) ((uint8_t *)&cv)[i] = 0;
     cv.secrets = keep;
+    take_fx[0] = 4; take_fx[1] = take_fx[2] = take_fx[3] = 0;
     story = 0; take_n = 0; juke_track = 0; replay = 0; thanks_due = 0; dlg.on = 0;
     scene = SC_INTRO; intro_reset(); mus_set(MUS_INTRO, 0);
     sy_drone_want = 0; sy_music_want = 256;
@@ -106,6 +108,7 @@ static void arcave_init(void)
         take_n = v->take_n > TAKE_MAX ? 0u : v->take_n;
         for (i = 0; i < 3u; i++) best[i] = v->best[i];
         play_s = play_saved_s = sv.play_s; sy_ear = sv.ear ? 1u : 0u; cv.secrets = sv.secrets & 7u; race_best_cs = sv.race_cs;
+        for (i = 0; i < 4u; i++) if (sv.fx1[i]) take_fx[i] = (uint8_t)imin(sv.fx1[i] - 1, TAKE_FX_MAX);
         if (story == 3u) story = 2u;             /* the light was back but no song yet: the rings again (they are quick) */
     }
 #ifdef AC_TEST_TSIZE                             /* (tests) the text size: 0 small, 1 medium, 2 large */
@@ -121,7 +124,7 @@ static void arcave_init(void)
     fb_all = 1;
 #ifdef AC_TEST_SCENE                             /* (tests) straight to a scene: 1 the rings, 2 the dish, 3-5 a machine */
     if (AC_TEST_SCENE == 1) { scene = SC_LAMP; lamp_reset(); }
-    else if (AC_TEST_SCENE == 2) { scene = SC_DISH; dish_reset(); }
+    else if (AC_TEST_SCENE == 2) { scene = SC_DISH; dish_reset(story >= 4u); }
     else if (AC_TEST_SCENE == 6) intro_race_start();                 /* (6: out of the upper door, the race back) */
     else if (AC_TEST_SCENE == 7) { scene = SC_CAVE; cave_enter(1); cv.x = Q8(-20); cv.y = Q8(181); }   /* (7: in the room by the door) */
     else { scene = SC_MACH; mach_enter(AC_TEST_SCENE - 3); mus_set(MUS_JUKE, 2); }
@@ -199,7 +202,10 @@ static void arcave_frame(void)
         sy_rumble_want = 0;
     } else if (sh.on) {
         r = sheet_tick(dt);
-        if (r == SA_LEAVE) to_cave(0);
+        if (r == SA_LEAVE) {
+            if (scene == SC_DISH) { dish_abort(); if (story < 4u) story = 2; }   /* (from the effects' page: no song kept) */
+            to_cave(0);
+        }
     } else {
         /* (in NIGHT BLOOM the ALGORITHM knob turns a ring: the jukebox waits) */
         if (in.enc[ENC_ALGORITHM] && scene != SC_INTRO && scene != SC_LAMP && scene != SC_DISH
@@ -218,6 +224,7 @@ static void arcave_frame(void)
             if (thanks_due && !dlg.on) { thanks_t -= dt; if (thanks_t <= 0) { thanks_due = 0; dlg_open(T_HAT, T_HAT_THANKS); } }
             if (r == CVA_LAMP) { scene = SC_LAMP; lamp_reset(); sy_rumble_want = 0; }
             else if (r == CVA_SCORES) sheet_open(SH_SCORES);
+            else if (r == CVA_DISH) { scene = SC_DISH; dish_reset(1); sy_rumble_want = 0; snd_ui(79); }
             else if (r == CVA_EXIT) {            /* out of the upper door: the course again, to be raced back */
                 scene = SC_INTRO; replay = 1; intro_race_start(); mus_set(MUS_INTRO, 0); sy_drone_want = 0; sy_music_want = 256; sy_rumble_want = 0;
                 snd_ui(79);
@@ -227,17 +234,19 @@ static void arcave_frame(void)
         case SC_LAMP:
             r = lamp_tick(dt);
             if (r < 0) to_cave(0);
-            else if (r > 0) { story = 3; scene = SC_DISH; dish_reset(); }
+            else if (r > 0) { story = 3; scene = SC_DISH; dish_reset(0); }
             break;
         case SC_DISH:
             r = dish_tick(dt);
-            if (r < 0) { story = 2; to_cave(0); }
-            else if (r > 0) {                    /* the song is kept: the power comes back */
+            if (r < 0) { if (story < 4u) story = 2; to_cave(0); }
+            else if (r == 2) sheet_open(SH_FX);
+            else if (r > 0) {                    /* the song is kept: the first time, the power comes back */
+                int first = story < 4u;
                 story = 4; juke_track = 0;
                 to_cave(0);
-                cv.power_t = 1600; cv.fade = 0; thanks_due = 1; thanks_t = 2600;
+                if (first) { cv.power_t = 1600; cv.fade = 0; thanks_due = 1; thanks_t = 2600; sfx(36, 0, 2400, W_SINE, 5200, 20, 0); }
                 banner_show(TR(T_NOWPLAYING), TR(T_YOURSONG), 1);
-                snd_chime(1); sfx(36, 0, 2400, W_SINE, 5200, 20, 0);
+                snd_chime(1);
                 save_soon();
             }
             break;

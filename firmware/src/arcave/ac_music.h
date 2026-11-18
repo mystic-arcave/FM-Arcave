@@ -35,6 +35,22 @@ static const song_t SONGS[JUKE_N] = {
 #define TAKE_MAX 48
 static volatile uint8_t take_n, take_bpm = 90;
 static uint8_t take_ev[TAKE_MAX][2];             /* [step of 32, key] */
+/* the song's four effects, 0..8 each (KNOB 1-4 at the dish): echo, reverb, distortion, chorus */
+#define TAKE_FX_MAX 8
+static volatile uint8_t take_fx[4] = {4, 0, 0, 0};
+/* one of the player's notes, with the effects on it. irq: from the tune (the interrupt), else from the main loop */
+static void take_voice(int32_t note, int irq)
+{
+    uint32_t e = take_fx[0], r = take_fx[1], d = take_fx[2], c = take_fx[3], k;
+    uint32_t vol = 3000u * 256u / (256u + d * 20u), send = e ? 26u + e * 26u : 0u, rs = r * 28u;
+    if (c) vol = vol * 4u / 5u;
+    for (k = 0; k < (c ? 3u : 1u); k++) {        /* chorus: two more of it, a little off pitch, one each side */
+        int32_t det = k == 1u ? 5 + (int32_t)c * 3 : k == 2u ? -5 - (int32_t)c * 3 : 0, pan = k == 1u ? 70 : k == 2u ? -70 : 0;
+        uint32_t v = k ? vol * 11u / 20u : vol;
+        if (irq) sy_now_fx(note, 700, W_TRI, v, 5, send, det, pan, 0, rs, d);
+        else sfx_fx(note, 0, 700, W_TRI, v, 5, send, det, pan, 0, rs, d);
+    }
+}
 
 static int32_t mus_deg(const song_t *s, int32_t d)
 {
@@ -108,7 +124,7 @@ static void mus_juke(uint32_t step)
     if (mus_track == 0u) {                       /* the player's own notes: two bars, round and round */
         uint32_t s32 = step % 32u;
         for (k = 0; k < take_n; k++)
-            if (take_ev[k][0] == s32) sy_now(key_note(take_ev[k][1]) + 12, 700, W_TRI, 3000, 5, 130, 0, 0, 0);
+            if (take_ev[k][0] == s32) take_voice(key_note(take_ev[k][1]) + 12, 1);
     }
 }
 
