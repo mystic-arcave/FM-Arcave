@@ -114,7 +114,7 @@ static void sheet_draw(void)
         sheet_page(TR(T_FX_TITLE), th->pad, IDS, 5, 1);
         return;
     }
-    gveil(th->bg, 28);
+    gveil(0, 30);                                /* nearly black: the words are all there is to read */
     if (sh.on == SH_INTRO) {
         static const int IDS[8] = {T_HELP_ROLL, -1, T_HELP_LOW, T_HELP_HIGH, -1, T_HELP_PADS, -1, T_HELP_RETURN};
         col_t cols[8] = {th->text, 0, th->text, th->text, 0, th->text, 0, th->pad};

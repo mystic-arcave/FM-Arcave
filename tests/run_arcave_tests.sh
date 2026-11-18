@@ -22,6 +22,7 @@ run "Turkish: the title, the tip fading as the wake text comes in, the controls 
 run "the hollow behind the start: hidden by a rock face until Rock is on the ledge and rolls in" play hollow 0 8
 run "the settings, line by line" play menu
 run "into the cave, the Hat, the jukebox, the settings" play story 1
+run "the jukebox past the Hat: its name at the screen's edge, Rock settling in its dip, PLAY: the rings" sh -c 'tests/run_arcave.sh juke 2 > build/host/juke.log 2>&1 && grep -q "^sound" build/host/juke.log'
 run "a machine's help page over black, a knob scrolling it" play help 4 4
 run "a new song at the mended jukebox: a long slide, effects, their page, kept (and saved)" sh -c 'tests/run_arcave.sh newsong 4 2 > build/host/newsong.log 2>&1 && grep -q "settings 0 saved" build/host/newsong.log'
 run "the four rings, the dish, a song kept, the power back (and saved)" sh -c 'tests/run_arcave.sh mend 2 1 > build/host/mend.log 2>&1 && grep -q "settings 0 saved" build/host/mend.log'

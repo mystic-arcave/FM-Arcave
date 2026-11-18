@@ -115,11 +115,19 @@ static const cv_plat_t CV_PLAT[] = {
     {788, 866, 176, 0},                          /* high on the right wall */
     {98, 126, 178, 1},                           /* a cap up there, toward the chimes */
 };
+#define CV_JUKE_X 522                            /* the jukebox, on the ground past the Hat */
+#define CV_DIP_W 26                              /* the dip it stands in: half its width, and its depth */
+#define CV_DIP_D 6
 /* both ends of the floor curve up into ramps, with a booster on each: roll out over it and it throws you up the wall */
 static int32_t cave_floor_q8(int32_t x)          /* the ground's height under x (Q8) */
 {
     int32_t d = x < Q8(110) ? Q8(110) - x : x > Q8(CV_W - 110) ? x - Q8(CV_W - 110) : 0;
-    return Q8(CV_GROUND) - ((d * d) >> 8) / 80;
+    int32_t j = iabs(x - Q8(CV_JUKE_X)), y = Q8(CV_GROUND) - ((d * d) >> 8) / 80;
+    if (j < Q8(CV_DIP_W)) {                      /* a shallow dip in front of the jukebox: Rock settles in it */
+        int32_t u = 256 - ((j / CV_DIP_W) * (j / CV_DIP_W) >> 8);
+        y += (Q8(CV_DIP_D) * u >> 8) * u >> 8;
+    }
+    return y;
 }
 #define CV_NCHIME 5
 #define CHIME_X(i) (176 + (i) * 34)
@@ -131,18 +139,18 @@ static int32_t cave_floor_q8(int32_t x)          /* the ground's height under x 
 typedef struct { int16_t x, y; uint8_t s, c; } cv_shroom_t;
 static const cv_shroom_t CV_SHROOM[] = {
     {100, 400, 90, 3}, {118, 400, 50, 0}, {214, 400, 120, 1}, {262, 400, 60, 4}, {340, 400, 80, 2}, {430, 400, 150, 0},
-    {470, 400, 70, 3}, {700, 400, 100, 4}, {776, 400, 140, 1}, {662, 344, 70, 2}, {812, 344, 90, 0}, {392, 288, 80, 4},
+    {470, 400, 70, 3}, {558, 400, 90, 2}, {700, 400, 100, 4}, {776, 400, 140, 1}, {662, 344, 70, 2}, {812, 344, 90, 0}, {392, 288, 80, 4},
     {536, 288, 60, 1}, {634, 232, 70, 3}, {782, 232, 100, 2}, {122, 190, 50, 1}, {854, 176, 50, 4},
     {-30, 190, 70, 2}, {-56, 190, 40, 0},
 };
 #define CV_NSHROOM (sizeof CV_SHROOM / sizeof CV_SHROOM[0])
-#define CV_JUKE_X 300
 #define CV_HAT_X 392
 static const int16_t CV_MACH[3][2] = {{740, 344}, {466, 288}, {706, 232}};
 static const char *const MACH_NAME[3] = {"MYSTIC RUN", "JUICE WORKS", "NIGHT BLOOM"};
 
 enum { CVA_NONE, CVA_LAMP, CVA_M1, CVA_M2, CVA_M3, CVA_SCORES, CVA_EXIT, CVA_DISH };
-#define CV_BOARD_X 522                           /* the scores board, on the ground past the Hat */
+#define CV_BOARD_X 652                           /* the scores board, up on the third machine's ledge */
+#define CV_BOARD_Y 232
 static struct {
     int32_t x, y, vx, vy, th, coy, drag, acc, camx, camy, t, fade, roll_px, sq[5], psst, power_t, boost_t, chime_t[CV_NCHIME], ring_t;
     uint8_t secrets, chimes, friend_awake;       /* secrets: bit 0 the sleeper, 1 the chimes, 2 the ring */
@@ -219,6 +227,10 @@ static int cave_tick(int32_t dt)
         } else cv.vx += (knob * 160) >> 7;       /* a little steering in the air */
         cv.vx = iclamp(cv.vx, -Q8(190), Q8(190));
         cv.vy += GR >> 7;
+        {   /* the dip in front of the jukebox: it slows Rock and draws it to the middle, so only a firm roll goes by */
+            int32_t dx = (cv.x >> 8) - CV_JUKE_X;
+            if (iabs(dx) < CV_DIP_W && cv.y > Q8(CV_GROUND - 30)) cv.vx -= ((GR * dx / 20 * (CV_DIP_W - iabs(dx)) / CV_DIP_W) >> 7) + cv.vx / 40;
+        }
         if (cv.g) cv.coy = 13; else if (cv.coy > 0) cv.coy--;
         if (first && jump >= 0 && cv.coy > 0) {
             cv.vy = -Q8(JMIN) - (345 - JMIN) * jump; cv.g = 0; cv.coy = 0;
@@ -300,7 +312,7 @@ static int cave_tick(int32_t dt)
     cv.near = 0;
     if (iabs(hx - CV_HAT_X) < 40 && hy > CV_GROUND - 40) cv.near = 1;
     if (iabs(hx - CV_JUKE_X) < 30 && hy > CV_GROUND - 40) cv.near = 2;
-    if (iabs(hx - CV_BOARD_X) < 22 && hy > CV_GROUND - 40) cv.near = 6;
+    if (iabs(hx - CV_BOARD_X) < 22 && iabs(hy - (CV_BOARD_Y - 8)) < 22) cv.near = 6;
     if (hx < CV_DOOR_X + 26 && hy > 190 - 40 && hy < 190) cv.near = 7;
     for (i = 0; i < 3; i++) if (iabs(hx - CV_MACH[i][0]) < 26 && iabs(hy - (CV_MACH[i][1] - 8)) < 22) cv.near = (uint8_t)(3 + i);
     if (cv.near) led_play_breathe = 1;
@@ -475,13 +487,24 @@ static void cave_draw(void)
     }
     /* the jukebox */
     {
-        int32_t x = SX(CV_JUKE_X), y = SY(CV_GROUND);
+        int32_t x = SX(CV_JUKE_X), y = SY(CV_GROUND + CV_DIP_D), sc = ts(1, 2);
         lit = cave_light(CV_JUKE_X, CV_GROUND - 20);
         galpha(lit);
         grect(x - 17, y - 34, 34, 34, th->panel); gellf(x, y - 34, 17, 16, th->panel, 1);
         gline(x - 17, y, x - 17, y - 34, th->rim); gline(x + 17, y, x + 17, y - 34, th->rim); ghl(x - 17, x + 18, y - 1, th->rim);
         garc(x, y - 34, 17, 16, 32768, 65536, th->rim, 0);
         gbox(x - 11, y - 30, 22, 12, th->rim);                       /* the window where the records are */
+        galpha(imax(150, lit));                                      /* its name over it and an arrow down, in any light */
+        if (x > -20 && x < 260) {
+            gfit(x, y - 66 - 5 * sc, 232, "JUKEBOX", on ? th->caps[(tm / 500u) % 5u] : th->pad, sc);
+            if (cv.near != 2) gtext(x - 3 * sc + sc / 2, y - 62 + (iabs(tsin(tm, 50, 0)) * 3 >> 14), "\xE2\x86\x93", th->pad, sc);
+        } else if (!on && cv.met && y > 150 && y < 300) {             /* not mended yet and off the screen: which way it is */
+            int32_t w = gtextw("JUKEBOX", sc) + 8 * sc, bob = tsin(tm, 60, 0) >> 13;
+            galpha(150 + ipulse(tm, 1300) * 106 / 256);
+            if (x < 0) { gtext(4 + bob, y - 66 - 5 * sc, "\xE2\x86\x90", th->pad, sc); gtext(4 + 8 * sc, y - 66 - 5 * sc, "JUKEBOX", th->pad, sc); }
+            else { gtext(236 - w, y - 66 - 5 * sc, "JUKEBOX", th->pad, sc); gtext(236 - 6 * sc + bob, y - 66 - 5 * sc, "\xE2\x86\x92", th->pad, sc); }
+        }
+        galpha(lit);
         for (k = 0; k < 4; k++) ghl(x - 10, x + 11, y - 13 + k * 3, th->rim);   /* the grille */
         galpha(256);
         if (on) {
@@ -491,14 +514,14 @@ static void cave_draw(void)
             for (k = 0; k < 3; k++) {            /* notes float off it */
                 int32_t q = (int32_t)((tm / 3u + (uint32_t)k * 333u) % 1000u);
                 galpha(256 - q * 256 / 1000);
-                gtext(x - 12 + k * 10 + (tsin(tm, 20, k * 20000) >> 12), y - 50 - q * 30 / 1000, "\xE2\x99\xAA", th->caps[(k * 2) % 5], 1);
+                gtext(x + (k - 1) * 26 - 3 + (tsin(tm, 20, k * 20000) >> 12), y - 30 - q * 30 / 1000, "\xE2\x99\xAA", th->caps[(k * 2) % 5], 1);
             }
             galpha(256);
         } else if (cv.power_t == 0 && (tm % 3100u) < 90u) { galpha(200); gline(x - 3, y - 26, x + 2, y - 22, th->pad); gline(x + 2, y - 22, x - 1, y - 20, th->pad); galpha(256); }   /* a spark */
     }
     {   /* the scores board: a little sign with a cup on it, readable in any light */
-        int32_t x = SX(CV_BOARD_X), y = SY(CV_GROUND);
-        galpha(imax(110, cave_light(CV_BOARD_X, CV_GROUND - 20)));
+        int32_t x = SX(CV_BOARD_X), y = SY(CV_BOARD_Y);
+        galpha(imax(110, cave_light(CV_BOARD_X, CV_BOARD_Y - 20)));
         gline(x, y, x, y - 14, th->stem);
         grect(x - 13, y - 34, 26, 20, th->panel); gbox(x - 13, y - 34, 26, 20, th->pad);
         grect(x - 4, y - 30, 8, 6, th->caps[3]); grect(x - 1, y - 24, 2, 3, th->caps[3]); grect(x - 4, y - 21, 8, 2, th->caps[3]);   /* the cup */

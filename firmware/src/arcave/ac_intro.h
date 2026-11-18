@@ -682,49 +682,64 @@ static void intro_draw(void)
         }
     if ((G.phase == IP_PLAY || G.phase == IP_OUT) && !G.race && G.race_show <= 0 && z == 256 && x0 < CTRL_X + 118 && x1 > CTRL_X - 118) {
         /* "for controls press the HOME button", HOME drawn as the button is; it stands in the land, so rolling on leaves it behind */
-        const char *s = TR(T_CTRL_TIP), *p;
-        char l1[40], pre[24], post[24];
-        int32_t n = 0, a = ts(1, 2), w1, wp, wh, wq, w2, w, h, bx, by, lx;
-        for (p = s; *p && *p != '|' && n < 38; ) l1[n++] = *p++;
-        l1[n] = 0; if (*p == '|') p++;
-        for (n = 0; *p && *p != '@' && n < 22; ) pre[n++] = *p++;
-        pre[n] = 0; if (*p == '@') p++;
-        for (n = 0; *p && n < 22; ) post[n++] = *p++;
-        post[n] = 0;
-        for (;; a--) {
-            w1 = gtextw(l1, a); wp = gtextw(pre, a); wh = gtextw("HOME", a) + 6 * a; wq = gtextw(post, a);
-            w2 = wp + wh + wq + (wp ? a : 0) + (wq ? a : 0);
-            w = imax(w1, w2) + 12;
-            if (w <= 232 || a == 1) break;
+        /* its words wrap at the size the settings ask for, in every language: only a word too wide for the screen
+           makes the whole box smaller */
+        const char *s = TR(T_CTRL_TIP);
+        char wd[10][20];
+        int32_t ww[10], ln[10], lw[6], nw = 0, nl = 0, n = 0, a = ts(1, 2), w = 0, h, bx, by, k, sp, bw, lx = 0;
+        for (; ; s++) {
+            if (*s == ' ' || *s == '|' || !*s) { if (n) { wd[nw][n] = 0; nw++; n = 0; } if (!*s || nw == 10) break; }
+            else if (n < 18) wd[nw][n++] = *s;
         }
-        h = 2 * TLH(a) + 4 * a + 6;
+        for (;; a--) {
+            sp = gtextw(" ", a); bw = gtextw("HOME", a) + 6 * a; nl = 0; w = 0;
+            for (k = 0; k < nw; k++) {
+                const char *q = wd[k]; char *at = 0; int32_t j;
+                for (j = 0; q[j]; j++) if (q[j] == '@') at = &wd[k][j];
+                if (at) { *at = 0; ww[k] = gtextw(wd[k], a) + bw + gtextw(at + 1, a) + (at[1] ? a : 0) + (wd[k][0] ? a : 0); *at = '@'; }
+                else ww[k] = gtextw(q, a);
+                if (k == 0 || lw[nl - 1] + sp + ww[k] > 216) { if (nl == 6) break; lw[nl++] = ww[k]; } else lw[nl - 1] += sp + ww[k];
+                ln[k] = nl - 1;
+                w = imax(w, lw[nl - 1]);
+            }
+            if ((w <= 216 && k == nw) || a == 1) break;
+        }
+        w += 12; h = nl * (TLH(a) + 2 * a) + 6;
         bx = WX(Q8(CTRL_X)) - w / 2; by = WY(land_y(Q8(CTRL_X))) - 58 - h;
         grect(bx, by, w, h, th->panel); gbox(bx, by, w, h, th->rim);
-        gtext(bx + (w - w1) / 2, by + 4 + 2 * a, l1, th->text, a);
-        lx = bx + (w - w2) / 2; 
-        gtext(lx, by + 4 + TLH(a) + 4 * a, pre, th->text, a); lx += wp + (wp ? a : 0);
-        grect(lx, by + 4 + TLH(a) + 2 * a, wh, 9 * a, th->bg); gbox(lx, by + 4 + TLH(a) + 2 * a, wh, 9 * a, th->pad);   /* the button */
-        gtext(lx + 3 * a, by + 4 + TLH(a) + 4 * a, "HOME", th->pad, a); lx += wh + (wq ? a : 0);
-        gtext(lx, by + 4 + TLH(a) + 4 * a, post, th->text, a);
-    }
-    for (i = 0; i < I_NPAD; i++) {               /* launch pads, and a key tapping above the next one */
-        const co_pad_t *p = &I_PAD[i];
-        int32_t d, ppx = 0, ppy = 0, dir = I_DIR;
-        if (p->x < x0 || p->x > x1) continue;
-        galpha(G.pad_used[i] ? 77 : 256);
-        for (d = -16; d <= 8; d += 4) {
-            int32_t X = WX((p->x + dir * d) << 8), Yv = WY(land_y((p->x + dir * d) << 8)) - 1;
-            if (d > -16) gline2(ppx, ppy, X, Yv, th->pad);
-            ppx = X; ppy = Yv;
+        for (k = 0, n = -1; k < nw; k++) {
+            int32_t ty = by + 4 + 2 * a + ln[k] * (TLH(a) + 2 * a), j;
+            char *at = 0;
+            if (ln[k] != n) { n = ln[k]; lx = bx + (w - lw[n]) / 2; }
+            for (j = 0; wd[k][j]; j++) if (wd[k][j] == '@') at = &wd[k][j];
+            if (!at) gtext(lx, ty, wd[k], th->text, a);
+            else {                               /* HOME, drawn as the button is */
+                int32_t x = lx;
+                *at = 0;
+                if (wd[k][0]) { gtext(x, ty, wd[k], th->text, a); x += gtextw(wd[k], a) + a; }
+                grect(x, ty - 2 * a, bw, 9 * a, th->bg); gbox(x, ty - 2 * a, bw, 9 * a, th->pad);
+                gtext(x + 3 * a, ty, "HOME", th->pad, a); x += bw + a;
+                gtext(x, ty, at + 1, th->text, a);
+                *at = '@';
+            }
+            lx += ww[k] + sp;
         }
-        if (!G.pad_used[i] && G.phase == IP_PLAY && dir * (p->x - (r->x >> 8)) > -40) {
-            int next = G.near > 0 && dir * (p->x - (r->x >> 8)) < 200, on = next && G.on_pad;
-            int32_t bob = on ? (tsin(tm, 300, 0) > 0 ? 3 : 0) : next ? iabs(tsin(tm, 60, 0)) * 5 >> 14 : 0;
-            int32_t kx = WX((p->x - dir * 4) << 8), ky = WY(land_y((p->x - dir * 4) << 8)) - 16 + bob;
-            galpha(next ? 256 : 115);
-            if (on) { grect(kx - 2, ky - 8, 5, 12, th->pad); grect(kx - 3, ky - 6, 7, 8, th->pad); grect(kx, ky - 6, 1, 4, th->ground); }
-            else { ghl(kx - 2, kx + 3, ky - 9, th->pad); ghl(kx - 2, kx + 3, ky + 3, th->pad); grect(kx - 4, ky - 7, 1, 9, th->pad); grect(kx + 4, ky - 7, 1, 9, th->pad);
-                   gp(kx - 3, ky - 8, th->pad); gp(kx + 3, ky - 8, th->pad); gp(kx - 3, ky + 2, th->pad); gp(kx + 3, ky + 2, th->pad); grect(kx, ky - 6, 1, 4, th->pad); }
+    }
+    for (i = 0; i < I_NPAD; i++) {               /* launch pads: five white piano keys set into the slope. Nothing floats
+                                                    over them (a floating key read as something to collect); the key under
+                                                    Rock goes down, and the next pad's keys go down one after another */
+        const co_pad_t *p = &I_PAD[i];
+        int32_t d, dir = I_DIR, rx = r->x >> 8;
+        int next;
+        if (p->x < x0 || p->x > x1) continue;
+        next = !G.pad_used[i] && G.phase == IP_PLAY && G.near > 0 && dir * (p->x - rx) > -40 && dir * (p->x - rx) < 200;
+        galpha(G.pad_used[i] ? 77 : 256);
+        for (d = -17; d <= 7; d++) {
+            int32_t key = (d + 17) / 5, wx = p->x + dir * d, sink = 0;
+            if ((d + 17) % 5 == 4) continue;     /* the gap between two keys */
+            if (r->g && iabs(rx - (p->x + dir * (key * 5 - 15))) < 5) sink = 2;
+            else if (next && (int32_t)(tm / 110u) % 8 == key) sink = 1;
+            grect(WX(wx << 8), WY(land_y(wx << 8)) - ZS(2) + ZS(sink), imax(1, ZS(1)), imax(2, ZS(7)), th->pad);
         }
         galpha(256);
     }
@@ -792,8 +807,15 @@ static void intro_draw(void)
         int32_t pulse = 97 + 159 * ipulse(tm, 2600) / 256;
         if (G.phase == IP_WIDE && G.t > 1000) {
             int32_t a = imin(256, (G.t - 1000) * 256 / 800) * pulse / 256;
-            if (ts(1, 2) == 1) { T8(TR(T_WAKE1), 156, 34, th->text, a); T8(TR(T_WAKE2), 156, 46, th->text, a); }
-            else { int32_t h = TB(TR(T_WAKE1), 3, 8, th->text, a); TB(TR(T_WAKE2), 3, 8 + h, th->text, a); }
+            /* the first time the PLAY button is shown: nice and large, the words making room for it */
+            {
+                const char *q = TR(T_WAKE1);
+                int in1 = 0;                     /* (which line the button is in: the second, in Turkish) */
+                for (; *q; q++) if ((uint8_t)*q == 0xEEu) in1 = 1;
+                if (ts(1, 2) == 1) { play_big = 1; T8(TR(T_WAKE1), 156, 32, th->text, a); T8(TR(T_WAKE2), 156, 50, th->text, a); }
+                else { int32_t h; play_big = 2; h = TB(TR(T_WAKE1), 2, in1 ? 16 : 8, th->text, a); TB(TR(T_WAKE2), 2, (in1 ? 26 : 18) + h, th->text, a); }
+                play_big = 0;
+            }
         }
         if (G.phase == IP_PLAY && G.race == 1 && G.cave_a <= 0)
             TB(TR(T_RACE_GO), 3, 20, th->text, pulse);
@@ -816,7 +838,6 @@ static void intro_draw(void)
             galpha(256);
         }
         if (G.phase == IP_PLAY) {
-            if (G.hint > 0) { int32_t h = TB(TR(T_ROLL), 2, 150, th->text, G.hint * pulse / 256); TB(TR(T_JUMP), 2, 152 + h, th->text, G.hint * pulse / 256); }
             if (G.cave_a > 0) {
                 int32_t h = TB(TR(T_ENTER), 3, 24, th->text, G.cave_a * pulse / 256);
                 if (G.cave_t > 600) TB(TR(T_PRESSPLAY), 3, 26 + h, th->text, G.cave_a * pulse / 256);

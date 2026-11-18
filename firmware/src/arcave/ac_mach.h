@@ -450,13 +450,16 @@ static void bloom_spawn(uint32_t now, uint32_t seed)
             return;
         }
 }
-/* a spore's place: it reaches its own ring two beats after it is born, the centre a beat and a half later */
+/* a spore's place: it drifts in slowly, reaching its own ring three beats after it is born (on the beat), the centre
+ * two beats later */
+#define NB_IN 288
+#define NB_OUT 192
 static void bloom_pos(uint32_t i, uint32_t now, int32_t *rad, int32_t *ang)
 {
     int32_t age = (int32_t)(now - nb.sp[i].born), ring = NB_R[nb.sp[i].c];
     /* slow at first, then faster: the way in goes with the square of the time, and still meets its ring on the beat */
-    *rad = age <= 192 ? 122 - (122 - ring) * age / 192 * age / 192 : ring - (ring - 6) * (age - 192) / 144;
-    *ang = nb.sp[i].a + nb.sp[i].curl * age / 192;
+    *rad = age <= NB_IN ? 122 - (122 - ring) * age / NB_IN * age / NB_IN : ring - (ring - 6) * (age - NB_IN) / NB_OUT;
+    *ang = nb.sp[i].a + nb.sp[i].curl * age / NB_IN;
 }
 static void bloom_tick(int32_t dt)
 {
@@ -488,9 +491,9 @@ static void bloom_tick(int32_t dt)
         int32_t age;
         if (!nb.sp[i].on) continue;
         age = (int32_t)(now - nb.sp[i].born);
-        if (!nb.sp[i].past && age >= 192) {      /* it is at its ring: is the petal there? */
+        if (!nb.sp[i].past && age >= NB_IN) {      /* it is at its ring: is the petal there? */
             int32_t rad, ang, d;
-            bloom_pos(i, nb.sp[i].born + 192u, &rad, &ang);
+            bloom_pos(i, nb.sp[i].born + (uint32_t)NB_IN, &rad, &ang);
             d = (int32_t)(int16_t)(uint16_t)(ang - nb.ang[nb.sp[i].c]);
 #ifdef AC_TEST_CATCH                             /* (tests) every spore is caught: the rings arriving one by one */
             d = 0; nb.ang[nb.sp[i].c] = ang;
@@ -510,7 +513,7 @@ static void bloom_tick(int32_t dt)
                 }
             } else { nb.sp[i].past = 1; mc.combo = 0; }
         }
-        if (nb.sp[i].past && age >= 336) {       /* it reached the flower: a petal falls */
+        if (nb.sp[i].past && age >= NB_IN + NB_OUT) {       /* it reached the flower: a petal falls */
             nb.sp[i].on = 0; mc.lives--; mc.flash = 300; mach_msg(T_MISS);
             sfx_ex(43, 0, 400, W_SAW, 3200, 2, 120, 0, 0, 65200);
             if (mc.lives <= 0) { mach_over(); return; }

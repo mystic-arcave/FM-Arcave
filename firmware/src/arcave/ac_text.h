@@ -321,7 +321,7 @@ static const char *const TX[T_N][L_N] = {
         "MYSTIC ARCAVE'E GEÇ"},
     /* the box by the start of the course: '|' ends its first line, '@' is the HOME button drawn as a button */
     [T_CTRL_TIP] = {"FOR CONTROLS PRESS|THE @ BUTTON.", "FÜR DIE STEUERUNG|DIE @-TASTE DRÜCKEN.", "FOR STYRING, TRYK|PÅ @-KNAPPEN.",
-                    "POUR LES COMMANDES|APPUIE SUR @.", "PARA LOS CONTROLES|PULSA EL BOTÓN @.",
+                    "POUR LES COMMANDES|APPUIE SUR @.", "PARA LOS CONTROLES|PULSA @.",
         "KONTROLLER İÇİN|@ DÜĞMESİNE BAS."},
     [T_HELP_ROLL] = {"ROLL = ALL KNOBS EXCEPT MASTER", "ROLLEN = ALLE KNÖPFE AUSSER MASTER", "RUL = ALLE KNAPPER UNDTAGEN MASTER", "ROULER = TOUS LES BOUTONS SAUF MASTER", "RODAR = TODOS LOS MANDOS MENOS MASTER",
         "YUVARLAN = MASTER HARİÇ TÜM DÜĞMELER"},

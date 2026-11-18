@@ -17,7 +17,7 @@ mkdir -p web/site/img
 "${PYTHON:-python3}" - <<'PY'
 from PIL import Image
 S = {"title": "lang-4600", "wake": "intro-9200", "course": "intro-24000", "pad": "intro-19000", "psst": "story-3600", "hat": "story-7600",
-     "cave": "lit-4300", "jukebox": "lit-7600", "rings": "mend-1500", "dish": "mend-12100", "run": "run-6000",
+     "cave": "lit-4300", "jukebox": "lit-6000", "rings": "mend-1500", "dish": "mend-12100", "run": "run-6000",
      "table": "table-7800", "bloom": "bloom-2500", "screen": "intro-1500"}
 for name, src in S.items():
     Image.open(f"build/host/{src}.ppm").convert("RGB").save(f"web/site/img/{name}.png", optimize=True)

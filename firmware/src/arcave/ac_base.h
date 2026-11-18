@@ -241,7 +241,12 @@ static uint32_t fnt_glyph(uint32_t cp)
 #define PB "\xEE\x80\x80"
 #define PLAY_GREEN HEXC(0x35d05c)
 static int32_t gtextw(const char *s, int32_t sc);
-static int32_t play_w(int32_t sc) { return sc == 1 ? 11 : gtextw("PLAY", sc / 2) + 4 * (sc / 2); }
+/* the button's size: its own letters at half the text's size, rounded up from 3 on (so it stands taller than the line),
+ * and at size 2 the same letters in a roomier key */
+static int32_t play_big;                         /* > 0: the button at this size whatever the text's (the first time it is shown) */
+static int32_t play_u(int32_t sc) { return play_big ? play_big : sc >= 3 ? (sc + 1) / 2 : 1; }
+static int32_t play_m(int32_t sc) { return !play_big && sc == 2 ? 2 : play_u(sc); }   /* its margin, and the gaps round its line */
+static int32_t play_w(int32_t sc) { return sc == 1 && !play_big ? 11 : gtextw("PLAY", play_u(sc)) + 2 * play_m(sc) + 2 * play_u(sc); }
 static int32_t glyph_adv(uint32_t cp, int32_t sc) { return cp == CP_PLAY ? play_w(sc) + sc : (FNT_W[fnt_glyph(cp)] + 1) * sc; }
 static int32_t gtextw(const char *s, int32_t sc)
 {
@@ -252,13 +257,13 @@ static int32_t gtextw(const char *s, int32_t sc)
 static int32_t gtext(int32_t x, int32_t y, const char *s, col_t c, int32_t sc);
 static void play_draw(int32_t x, int32_t y, int32_t sc)   /* y: the capitals' top of the line it stands in */
 {
-    int32_t u = sc / 2, w = play_w(sc), h, top;
-    if (sc == 1) { grect(x, y - 1, w, 7, PLAY_GREEN); grect(x + 2, y + 2, w - 4, 1, 0); return; }
-    h = 15 * u; top = y + (5 * sc - h) / 2;
+    int32_t u = play_u(sc), m = play_m(sc), w = play_w(sc), h, top;
+    if (sc == 1 && !play_big) { grect(x, y - 1, w, 7, PLAY_GREEN); grect(x + 2, y + 2, w - 4, 1, 0); return; }
+    h = 11 * u + 4 * m; top = y + (5 * sc - h) / 2;
     grect(x + u, top, w - 2 * u, h, PLAY_GREEN); grect(x, top + u, w, h - 2 * u, PLAY_GREEN);   /* (its corners off) */
-    gtext(x + 2 * u, top + u, "PLAY", 0, u);
-    grect(x + 2 * u, top + 7 * u, w - 4 * u, u, 0);
-    gtext(x + 2 * u, top + 9 * u, "STOP", 0, u);
+    gtext(x + m + u, top + m, "PLAY", 0, u);
+    grect(x + m + u, top + 5 * u + 2 * m, w - 2 * m - 2 * u, u, 0);
+    gtext(x + m + u, top + 6 * u + 3 * m, "STOP", 0, u);
 }
 /* text with its capitals' top at y (accents reach 2 * sc above); returns the x after it */
 static int32_t gtext(int32_t x, int32_t y, const char *s, col_t c, int32_t sc)

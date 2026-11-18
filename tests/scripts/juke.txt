@@ -1,0 +1,16 @@
+# the jukebox past the Hat, in its dip under its name: its name and an arrow at the screen's edge until it is in sight,
+# Rock rolls up and settles in the dip, PLAY: the rings
+600 btn 12
+3000 shot
+2600 enc 2 8
+2850 enc 2 8
+3100 enc 2 8
+3350 enc 2 8
+3600 enc 2 8
+3850 enc 2 8
+4100 enc 2 8
+4350 enc 2 8
+6200 shot
+6300 btn 12
+7200 shot
+7400 end
