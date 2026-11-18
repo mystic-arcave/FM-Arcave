@@ -16,7 +16,7 @@ play() { tests/run_arcave.sh "$@" > "$OUT/$1.log" 2>&1 && grep -q '^sound' "$OUT
 
 run "the intro: title, wake, roll, pads, the last stretch" play intro
 run "the title in each language" play lang
-run "the controls box by the start, HOME: the controls sheet" play controls
+run "the controls box by the start, HOME: the controls shown, a full loop (roll, hop, big hop, the jump onto the bounce mushroom, the other grip)" play controls
 run "the PLAY button drawn as the green button in the wake line" play playbtn
 run "Turkish: the title, the tip fading as the wake text comes in, the controls sheet" play turkish
 run "the hollow behind the start: hidden by a rock face until Rock is on the ledge and rolls in" play hollow 0 8

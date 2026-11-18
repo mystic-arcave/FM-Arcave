@@ -1,25 +1,35 @@
-# the controls box by the start, HOME: the controls sheet, HOME again, then rolling past the box
+# the controls box by the start; HOME: the controls shown (roll, hop, big hop; the jump over the white keys onto the
+# bounce mushroom; the other grip), a full loop of it; HOME again, then rolling past the box
 600 btn 12
 2600 btn 12
 6800 shot
 7000 btn 8
-7600 shot
-8600 btn 8
-9000 shot
-9200 enc 2 8
-9450 enc 2 8
-9700 enc 2 8
-9950 enc 2 8
-10200 enc 2 8
-10450 enc 2 8
-10700 enc 2 8
-10950 enc 2 8
-11000 shot
-11200 enc 2 8
-11450 enc 2 8
-11700 enc 2 8
-11950 enc 2 8
-12200 enc 2 8
-12450 enc 2 8
-13500 shot
-14000 end
+8200 shot
+9750 shot
+10300 shot
+11550 shot
+11800 shot
+12100 shot
+14300 shot
+14950 shot
+15300 shot
+15900 shot
+16400 shot
+17000 shot
+18700 shot
+19950 shot
+20350 shot
+21100 shot
+22500 shot
+23000 btn 8
+23400 shot
+23600 enc 2 8
+23850 enc 2 8
+24100 enc 2 8
+24350 enc 2 8
+24600 enc 2 8
+24850 enc 2 8
+25100 enc 2 8
+25350 enc 2 8
+25900 shot
+26400 end
