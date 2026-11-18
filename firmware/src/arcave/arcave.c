@@ -126,11 +126,16 @@ static void arcave_init(void)
     if (AC_TEST_SCENE == 1) { scene = SC_LAMP; lamp_reset(); }
     else if (AC_TEST_SCENE == 2) { scene = SC_DISH; dish_reset(story >= 4u); }
     else if (AC_TEST_SCENE == 6) intro_race_start();                 /* (6: out of the upper door, the race back) */
+    else if (AC_TEST_SCENE == 8) {               /* (8: on the course, up on the ledge behind the start) */
+        G.phase = IP_PLAY; G.t = 0; G.eyes = 256; G.turned = 1;
+        G.r.x = Q8(CO_WALLX - 4); G.r.y = Q8(CO_LEDGE) - rock_rad(0); G.cam_y = G.r.y - Q8(130);
+    }
     else if (AC_TEST_SCENE == 7) { scene = SC_CAVE; cave_enter(1); cv.x = Q8(-20); cv.y = Q8(181); }   /* (7: in the room by the door) */
     else { scene = SC_MACH; mach_enter(AC_TEST_SCENE - 3); mus_set(MUS_JUKE, 2); }
 #endif
 }
 
+static int lang_tip_up(void) { return scene == SC_INTRO && G.phase == IP_WIDE && G.t < 1800; }
 static void juke_change(int32_t d)
 {
     if (story < 4) {
@@ -163,7 +168,7 @@ static void arcave_frame(void)
     if ((BDOWN(BTN_OCT_DOWN) || BDOWN(BTN_OCT_UP)) && !mn.on) {   /* (in the settings OCT+ confirms and OCT- steps back) */
         set_lang(lang + (BDOWN(BTN_OCT_UP) ? 1 : L_N - 1));
         lang_touched = 1;
-        if (tip_t > 0) tip_t = imax(tip_t, 2600);                    /* the tip is up: it shows the new language a while longer */
+        if (lang_tip_up()) ;                     /* the tip is up: it shows the new language itself */
         else if (!(scene == SC_INTRO && G.phase == IP_TITLE) && !mn.on && !dlg.on) banner_show(TR(T_LANGUAGE), TR(T_LANG), 0);   /* (the Hat's box says it in the new language itself) */
         snd_ui(72 + lang * 2); save_soon();
     }
@@ -263,8 +268,9 @@ static void arcave_frame(void)
     case SC_DISH: dish_draw(); break;
     case SC_MACH: mach_draw(); break;
     }
-    if (scene == SC_INTRO && G.phase == IP_TITLE) { tip_t = 3600; lang_tip_draw(smooth8(3200, 3900, G.t)); }
-    else if (tip_t > 0) { tip_t -= dt; if (!mn.on) lang_tip_draw(imin(256, tip_t * 256 / 600)); }   /* three seconds more, then it fades */
+    /* the language tip: in with the title's last second, and out exactly as "press PLAY to wake up Rock" comes in */
+    if (scene == SC_INTRO && G.phase == IP_TITLE) lang_tip_draw(smooth8(3200, 3900, G.t));
+    else if (lang_tip_up() && !mn.on) lang_tip_draw(256 - iclamp((G.t - 1000) * 256 / 800, 0, 256));
     fx_apply(dt);
     if (sh.on && !mn.on) sheet_draw();
     if (mn.on) menu_draw();

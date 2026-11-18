@@ -4,6 +4,26 @@
  * the land comes from a table (tools/gen_course.py), the physics steps 128 times a second. */
 #include "arcave_course.h"
 
+/* two courses: the opening roll is the short one; out of the Arcave's upper door it is the long one (twice the
+ * length, the first build's), raced back. Everything below reads the one in use through these names */
+static const course_t *co = &CO_SHORT;
+#define CO_L (co->l)
+#define CO_XE (co->xe)
+#define CO_XSTOP (co->xstop)
+#define CO_HN (co->hn)
+#define CO_HT (co->ht)
+#define CO_YEND_Q4 (co->yend_q4)
+#define CO_SHROOM (co->shroom)
+#define CO_NSHROOM (co->nshroom)
+#define CO_PAD (co->pad)
+#define CO_NPAD (co->npad)
+#define CO_SKY (co->sky)
+#define CO_NSKY (co->nsky)
+#define CO_PROP (co->prop)
+#define CO_NPROP (co->nprop)
+#define CO_POOL (co->pool)
+#define CO_NPOOL (co->npool)
+
 enum { IP_TITLE, IP_WIDE, IP_WAKE, IP_PLAY, IP_OUT, IP_DONE };
 
 typedef struct {
@@ -23,8 +43,9 @@ static struct {
     struct { int32_t x, y, t; uint8_t c, big, label, on; } burst;
     struct { int32_t x, y, t; } trail[20];
     uint32_t ntrail;
-    uint8_t pad_used[CO_NPAD > CO_NRPAD ? CO_NPAD : CO_NRPAD], sky_used[CO_NSKY > CO_NRSKY ? CO_NSKY : CO_NRSKY];
-    int16_t sky_sq[CO_NSKY > CO_NRSKY ? CO_NSKY : CO_NRSKY];
+    uint8_t pad_used[CO_MAXPAD], sky_used[CO_MAXSKY];
+    int16_t sky_sq[CO_MAXSKY];
+    int32_t veil;                                /* the rock face that hides the hollow behind the start: 256 solid .. 0 gone */
     uint8_t race;                                /* the race back: 0 not, 1 out of the door (before the line), 2 on the clock */
     int32_t race_ms, race_show, step_cd;
 } G;
@@ -144,6 +165,7 @@ static void intro_reset(void)
 {
     uint32_t i;
     for (i = 0; i < sizeof G; i++) ((uint8_t *)&G)[i] = 0;
+    co = &CO_SHORT; G.veil = 256;
     G.r.x = Q8(60); G.r.y = land_y(Q8(60)) - rock_rad(0); G.r.g = 1;
     G.phase = IP_TITLE; G.c_off = Q8(84);
     in_time = 0;
@@ -160,6 +182,7 @@ static void intro_race_start(void)               /* out of the Arcave's upper do
 {
     uint32_t i;
     for (i = 0; i < sizeof G; i++) ((uint8_t *)&G)[i] = 0;
+    co = &CO_LONG; G.veil = 256;
     G.phase = IP_PLAY; G.eyes = 256; G.turned = 1; G.race = 1; G.fade = 256; G.c_off = Q8(156);
     G.r.x = Q8(RACE_X0); G.r.y = land_y(G.r.x) - rock_rad(0); G.r.g = 1; G.cam_y = G.r.y - Q8(130);
     G.camz = 256; G.camx = iclamp(G.r.x - G.c_off, Q8(CO_CAMMIN), CAMMAX); G.camy = G.cam_y;
@@ -305,6 +328,8 @@ static int intro_tick(int32_t dt)
             }
         }
         if (G.race_show > 0) G.race_show -= dt;
+        /* the hollow behind the start is hidden by a rock face until Rock is up on the ledge and rolls into it */
+        G.veil = iclamp(G.veil + (r->x < Q8(CO_WALLX - 16) ? -dt : dt) * 256 / 450, 0, 256);
         if (!G.found && r->x < Q8(CO_CARDX + 110)) { G.found = 1; snd_jingle(); }
         if (G.rocket > 0) {
             G.rocket -= dt;
@@ -628,6 +653,17 @@ static void intro_draw(void)
             int32_t a = -(int32_t)(tm * 25u) + k * 13107;
             garc(lx, ly, ZS(CO_LOOPR + 4), ZS(CO_LOOPR + 4), a, a + 7300, th->caps[k], 1);
         }
+    }
+    if (G.veil > 0 && x0 < CO_WALLX) {            /* a rock face over the hollow: the ledge looks like a shelf in a cliff */
+        static const int16_t VF[6][2] = {{-20, 3}, {-26, -38}, {-21, -86}, {-33, -150}, {-27, -236}, {-44, -420}};
+        int32_t xy[18];
+        for (i = 0; i < 6; i++) { xy[2 * i] = WX(Q8(CO_WALLX + VF[i][0])); xy[2 * i + 1] = WY(Q8(CO_LEDGE + VF[i][1])); }
+        xy[12] = WX(Q8(CO_WALLX - 1100)); xy[13] = WY(Q8(CO_LEDGE - 420));
+        xy[14] = WX(Q8(CO_WALLX - 1100)); xy[15] = WY(Q8(CO_LEDGE + 500));
+        xy[16] = xy[0]; xy[17] = WY(Q8(CO_LEDGE + 500));
+        galpha(G.veil);
+        gpoly(xy, 9, th->mount); gpolyline(xy, 6, 0, th->rim);
+        galpha(256);
     }
     if (z == 256 && (G.race || G.race_show > 0)) {   /* the two lines of the race back */
         if (x0 < RACE_START + 40 && x1 > RACE_START - 40) race_post(WX(Q8(RACE_START)), WY(land_y(Q8(RACE_START))), TR(T_RACE_START), th->pad);

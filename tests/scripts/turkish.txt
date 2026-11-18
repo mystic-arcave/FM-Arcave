@@ -1,0 +1,34 @@
+# Turkish: OCT+ five times on the title, the tip fading out as "press PLAY to wake up Rock" fades in, the controls sheet,
+# the ledge behind the start (a shelf in a rock face), up onto it and in: the face fades and the hollow shows
+3000 btn 1
+3200 btn 1
+3400 btn 1
+3600 btn 1
+3800 btn 1
+4600 shot
+7400 shot
+7800 shot
+8000 shot
+8200 shot
+8600 shot
+9000 btn 12
+13200 btn 8
+13800 shot
+14200 btn 8
+14600 enc 2 -6
+15000 shot
+15400 enc 2 -8
+15800 keys 2
+15900 keys 0
+16000 enc 2 -8
+16300 shot
+16600 enc 2 -8
+16900 enc 2 -8
+17200 shot
+17500 enc 2 -8
+17800 enc 2 -8
+18100 shot
+18400 enc 2 -8
+18700 enc 2 -8
+19000 shot
+19200 end

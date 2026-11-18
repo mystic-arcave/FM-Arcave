@@ -3,7 +3,7 @@
 """FM ARCAVE's tables: firmware/gen/arcave_tab.h (a sine, the notes' phase steps, the pixel font).
 
 The font is the game's own: capitals five pixels tall in the manner of the title's lettering, with the
-accented letters German, Danish, French and Spanish need (two rows above the capitals, one below).
+accented letters German, Danish, French, Spanish and Turkish need (two rows above the capitals, one below).
 
     python3 tools/gen_tables.py
 """
@@ -95,6 +95,7 @@ g("○", ".###.", "#...#", "#...#", "#...#", ".###.")          # ○
 ACC = {
     "acute": ("...#.", "..#.."), "grave": (".#...", "..#.."), "circ": ("..#..", ".#.#."),
     "uml": (".....", ".#.#."), "tilde": (".##.#", "#.##."), "ring": ("..#..", "..#.."),
+    "breve": (".#.#.", "..#.."), "dot": (".....", "..#.."),
 }
 COMPOSED = {
     "Ä": ("A", "uml"), "Ö": ("O", "uml"), "Ü": ("U", "uml"), "Å": ("A", "ring"),
@@ -104,6 +105,7 @@ COMPOSED = {
     "Ô": ("O", "circ"), "Ó": ("O", "acute"),
     "Ù": ("U", "grave"), "Û": ("U", "circ"), "Ú": ("U", "acute"),
     "Ñ": ("N", "tilde"), "Ç": ("C", None),
+    "Ğ": ("G", "breve"), "İ": ("I", "dot"), "Ş": ("S", None),   # Turkish (its I without a dot is the plain I)
 }
 
 glyphs = {}   # cp -> (w, [8 rows])
