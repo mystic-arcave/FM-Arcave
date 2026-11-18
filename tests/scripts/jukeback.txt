@@ -1,0 +1,11 @@
+# the mended jukebox: Rock in front of it (its name, no offer yet), away (no name), back (the offer to re-record)
+1000 shot
+1200 enc 2 6
+1500 enc 2 6
+2600 shot
+3000 enc 2 -6
+3300 enc 2 -6
+3600 enc 2 -4
+5200 shot
+7000 shot
+7200 end

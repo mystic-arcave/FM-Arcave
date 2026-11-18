@@ -149,12 +149,14 @@ static const int16_t CV_MACH[3][2] = {{740, 344}, {466, 288}, {706, 232}};
 static const char *const MACH_NAME[3] = {"MYSTIC RUN", "JUICE WORKS", "NIGHT BLOOM"};
 
 enum { CVA_NONE, CVA_LAMP, CVA_M1, CVA_M2, CVA_M3, CVA_SCORES, CVA_EXIT, CVA_DISH };
-#define CV_BOARD_X 652                           /* the scores board, up on the third machine's ledge */
-#define CV_BOARD_Y 232
+#define CV_BOARD_X 824                           /* the scores board, on the small ledge high on the right wall */
+#define CV_BOARD_Y 176
 static struct {
     int32_t x, y, vx, vy, th, coy, drag, acc, camx, camy, t, fade, roll_px, sq[5], psst, power_t, boost_t, chime_t[CV_NCHIME], ring_t;
     uint8_t secrets, chimes, friend_awake;       /* secrets: bit 0 the sleeper, 1 the chimes, 2 the ring */
     uint8_t g, inited, met, near;                /* near: 0 nothing, 1 the Hat, 2 the jukebox, 3..5 a machine */
+    uint8_t at_juke, juke_ready;                 /* in front of the jukebox; it offers a new song (not until Rock has
+                                                    left it once after the last one was kept) */
 } cv;
 static uint8_t story;                            /* 0 the intro, 1 in the cave, 2 asked to mend the jukebox, 3 the light is back, 4 power */
 
@@ -311,7 +313,9 @@ static int cave_tick(int32_t dt)
     /* what is in reach */
     cv.near = 0;
     if (iabs(hx - CV_HAT_X) < 40 && hy > CV_GROUND - 40) cv.near = 1;
-    if (iabs(hx - CV_JUKE_X) < 30 && hy > CV_GROUND - 40) cv.near = 2;
+    cv.at_juke = iabs(hx - CV_JUKE_X) < 30 && hy > CV_GROUND - 40;
+    if (!cv.at_juke) cv.juke_ready = 1;
+    if (cv.at_juke && (story < 4 || cv.juke_ready)) cv.near = 2;
     if (iabs(hx - CV_BOARD_X) < 22 && iabs(hy - (CV_BOARD_Y - 8)) < 22) cv.near = 6;
     if (hx < CV_DOOR_X + 26 && hy > 190 - 40 && hy < 190) cv.near = 7;
     for (i = 0; i < 3; i++) if (iabs(hx - CV_MACH[i][0]) < 26 && iabs(hy - (CV_MACH[i][1] - 8)) < 22) cv.near = (uint8_t)(3 + i);
@@ -328,24 +332,106 @@ static int cave_tick(int32_t dt)
     return act;
 }
 
+/* the three machines, each built like its game. Dark (before the power) they are only their outlines; lit, they move:
+ *   MYSTIC RUN    a crystal standing on end, shards at its foot; on its screen a tiny Rock hops crystals going by
+ *   JUICE WORKS   a juice press: a glass tank of juice on top, bubbling; four taps dripping into a glass that fills
+ *   NIGHT BLOOM   a flower in a pot: petals turning round a round screen, leaves on the stem, spores drifting up */
 static void cave_cabinet(int32_t x, int32_t y, int which, int32_t lit, uint32_t tm)
 {
-    col_t c = th->caps[which * 2 % 5];
-    int32_t k;
+    int on = story >= 4;
+    col_t c = on ? th->caps[which * 2 % 5] : th->rim, line = on ? c : th->rim;
+    int32_t k, xy[12];
     galpha(lit);
-    grect(x - 14, y - 44, 28, 44, th->panel);
-    gbox(x - 14, y - 44, 28, 44, story >= 4 ? c : th->rim);
-    gbox(x - 16, y - 50, 32, 8, story >= 4 ? c : th->rim);          /* the marquee */
-    gbox(x - 10, y - 38, 20, 16, th->rim);                          /* the screen */
-    grect(x - 9, y - 17, 18, 2, th->rim);                           /* the panel's edge */
-    for (k = 0; k < 3; k++) grect(x - 7 + k * 6, y - 13, 2, 2, th->rim);
-    if (story >= 4) {
-        galpha(256);
-        grect(x - 15, y - 49, 30, 6, c);
-        if (which == 0) for (k = 0; k < 4; k++) grect(x - 8 + ((k * 5 + (int32_t)(tm / 90u)) % 17), y - 26 - (k & 1) * 4, 2, 3, th->caps[k]);
-        else if (which == 1) for (k = 0; k < 4; k++) grect(x - 7 + k * 4, y - 37 + (int32_t)((tm / 70u + (uint32_t)k * 5u) % 13u), 2, 3, th->caps[k + 1]);   /* drips */
-        else for (k = 0; k < 4; k++) { int32_t a = (int32_t)(tm * 9u) + k * 16384; gp(x + ((6 * icos(a)) >> 14), y - 30 + ((6 * isin(a)) >> 14), th->caps[k]); gp(x, y - 30, th->pad); }
-        galpha(60 + (tsin(tm, 30, which * 20000) >> 9)); gdisc(x, y - 30, 22, c);
+    if (which == 0) {                            /* MYSTIC RUN */
+        static const int8_t BODY[5][2] = {{-13, -5}, {-15, -40}, {0, -64}, {15, -40}, {13, -5}};
+        static const int8_t SH[2][4][2] = {{{-14, -1}, {-22, -14}, {-19, -22}, {-12, -10}}, {{13, -1}, {20, -10}, {18, -16}, {12, -8}}};
+        if (on) { galpha(50 + (tsin(tm, 40, 0) >> 9)); gdisc(x, y - 58, 16, c); galpha(lit); }
+        for (k = 0; k < 2; k++) {                /* two shards at its foot */
+            int32_t j;
+            for (j = 0; j < 4; j++) { xy[2 * j] = x + SH[k][j][0]; xy[2 * j + 1] = y + SH[k][j][1]; }
+            gpoly(xy, 4, th->panel); gpolyline(xy, 4, 1, on ? th->caps[(k * 3 + 1) % 5] : th->rim);
+        }
+        for (k = 0; k < 5; k++) { xy[2 * k] = x + BODY[k][0]; xy[2 * k + 1] = y + BODY[k][1]; }
+        gpoly(xy, 5, th->panel); gpolyline(xy, 5, 1, line);
+        gline(x, y - 64, x - 5, y - 44, line); gline(x, y - 64, x + 5, y - 44, line);   /* the facets of its point */
+        grect(x - 16, y - 5, 33, 5, th->panel); gbox(x - 16, y - 5, 33, 5, line);       /* the plinth */
+        gbox(x - 10, y - 38, 21, 16, th->rim);   /* the screen */
+        for (k = 0; k < 3; k++) grect(x - 7 + k * 6, y - 15, 2, 2, th->rim);
+        if (on) {                                /* the game on it: the ground, crystals going by, Rock hopping them */
+            int32_t g = y - 25, hop = (int32_t)(tm % 700u);
+            galpha(256);
+            ghl(x - 9, x + 10, g, th->rim);
+            for (k = 0; k < 2; k++) {
+                int32_t cxp = x + 9 - (int32_t)((tm / 40u + (uint32_t)k * 10u) % 19u);
+                gline(cxp - 1, g - 1, cxp, g - 4, th->caps[k * 2]); gline(cxp, g - 4, cxp + 1, g - 1, th->caps[k * 2]);
+            }
+            hop = hop < 350 ? 6 * hop / 350 * (350 - hop) / 350 * 4 / 4 : 0;
+            gdisc(x - 4, g - 3 - hop, 2, th->rock_rim);
+            gp(x - 4, y - 58, th->text); gp(x - 3, y - 52, th->text);   /* glints on the point */
+            if ((tm / 600u) & 1u) gp(x + 4, y - 48, th->text);
+        }
+    } else if (which == 1) {                     /* JUICE WORKS */
+        int32_t tx = x, ty = y - 47, lvl;
+        grect(x - 14, y - 34, 28, 34, th->panel); gbox(x - 14, y - 34, 28, 34, line);   /* the press */
+        grect(x - 2, y - 37, 4, 4, th->panel); gbox(x - 2, y - 37, 4, 4, line);         /* its neck */
+        gdisc(tx, ty, 12, th->panel);
+        if (on) {                                /* the tank: juice to a wobbling level, bubbles in it */
+            lvl = ty - 2 + (tsin(tm, 50, 0) >> 13);
+            galpha(200);
+            gclip_y0 = imax(0, lvl); gdisc(tx, ty, 11, th->caps[(tm / 1500u) % 5u]); gclip_y0 = 0;
+            galpha(256);
+            for (k = 0; k < 4; k++) {
+                int32_t b = (int32_t)((tm / 30u + (uint32_t)k * 37u) % 18u);
+                if (ty + 9 - b > lvl + 1) gp(tx - 6 + k * 4 + ((b / 4) & 1), ty + 9 - b, th->text);
+            }
+            galpha(lit);
+        }
+        gcirc(tx, ty, 12, line);
+        garc(tx, ty, 9, 9, 34000, 42000, th->text, 0);                                     /* a shine on the glass */
+        gbox(x - 10, y - 31, 21, 10, th->rim);   /* the ticket screen */
+        for (k = 0; k < 4; k++) {                /* four taps, a glass under them */
+            col_t tc = on ? th->caps[k + 1] : th->rim;
+            grect(x - 9 + k * 6, y - 19, 3, 3, tc);
+            if (on) {
+                int32_t d = (int32_t)((tm / 25u + (uint32_t)k * 11u) % 16u);
+                if (((tm / 900u) & 3u) == (uint32_t)k && d < 9) gp(x - 8 + k * 6, y - 15 + d, tc);
+            }
+        }
+        gline(x - 5, y - 11, x - 4, y - 2, th->text); gline(x + 5, y - 11, x + 4, y - 2, th->text); ghl(x - 4, x + 5, y - 2, th->text);
+        if (on) { int32_t f = (int32_t)((tm / 180u) % 9u); grect(x - 3, y - 2 - f, 7, f, th->caps[(tm / 900u) % 4u + 1u]); }
+        {   /* the crank on its side */
+            int32_t a = on ? (int32_t)(tm * 12u) : 0;
+            gcirc(x + 17, y - 20, 3, line);
+            gline(x + 17, y - 20, x + 17 + ((5 * icos(a)) >> 14), y - 20 + ((5 * isin(a)) >> 14), line);
+        }
+    } else {                                     /* NIGHT BLOOM */
+        int32_t fx = x, fy = y - 46;
+        static const int8_t POT[4][2] = {{-9, 0}, {9, 0}, {12, -12}, {-12, -12}};
+        for (k = 0; k < 4; k++) { xy[2 * k] = x + POT[k][0]; xy[2 * k + 1] = y + POT[k][1]; }
+        grect(x - 1, fy, 3, y - 12 - fy, on ? th->caps[2] : th->rim);                   /* the stem */
+        gellf(x - 7, y - 24, 6, 3, on ? th->caps[2] : th->rim, 0);                       /* its leaves */
+        gellf(x + 7, y - 30, 6, 3, on ? th->caps[2] : th->rim, 0);
+        gpoly(xy, 4, th->panel); gpolyline(xy, 4, 1, line);                               /* the pot */
+        ghl(x - 12, x + 13, y - 9, line);
+        if (on) { galpha(50 + (tsin(tm, 30, 9000) >> 9)); gdisc(fx, fy, 24, c); galpha(lit); }
+        for (k = 0; k < 8; k++) {                /* the petals, turning (four of them in the game's own colours) */
+            int32_t a = (on ? (int32_t)(tm * 6u) : 0) + k * 8192, px = fx + ((15 * icos(a)) >> 14), py = fy + ((15 * isin(a)) >> 14);
+            col_t pc = on ? th->caps[(k & 1) ? 4 : k / 2 % 4] : th->rim;
+            gdisc(px, py, 5, th->panel); gcirc(px, py, 5, pc);
+        }
+        gdisc(fx, fy, 9, th->panel); gcirc(fx, fy, 9, line);                              /* the round screen */
+        if (on) {                                /* on it, a ring of four petals of its own, the other way round */
+            for (k = 0; k < 4; k++) {
+                int32_t a = -(int32_t)(tm * 10u) + k * 16384;
+                gdisc(fx + ((5 * icos(a)) >> 14), fy + ((5 * isin(a)) >> 14), 1, th->caps[k]);
+            }
+            gp(fx, fy, th->pad);
+            for (k = 0; k < 5; k++) {            /* spores drifting up off it */
+                int32_t q = (int32_t)((tm / 12u + (uint32_t)k * 197u) % 1000u);
+                galpha(lit * (1000 - q) / 1000);
+                gp(fx - 14 + k * 7 + (tsin(tm, 15, k * 13000) >> 12), fy - 12 - q * 26 / 1000, th->caps[(k + 1) % 5]);
+            }
+        }
     }
     galpha(256);
 }
@@ -495,10 +581,12 @@ static void cave_draw(void)
         garc(x, y - 34, 17, 16, 32768, 65536, th->rim, 0);
         gbox(x - 11, y - 30, 22, 12, th->rim);                       /* the window where the records are */
         galpha(imax(150, lit));                                      /* its name over it and an arrow down, in any light */
-        if (x > -20 && x < 260) {
+        if (on) {                                                    /* (playing: its name only in front of it, as a machine's) */
+            if (cv.at_juke) gfit(x, y - 60 - 5 * ts(1, 3), 232, "JUKEBOX", th->caps[(tm / 500u) % 5u], ts(1, 3));
+        } else if (x > -20 && x < 260) {
             gfit(x, y - 66 - 5 * sc, 232, "JUKEBOX", on ? th->caps[(tm / 500u) % 5u] : th->pad, sc);
             if (cv.near != 2) gtext(x - 3 * sc + sc / 2, y - 62 + (iabs(tsin(tm, 50, 0)) * 3 >> 14), "\xE2\x86\x93", th->pad, sc);
-        } else if (!on && cv.met && y > 150 && y < 300) {             /* not mended yet and off the screen: which way it is */
+        } else if (cv.met && y > 150 && y < 300) {                    /* not mended yet and off the screen: which way it is */
             int32_t w = gtextw("JUKEBOX", sc) + 8 * sc, bob = tsin(tm, 60, 0) >> 13;
             galpha(150 + ipulse(tm, 1300) * 106 / 256);
             if (x < 0) { gtext(4 + bob, y - 66 - 5 * sc, "\xE2\x86\x90", th->pad, sc); gtext(4 + 8 * sc, y - 66 - 5 * sc, "JUKEBOX", th->pad, sc); }
@@ -552,8 +640,15 @@ static void cave_draw(void)
     if (cv.near && !dlg.on) {
         const char *s = cv.near == 1 ? TR(T_TALK) : cv.near == 2 ? TR(on ? T_NEWSONG : T_FIX) : cv.near == 6 ? TR(T_SCORES_PROMPT) : cv.near == 7 ? TR(T_EXIT) : TR(T_START);
         int32_t px = SX(cv.x >> 8), py = SY(cv.y >> 8) - 30;
-        if (cv.near >= 3 && cv.near <= 5) gfit(SX(CV_MACH[cv.near - 3][0]), SY(CV_MACH[cv.near - 3][1]) - 58 - 5 * ts(1, 3), 232, MACH_NAME[cv.near - 3], on ? th->caps[(cv.near - 3) * 2 % 5] : th->mute, ts(1, 3));
-        if (cv.near >= 3 && cv.near <= 5 && !on) s = TR(T_NOPOWER);
+        if (cv.near >= 3 && cv.near <= 5) {      /* a machine: its name over it, and what PLAY does over that (clear of the machine) */
+            int32_t ty = SY(CV_MACH[cv.near - 3][1]) - 76 - 5 * ts(1, 3);
+            gfit(SX(CV_MACH[cv.near - 3][0]), ty, 232, MACH_NAME[cv.near - 3], on ? th->caps[(cv.near - 3) * 2 % 5] : th->mute, ts(1, 3));
+            if (!on) s = TR(T_NOPOWER);
+            px = SX(CV_MACH[cv.near - 3][0]); py = ty - TLH(ts(1, 3)) - 4 - 6 + 6 * ts(1, 3);
+        }
+        if (cv.near == 2 && on) {                /* the mended jukebox: the same, over its name */
+            px = SX(CV_JUKE_X); py = SY(CV_GROUND + CV_DIP_D) - 60 - 5 * ts(1, 3) - TLH(ts(1, 3)) - 4 - 6 + 6 * ts(1, 3);
+        }
         galpha(160 + ipulse(tm, 1400) * 96 / 256);
         gfit(px, py + 6 - 6 * ts(1, 3), 232, s, th->text, ts(1, 3));
         galpha(256);

@@ -444,6 +444,37 @@ static void ac_input(void)
 #define BDOWN(b) (in.bdown >> (b) & 1u)
 #define BHELD(b) (in.btn >> (b) & 1u)
 
+/* the battery. The platform gives the raw reading of the FM-1's battery divider (batt_raw, 0..1023, -1: none, as in a
+ * browser). Taken as half the cell's voltage into a 3.3 V ADC: 4.15 V full, 3.40 V empty. Not yet checked against a
+ * real FM-1 (the ABOUT page's last line shows the raw number, for that); a reading far outside a cell's range counts
+ * as no battery, so a wrong guess shows nothing rather than a false alarm. Low: 15 % and under, until it is over 20. */
+#define BATT_MV(raw) ((raw) * 6600 / 1023)
+static uint8_t batt_low;
+static int32_t batt_pct(void)
+{
+    int32_t mv, p;
+    if (batt_raw < 0) return -1;
+    mv = BATT_MV(batt_raw);
+    if (mv < 2800 || mv > 4700) return -1;
+    p = iclamp((mv - 3400) * 100 / (4150 - 3400), 0, 100);
+    if (p <= 15) batt_low = 1; else if (p > 20) batt_low = 0;
+    return p;
+}
+/* a battery, its right edge at x: an outline, its nub, a bar for the level; the number beside it if asked for */
+static void batt_draw(int32_t x, int32_t y, int32_t pct, int num, col_t ok, col_t low)
+{
+    col_t c = batt_low ? low : ok;
+    gbox(x - 17, y, 15, 8, c); grect(x - 2, y + 2, 2, 4, c);
+    if (pct > 0) grect(x - 15, y + 2, imax(1, 11 * pct / 100), 4, c);
+    if (num) {
+        char b[6]; int32_t n = 0;
+        if (pct >= 100) b[n++] = '1';
+        if (pct >= 10) b[n++] = (char)('0' + pct / 10 % 10);
+        b[n++] = (char)('0' + pct % 10); b[n++] = '%'; b[n] = 0;
+        gtextr(x - 20, y + 1, b, c, 1);
+    }
+}
+
 /* the lights: set what should be lit each frame; only changes reach the panel */
 static uint32_t led_key_want, led_key_dim_want, led_btn_want, led_key_now, led_key_dim_now, led_btn_now;
 static uint8_t led_play_breathe, led_play_now = 255;   /* PLAY: its green light, breathing when it is wanted */

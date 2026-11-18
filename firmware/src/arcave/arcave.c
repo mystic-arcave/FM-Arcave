@@ -122,6 +122,10 @@ static void arcave_init(void)
     intro_reset();
     mus_set(MUS_INTRO, 0);
     fb_all = 1;
+#if defined AC_TEST_SCENE && !defined AC_TEST_X  /* (tests) where scene 9 puts Rock, unless AT=X,Y says */
+#define AC_TEST_X 466
+#define AC_TEST_Y 274
+#endif
 #ifdef AC_TEST_SCENE                             /* (tests) straight to a scene: 1 the rings, 2 the dish, 3-5 a machine */
     if (AC_TEST_SCENE == 1) { scene = SC_LAMP; lamp_reset(); }
     else if (AC_TEST_SCENE == 2) { scene = SC_DISH; dish_reset(story >= 4u); }
@@ -129,6 +133,10 @@ static void arcave_init(void)
     else if (AC_TEST_SCENE == 8) {               /* (8: on the course, up on the ledge behind the start) */
         G.phase = IP_PLAY; G.t = 0; G.eyes = 256; G.turned = 1;
         G.r.x = Q8(CO_WALLX - 4); G.r.y = Q8(CO_LEDGE) - rock_rad(0); G.cam_y = G.r.y - Q8(130);
+    }
+    else if (AC_TEST_SCENE == 9) {               /* (9: in the cave at AC_TEST_X, AC_TEST_Y: run_arcave.sh AT=x,y) */
+        scene = SC_CAVE; cave_enter(1); cv.met = 1; cv.x = Q8(AC_TEST_X); cv.y = Q8(AC_TEST_Y);
+        cv.camx = cv.x - Q8(120); cv.camy = cv.y - Q8(176);
     }
     else if (AC_TEST_SCENE == 7) { scene = SC_CAVE; cave_enter(1); cv.x = Q8(-20); cv.y = Q8(181); }   /* (7: in the room by the door) */
     else { scene = SC_MACH; mach_enter(AC_TEST_SCENE - 3); mus_set(MUS_JUKE, 2); }
@@ -249,6 +257,7 @@ static void arcave_frame(void)
                 int first = story < 4u;
                 story = 4; juke_track = 0;
                 to_cave(0);
+                cv.juke_ready = 0;               /* (the offer of another song waits until Rock comes back to it) */
                 if (first) { cv.power_t = 1600; cv.fade = 0; thanks_due = 1; thanks_t = 2600; sfx(36, 0, 2400, W_SINE, 5200, 20, 0); }
                 banner_show(TR(T_NOWPLAYING), TR(T_YOURSONG), 1);
                 snd_chime(1);
@@ -282,6 +291,10 @@ static void arcave_frame(void)
         grect(32, y + h + 16, 176 * imin(wipe_hold, 3000) / 3000, 5, th->caps[0]);
     }
     banner_draw(dt);
+    if (!mn.on && batt_pct() >= 0 && batt_low && (now / 500u) & 1u) {   /* the battery running low: it flashes in the corner, on any screen */
+        grect(216, 1, 23, 11, th->bg);
+        batt_draw(237, 2, batt_pct(), 0, th->caps[0], th->caps[0]);
+    }
     ac_present();
     ac_leds_end();
     if (save_dirty && (int32_t)(fm1_ms - save_at) >= 0) { save_dirty = 0; save_now(); }

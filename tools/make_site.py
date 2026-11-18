@@ -13,7 +13,7 @@
 
 Without a package the installer is left out and the home page still stands (CI: the emulator goes up even when
 the FM-1 toolchain could not be fetched). A package is refused unless it carries the standard update loader and one
-of FM ARCAVE's own identities, FM-1_96N.
+of FM ARCAVE's own identities, FM-1_96N (from 0.10: FM-1_970 on).
 """
 import json
 import re
@@ -52,8 +52,8 @@ def main():
     if pkg:
         data = pkg.read_bytes()
         product = product_of(data)
-        if not re.fullmatch(r"FM-1_96\d", product):
-            raise SystemExit(f"make_site: {pkg.name} says {product!r}, not one of FM ARCAVE's identities (FM-1_96N)")
+        if not re.fullmatch(r"FM-1_9[6-8]\d", product):
+            raise SystemExit(f"make_site: {pkg.name} says {product!r}, not one of FM ARCAVE's identities (FM-1_96N to FM-1_989)")
         if LOADER_MARK not in data:
             raise SystemExit(f"make_site: {pkg.name} has no standard update loader ({LOADER_MARK.decode()})")
         name = f"fm-arcave-{ver}.fwsc"

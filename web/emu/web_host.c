@@ -14,6 +14,7 @@ enum { ENC_SELECT = 0, ENC_ALGORITHM = 1, ENC_KNOB1 = 2, ENC_KNOB2 = 3, ENC_KNOB
 #define KEY_LED(k) (14u + (k))
 
 static volatile uint32_t fm1_ms;
+static int32_t batt_raw = -1;                    /* (no battery in a browser: the game shows none) */
 static struct { uint32_t notes, buttons; } fm1_in;
 static uint32_t w_edges, w_rel, w_note_edges;
 static int32_t w_enc[8];

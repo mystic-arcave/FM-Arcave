@@ -380,6 +380,7 @@ extern void isr_timer5(void);
 /* ---- the sound: ALNK0 I2S, two halves; the app renders, the MASTER knob scales, Q15 -> 24 bit (-6 dBFS ceiling) */
 static int32_t abuf[2u * HALF_WORDS] __attribute__((aligned(4)));
 static volatile int32_t master_q12 = 2048;
+static int32_t batt_raw = -1;                    /* the battery divider's ADC reading, smoothed, once a second (-1: not yet) */
 static void app_audio(int32_t *out, uint32_t n);
 static void app_main(void);
 
@@ -434,6 +435,13 @@ static void platform_poll(void)
     }
     if (fm1_ms >= 30000u && bootguard.pending)
         bootguard_clear(&bootguard);            /* 30 s up: this firmware boots */
+    {   /* the battery: read once a second, smoothed (the game turns it into a level, ac_base.h batt_pct) */
+        static uint32_t batt_ms;
+        if (fm1_ms - batt_ms >= 1000u) {
+            batt_ms = fm1_ms;
+            if ((a = fm1_adc_read(FM1_ADC_BATT)) >= 0) batt_raw = batt_raw < 0 ? a : batt_raw + (a - batt_raw) / 4;
+        }
+    }
     if ((a = fm1_adc_read(FM1_ADC_MASTER)) >= 0) {
         uint32_t k10;
         knob_avg += (a * 16 - knob_avg) / 8;

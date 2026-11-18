@@ -1,0 +1,17 @@
+# the rings: stuck a minute (the note, HOME breathing), the hint page and back, stuck two (the skip note), HOME held: skipped
+2000 shot
+61000 shot
+61500 btn 8
+62500 shot
+64500 shot
+66000 btn 8
+66500 shot
+121000 shot
+121500 btndown 8
+123000 shot
+124600 btnup 8
+125000 shot
+125600 shot
+126400 shot
+128000 shot
+130000 end

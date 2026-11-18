@@ -25,9 +25,13 @@ run "into the cave, the Hat, the jukebox, the settings" play story 1
 run "the jukebox past the Hat: its name at the screen's edge, Rock settling in its dip, PLAY: the rings" sh -c 'tests/run_arcave.sh juke 2 > build/host/juke.log 2>&1 && grep -q "^sound" build/host/juke.log'
 run "a machine's help page over black, a knob scrolling it" play help 4 4
 run "a new song at the mended jukebox: a long slide, effects, their page, kept (and saved)" sh -c 'tests/run_arcave.sh newsong 4 2 > build/host/newsong.log 2>&1 && grep -q "settings 0 saved" build/host/newsong.log'
+run "the rings, stuck: a minute (the note, HOME breathing), the hint page and back, two minutes (HOME held three seconds: the rings glide into line, the light)" play hint 2 1
 run "the four rings, the dish, a song kept, the power back (and saved)" sh -c 'tests/run_arcave.sh mend 2 1 > build/host/mend.log 2>&1 && grep -q "settings 0 saved" build/host/mend.log'
 run "the settings: skip to the Mystic Arcave, OCT+ confirms (and saved)" sh -c 'tests/run_arcave.sh skip > build/host/skip.log 2>&1 && grep -q "settings 0 saved" build/host/skip.log'
 run "the lit cave, a tune changed" play lit 4
+run "the mended jukebox: its name only in front of it, the offer of a new song only after Rock has left it once" env AT=522,380 sh -c 'tests/run_arcave.sh jukeback 4 9 > build/host/jukeback.log 2>&1 && grep -q "^sound" build/host/jukeback.log'
+run "the machines up close, lit: a crystal, a juice press, a flower" env AT=740,330 sh -c 'tests/run_arcave.sh cabinets 4 9 > build/host/cabinets.log 2>&1 && grep -q "^sound" build/host/cabinets.log'
+run "the battery: its level in the settings' corner; low, flashing in the corner on any screen" env AT=466,274 sh -c 'tests/run_arcave.sh batt 4 9 > build/host/batt.log 2>&1 && grep -q "^sound" build/host/batt.log'
 run "a booster, a secret high up, then GLO held: the save wiped (and saved)" sh -c 'tests/run_arcave.sh boost 4 > build/host/boost.log 2>&1 && grep -q "settings 0 saved" build/host/boost.log'
 run "the room up on the left, its door, outside: over the start line" play door 4 7
 run "the race back, start to finish (and the time saved)" sh -c 'tests/run_arcave.sh race 4 6 > build/host/race.log 2>&1 && grep -q "settings 0 saved" build/host/race.log'

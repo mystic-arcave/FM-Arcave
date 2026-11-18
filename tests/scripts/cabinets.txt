@@ -1,0 +1,4 @@
+# the machines up close, lit: each its own shape, the prompt over its name
+100 shot
+1500 shot
+1600 end

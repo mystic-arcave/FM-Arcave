@@ -1,0 +1,11 @@
+# the battery: GLO, the settings with it in the corner (full, then low and flashing); then low in the cave, flashing
+800 batt 620
+2000 btn 7
+2600 shot
+3000 batt 535
+4000 shot
+4500 shot
+5000 btn 7
+5500 shot
+6000 shot
+6600 end

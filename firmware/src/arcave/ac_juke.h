@@ -11,21 +11,41 @@
 #define LP_RINGS 4                               /* one to a numbered knob */
 static const uint8_t LP_N[LP_RINGS] = {8, 12, 16, 24}, LP_R[LP_RINGS] = {28, 46, 64, 82}, LP_MUL[LP_RINGS] = {6, 4, 3, 2};
 static const int16_t LP_GW[LP_RINGS] = {3400, 2700, 2100, 1700};   /* a crack's half width, angle units */
-static struct { int32_t pos[LP_RINGS], hold, spin, flash[LP_RINGS], t, done_t, idle; uint8_t done; } lp;
+/* help, for whoever is stuck: after a minute without the light (all visits counted), HOME breathes and a note says it
+ * gives a hint (a page: how the rings drag each other, and the way through); after two, holding HOME three seconds
+ * skips the rings: they turn into line by themselves, outside first */
+#define LP_HINT_MS 60000
+#define LP_SKIP_MS 120000
+#define LP_SKIP_HOLD 3000
+#define LP_GLIDE 900                             /* how long a ring takes to glide into line; the next starts after LP_STAGGER */
+#define LP_STAGGER 260
+static struct {
+    int32_t pos[LP_RINGS], hold, spin, flash[LP_RINGS], t, done_t, idle, home_t, skip_t, off[LP_RINGS];
+    uint8_t done, hint, home_on, skip;
+} lp;
+static int32_t lp_stuck;                         /* time spent at the rings without the light, every visit (not saved) */
 
 static void lamp_reset(void)
 {
+    uint32_t i;
+    for (i = 0; i < sizeof lp; i++) ((uint8_t *)&lp)[i] = 0;
     lp.pos[0] = 3; lp.pos[1] = 7; lp.pos[2] = 5; lp.pos[3] = 9;
-    lp.hold = 0; lp.spin = 0; lp.t = 0; lp.done = 0; lp.done_t = 0; lp.idle = 0;
-    lp.flash[0] = lp.flash[1] = lp.flash[2] = lp.flash[3] = 0;
     sy_drone_want = 110;
 }
-static int32_t lamp_ang(int i) { return lp.pos[i] * 65536 / LP_N[i] - 16384 + lp.spin; }
+/* how far ring i still has to glide while the rings are being skipped (angle units, 0 once there) */
+static int32_t lamp_glide(int i)
+{
+    int32_t u;
+    if (!lp.skip) return 0;
+    u = iclamp((lp.skip_t - (LP_RINGS - 1 - i) * LP_STAGGER) * 256 / LP_GLIDE, 0, 256);
+    return lp.off[i] * (256 - ease8(u)) / 256;
+}
+static int32_t lamp_ang(int i) { return lp.pos[i] * 65536 / LP_N[i] - 16384 + lp.spin + lamp_glide(i); }
 static int lamp_eq(int i, int j) { return lp.pos[i] * LP_MUL[i] == lp.pos[j] * LP_MUL[j]; }
 static void lamp_turn(int n, int32_t d)
 {
     static const uint8_t DEG[LP_RINGS] = {0, 2, 4, 6};
-    if (lp.done || !d) return;
+    if (lp.done || lp.skip || lp.hint || !d) return;
     if (d > 1) { lamp_turn(n, d - 1); d = 1; }   /* a quick turn: every notch counts */
     if (d < -1) { lamp_turn(n, d + 1); d = -1; }
     lp.pos[n] = ((lp.pos[n] + d) % LP_N[n] + LP_N[n]) % LP_N[n];
@@ -34,23 +54,59 @@ static void lamp_turn(int n, int32_t d)
     sfx_ex(60 + SC_PEN[(DEG[n] + lp.pos[n] % 3) % 5] + 12 * ((DEG[n] + lp.pos[n] % 3) / 5), 0, 320, W_TRI, 3200, 3, 150, 0, (2 * n - 3) * 25, 0);
     lp.idle = 0;
 }
-/* 0: still at it; 1: the light is back; -1: HOME, back to the cave */
+static void lamp_skip(void)                      /* every crack to the top, from wherever it is: the shorter way round */
+{
+    int i;
+    for (i = 0; i < LP_RINGS; i++) { lp.off[i] = (int32_t)(int16_t)(uint16_t)(lp.pos[i] * 65536 / LP_N[i]); lp.pos[i] = 0; }
+    lp.skip = 1; lp.skip_t = 0; lp.hint = 0;
+    sfx(55, 0, 900, W_TRI, 3000, 8, 160); sfx(62, 120, 900, W_TRI, 3000, 8, 160);
+}
+/* 0: still at it; 1: the light is back; -1: back to the cave (HOME before the hint is offered, REC from the hint) */
 static int lamp_tick(int32_t dt)
 {
     int i;
     lp.t += dt; lp.idle += dt;
-    if (BDOWN(BTN_HOME) && !lp.done) return -1;
+    if (!lp.done) lp_stuck += dt;
+    /* HOME: acted on when it is let go (a hold may be on its way to a skip) */
+    if (BDOWN(BTN_HOME)) { lp.home_on = 1; lp.home_t = 0; }
+    if (lp.home_on && BHELD(BTN_HOME)) {
+        lp.home_t += dt;
+        if (lp_stuck >= LP_SKIP_MS && lp.home_t >= LP_SKIP_HOLD && !lp.done && !lp.skip) { lp.home_on = 0; lamp_skip(); }
+    } else if (lp.home_on) {
+        lp.home_on = 0;
+        if (lp.home_t < 700 && !lp.done && !lp.skip) {
+            if (lp.hint) { lp.hint = 0; snd_ui(67); }
+            else if (lp_stuck >= LP_HINT_MS) { lp.hint = 1; lp.t = 0; snd_ui(76); }
+            else return -1;
+        }
+    }
+    if (lp.hint && BDOWN(BTN_REC)) return -1;
     lamp_turn(0, in.enc[ENC_KNOB1]); lamp_turn(1, in.enc[ENC_KNOB2]); lamp_turn(2, in.enc[ENC_KNOB3]); lamp_turn(3, in.enc[ENC_KNOB4]);
     for (i = 0; i < LP_RINGS; i++) lp.flash[i] = imax(0, lp.flash[i] - dt);
     lp.spin += (lp.done ? 9000 : 420) * dt / 1000;
+    if (lp.skip && !lp.done) {
+        int32_t was = lp.skip_t;
+        lp.skip_t += dt;
+        for (i = 0; i < LP_RINGS; i++) {         /* each ring clicks home as it arrives */
+            int32_t at = (LP_RINGS - 1 - i) * LP_STAGGER + LP_GLIDE;
+            if (was < at && lp.skip_t >= at) { lp.flash[i] = 200; sfx(72 + SC_PEN[(3 - i) % 5], 0, 500, W_TRI, 3000, 3, 180); }
+        }
+    }
     if (!lp.done) {
-        lp.hold = (lamp_eq(0, 1) && lamp_eq(1, 2) && lamp_eq(2, 3)) ? lp.hold + dt : 0;
+        int ready = !lp.skip || lp.skip_t >= (LP_RINGS - 1) * LP_STAGGER + LP_GLIDE;
+        lp.hold = ready && (lamp_eq(0, 1) && lamp_eq(1, 2) && lamp_eq(2, 3)) ? lp.hold + dt : 0;
         if (lp.hold > 700) {
             static const uint8_t ARP[8] = {60, 64, 67, 72, 76, 79, 84, 88};
-            lp.done = 1;
+            lp.done = 1; lp.hint = 0;
             for (i = 0; i < 8; i++) sfx(ARP[i], (uint32_t)i * 90u, 2400, W_TRI, 3000, 5, 200);
             sfx(36, 0, 3000, W_SINE, 5000, 30, 0);
         }
+        /* HOME breathes while it has something to give: lit while it is held toward a skip */
+        if (lp_stuck >= LP_HINT_MS && !lp.skip) {
+            if (lp.home_on && lp_stuck >= LP_SKIP_MS) led_btn_want |= 1u << BTN_HOME;
+            else if (!lp.hint) led_breathe_want |= 1u << BTN_HOME;
+        }
+        if (lp.hint) led_breathe_want |= 1u << BTN_REC;
     } else {
         lp.done_t += dt;
         led_key_want = ((1u << AC_NKEY) - 1u) & (0x1111111u << ((lp.done_t / 90) & 3));
@@ -58,10 +114,79 @@ static int lamp_tick(int32_t dt)
     }
     return 0;
 }
+
+/* the hint's picture: four small rings, put into line one at a time from the outside in (each dragging the one inside
+ * it the other way), then the light out through them; again and again. Returns which line goes with it: 0 while the
+ * outer ring is put straight, 1 after */
+#define LP_HINT_LOOP 11000
+static int lamp_hint_rings(int32_t cx, int32_t cy, uint32_t tm)
+{
+    static const int8_t P0[LP_RINGS] = {3, 7, 5, 9}, MOVE[LP_RINGS] = {-3, -4, 4, 3};   /* MOVE[s]: ring 3 - s, notches */
+    static const uint8_t R[LP_RINGS] = {9, 15, 21, 27};
+    static const int16_t AT[LP_RINGS + 1] = {1800, 4400, 6000, 7600, 9200};  /* when each step turns (900 ms), the light */
+    int32_t ph = (int32_t)(tm % LP_HINT_LOOP), posq[LP_RINGS], s, i, k, cur = -1;
+    for (i = 0; i < LP_RINGS; i++) posq[i] = P0[i] * 256;
+    for (s = 0; s < LP_RINGS; s++) {
+        int32_t r = LP_RINGS - 1 - s, f = ease8(iclamp((ph - AT[s]) * 256 / 900, 0, 256));
+        posq[r] += MOVE[s] * f;
+        if (r > 0) posq[r - 1] -= MOVE[s] * f;
+        if (ph >= (s ? AT[s] - 500 : 0) && ph < AT[s + 1] - 500) cur = r;
+    }
+    if (ph >= AT[LP_RINGS]) {                    /* lined up: the light gets out */
+        int32_t a0 = posq[3] * 65536 / 256 / LP_N[3] - 16384;
+        cur = -1;
+        for (k = -3; k <= 3; k++) {
+            int32_t a = a0 + k * 500;
+            galpha(150 + (tsin(tm, 30, k * 9000) >> 8));
+            gline(cx + ((4 * icos(a)) >> 14), cy + ((4 * isin(a)) >> 14), cx + ((44 * icos(a)) >> 14), cy + ((44 * isin(a)) >> 14), th->caps[(k + 3 + (int32_t)(tm / 150u)) % 5]);
+        }
+        galpha(256);
+    }
+    for (i = 0; i < LP_RINGS; i++) {
+        int32_t a = posq[i] * 65536 / 256 / LP_N[i] - 16384, gw = LP_GW[i] * 3 / 2;
+        garc(cx, cy, R[i], R[i], a + gw, a + 65536 - gw, i == cur ? th->pad : th->caps[i + 1], i == cur);
+    }
+    galpha(90 + (tsin(tm, 30, 0) >> 9)); gdisc(cx, cy, 4, th->pad); galpha(256); gdisc(cx, cy, 2, th->pad);
+    if (cur >= 0) {                              /* which knob is turning */
+        char b[10] = "KNOB 0";
+        b[5] = (char)('1' + cur);
+        gtext(cx + 39, cy + 2, b, th->caps[cur + 1], ts(1, 2));
+    }
+    return ph >= AT[1] - 500;
+}
+static void lamp_hint_draw(void)
+{
+    int32_t sh = ts(2, 4), sf = ts(1, 2), a = ts(1, 2), y, top, room, h1, h2, foot, line;
+    uint32_t tm = (uint32_t)lp.t;
+    gclear(th->bg);
+    /* the picture top left, the word and the knob turning beside it; under them how the rings drag, and the step the
+     * picture is at */
+    line = lamp_hint_rings(37, 37, tm);
+    while (sh > 2 && gtextw(TR(T_HINT), sh) > 160) sh--;
+    gtext(76, 10, TR(T_HINT), th->caps[0], sh);
+    while (sf > 1 && (gtextw(TR(T_LAMP_TIP_BACK), sf) > 232 || gtextw(TR(T_REC_BACK), sf) > 232)) sf--;
+    top = 72;
+    foot = 238 - 2 * TLH(sf);
+    room = foot - 2 - top;
+    for (;;) {                                   /* the size asked for, smaller only if they would not fit */
+        h1 = gblock_h(228, TR(T_LAMP_TIP1), a);
+        h2 = imax(gblock_h(228, TR(T_LAMP_TIP2), a), gblock_h(228, TR(T_LAMP_TIP3), a));
+        if (h1 + 6 + h2 <= room || a == 1) break;
+        a--;
+    }
+    y = top + imax(0, (room - h1 - 6 - h2) / 2);
+    y += gblock(6, y, 228, TR(T_LAMP_TIP1), th->text, a, 0) + 6;
+    gblock(6, y, 228, TR(line ? T_LAMP_TIP3 : T_LAMP_TIP2), th->caps[line ? 2 : 4], a, 0);
+    gfit(120, foot + 2 * sf, 232, TR(T_LAMP_TIP_BACK), th->pad, sf);
+    gfit(120, foot + TLH(sf) + 2 * sf, 232, TR(T_REC_BACK), th->mute, sf);
+}
+
 static void lamp_draw(void)
 {
     int32_t cx = 120, cy = 116, i, k, agree = (lamp_eq(0, 1) ? 1 : 0) + (lamp_eq(1, 2) ? 1 : 0) + (lamp_eq(2, 3) ? 1 : 0);
     uint32_t tm = (uint32_t)lp.t;
+    if (lp.hint) { lamp_hint_draw(); return; }
+    if (lp.skip && lp.skip_t < (LP_RINGS - 1) * LP_STAGGER + LP_GLIDE) agree = 0;
     gclear(th->bg);
     for (k = 0; k < 72; k++) {                   /* the light: each ray goes as far as the first glass that stops it */
         int32_t a = k * 65536 / 72, len = 120, out = 1;
@@ -89,15 +214,33 @@ static void lamp_draw(void)
     if (lp.done) {
         grect(0, 0, 240, 8 + TLH(ts(2, 4)), th->bg);
         gfit(120, 6 + 2 * ts(2, 4), 232, TR(T_LAMP_DONE), th->text, ts(2, 4));
-    } else {                                     /* the words on cleared strips, top and foot: the rings run under them */
-        int32_t a = ts(1, 2), at = ts(1, 3), h = gblock_h(232, TR(T_LAMP1), at), y;
+        return;
+    }
+    {   /* the words on cleared strips, top and foot: the rings run under them */
+        int32_t a = ts(1, 2), at = ts(1, 3), h = gblock_h(232, TR(T_LAMP1), at), fy;
         if (lp.t < 9000 || a == 1) { grect(0, 0, 240, h + 4, th->bg); gblock(4, 2, 232, TR(T_LAMP1), th->text, at, 1); }
         else h = 0;                              /* (larger text: it steps aside once read, the rings need the room) */
         if (agree >= 1 && agree < 3) gfit(120, h + 4 + 2 * a, 232, TR(T_LAMP_TWO), th->caps[3], a);
-        y = gfoot(238 - TLH(a), TR(lp.idle > 20000 ? T_LAMP_HINT : T_LAMP2), lp.idle > 20000 ? th->caps[0] : th->mute, th->bg, a);
+        fy = gfoot(238 - TLH(a), TR(lp.idle > 20000 ? T_LAMP_HINT : T_LAMP2), lp.idle > 20000 ? th->caps[0] : th->mute, th->bg, a);
         grect(0, 238 - TLH(a), 240, TLH(a) + 2, th->bg);
         gfit(120, 238 - TLH(a) + 2 * a, 232, TR(T_KNOBS123), th->pad, a);
-        (void)y;
+        if (lp_stuck >= LP_HINT_MS && !lp.skip) {   /* the note: a panel over the foot of the rings, popping up when it first comes */
+            int skip = lp_stuck >= LP_SKIP_MS, id = skip ? T_LAMP_SKIP_POP : T_LAMP_HINT_POP;
+            int32_t since = lp_stuck - (skip ? LP_SKIP_MS : LP_HINT_MS), pop = imin(256, since * 256 / 220);
+            int32_t sc = ts(1, 3), w = 216, bh, bar = skip && lp.home_on ? 12 : 0, y;
+            while (sc > 1 && gblock_h(w - 16, TR(id), sc) > 3 * TLH(sc)) sc--;
+            bh = gblock_h(w - 16, TR(id), sc) + 12 + bar;
+            y = fy - 6 - bh + (256 - ease8(pop)) * 20 / 256;
+            galpha(pop);
+            grect(120 - w / 2, y, w, bh, th->panel);
+            gbox(120 - w / 2, y, w, bh, (ipulse(tm, 1200) > 128 || bar) ? th->caps[0] : th->pad);
+            gblock(120 - w / 2 + 8, y + 6, w - 16, TR(id), th->text, sc, 1);
+            if (bar) {                           /* holding: a bar fills toward the skip */
+                gbox(120 - w / 2 + 12, y + bh - 12, w - 24, 7, th->mute);
+                grect(120 - w / 2 + 14, y + bh - 10, (w - 28) * imin(lp.home_t, LP_SKIP_HOLD) / LP_SKIP_HOLD, 3, th->caps[0]);
+            }
+            galpha(256);
+        }
     }
 }
 

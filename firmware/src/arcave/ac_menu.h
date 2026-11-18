@@ -63,7 +63,10 @@ static void menu_draw(void)
         const char *s = TR(T_ABOUT_1 + mn.about - 1), *rest = 0;
         int32_t n = 0, sc = ts(2, 4), top, room;
         while (*s && n < 240) buf[n++] = *s++;
-        if (mn.about == 4) { s = APP_VER; while (*s && n < 270) buf[n++] = *s++; }
+        if (mn.about == 4) {                     /* the version; and the battery's raw reading (to set its scale by) */
+            s = APP_VER; while (*s && n < 260) buf[n++] = *s++;
+            if (batt_raw >= 0) { int32_t v = batt_raw; buf[n++] = ' '; buf[n++] = 'B'; buf[n++] = (char)('0' + v / 1000 % 10); buf[n++] = (char)('0' + v / 100 % 10); buf[n++] = (char)('0' + v / 10 % 10); buf[n++] = (char)('0' + v % 10); }
+        }
         buf[n] = 0;
         gfit(120, 6 + 2 * sh, 232, "FM ARCAVE", th->caps[3], sh);
         top = 6 + TLH(sh) + 4; room = 238 - TLH(sf) - 4 - top;
@@ -73,7 +76,11 @@ static void menu_draw(void)
         gtextr(230, 238 - TLH(sf) + 2 * sf, mn.rest ? PB " \xE2\x86\x93" : PB " \xE2\x86\x92", th->pad, sf);
         return;
     }
-    gfit(120, 6 + 2 * sh, 232, TR(T_SETTINGS), th->text, sh);
+    {   /* the title, and the FM-1's battery in the top right corner (when there is one to read) */
+        int32_t bp = batt_pct();
+        gfit(120, 6 + 2 * sh, bp >= 0 ? 160 : 232, TR(T_SETTINGS), th->text, sh);
+        if (bp >= 0 && !(batt_low && (fm1_ms / 500u) & 1u)) batt_draw(237, 3, bp, 1, th->mute, th->caps[0]);
+    }
     y0 = 6 + TLH(sh) + 6;
     /* the foot: what the selected line has to say (or which knob does what), and how to close */
     foot = 238 - TLH(sf);

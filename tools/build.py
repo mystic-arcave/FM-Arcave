@@ -298,7 +298,7 @@ def mmio_check():
 def main():
     global PRODUCT, VERSION, BOARD, APP_SLOT
     ap = argparse.ArgumentParser()
-    ap.add_argument("--release", metavar="X.Y", help="release build: identity FM-1_96Y, version string X.Y")
+    ap.add_argument("--release", metavar="X.Y", help="release build: identity FM-1_96Y (0.10: FM-1_970), version string X.Y")
     ap.add_argument("--board", choices=sorted(BOARD_PREFIX), default=None,
                     help="target board: fm1 (default) or smk37 (default: $BOARD, else fm1)")
     ap.add_argument("--model", choices=sorted(MODELS), default=None,
@@ -320,11 +320,13 @@ def main():
         suffix += "-" + model
     PRODUCT = BOARD_PREFIX[BOARD] + "0"
     name = f"fm-arcave{suffix}.fwsc"
-    if a.release:                   # one digit each: the identity has room for two (X.Y; a .Z only in the text)
-        m = re.fullmatch(r"(\d)\.(\d)(\.\d)?(-[A-Za-z0-9]+)?", a.release)
-        if not m:
-            raise SystemExit(f"--release {a.release}: use X.Y, X.Y.Z or X.Y-suffix, one digit each")
-        PRODUCT = BOARD_PREFIX[BOARD] + m[2]
+    if a.release:                   # the identity counts on from the prefix: X.Y is ..._96Y up to 0.9, then 0.10 is
+                                    # ..._970, 0.11 ..._971 (a number the updaters read whole, so it keeps rising), up to
+                                    # 0.29; a .Z only in the text
+        m = re.fullmatch(r"(\d)\.(\d{1,2})(\.\d)?(-[A-Za-z0-9]+)?", a.release)
+        if not m or not 1 <= int(m[2]) <= 29:
+            raise SystemExit(f"--release {a.release}: use X.Y, X.Y.Z or X.Y-suffix, Y from 1 to 29")
+        PRODUCT = BOARD_PREFIX[BOARD][:-1] + str(int(BOARD_PREFIX[BOARD][-1]) * 10 + int(m[2]))
         VERSION = m[1] + "." + m[2] + (m[3] or "")
         name = f"fm-arcave-{a.release}{suffix}.fwsc"
     fm1pkg_make.SDK = a.sdk
