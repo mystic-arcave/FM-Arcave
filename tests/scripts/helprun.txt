@@ -1,0 +1,23 @@
+# a machine's start card (HOME above REC at the foot); HOME: how it is played, a loop of little scenes over the FM-1 and the
+# hands doing each step, the scene again on the FM-1's own screen; HOME again: back
+600 shot
+900 btn 8
+1400 shot
+2400 shot
+3400 shot
+4400 shot
+5400 shot
+6400 shot
+7400 shot
+8400 shot
+9400 shot
+10400 shot
+11400 shot
+12400 shot
+13400 shot
+14400 shot
+15400 shot
+16400 shot
+17000 btn 8
+17500 shot
+17700 end

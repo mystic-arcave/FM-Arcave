@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /* Sheets laid over a paused game, and the FX button's effects.
- *   controls   HOME on the course: the controls shown, in a loop of little scenes (ac_tutor.h). HOME in a machine: how that machine is played, over
- *              black, in paragraphs, any knob scrolling a long page (REC from there goes back to the Arcave).
+ *   controls   HOME on the course: the controls shown, in a loop of little scenes (ac_tutor.h). HOME in a machine: how that
+ *              machine is played, the same way (ac_mtutor.h; REC from there goes back to the Arcave).
  *              HOME at the dish, once it has a tempo: what the song's four effects do. HOME again returns.
  *   scores     EDIT anywhere, or the board in the Arcave: the best score of each machine, the time played, the
  *              secrets found. EDIT, PLAY or HOME closes.
@@ -13,7 +13,8 @@ static struct { uint8_t on; int32_t t, scroll, max; } sh;   /* scroll: how far d
 static uint32_t play_s, play_ms;                 /* the time played: whole seconds (kept in the save) and the rest */
 
 #include "ac_tutor.h"
-static void sheet_open(int kind) { tu_last = -1; sh.on = (uint8_t)kind; sh.t = 0; sh.scroll = 0; sh.max = 0; snd_ui(74); sy_rumble_want = 0; }
+#include "ac_mtutor.h"
+static void sheet_open(int kind) { tu_last = -1; mt_last = -1; sh.on = (uint8_t)kind; sh.t = 0; sh.scroll = 0; sh.max = 0; snd_ui(74); sy_rumble_want = 0; }
 static int sheet_tick(int32_t dt)
 {
     sh.t += dt;
@@ -23,11 +24,13 @@ static int sheet_tick(int32_t dt)
         return SA_NONE;
     }
     if (BDOWN(BTN_HOME)) { sh.on = SH_NONE; snd_ui(67); return SA_CLOSED; }
-    if (sh.on == SH_MACH || sh.on == SH_FX) {    /* a page that may be longer than the screen: any knob moves it, a line a click */
+    if (sh.on == SH_MACH || sh.on == SH_FX) {    /* REC goes back to the Arcave; the effects' page may be longer than the
+                                                    screen: any knob moves it, a line a click */
         if (BDOWN(BTN_REC)) { sh.on = SH_NONE; return SA_LEAVE; }
-        if (in.any_knob) sh.scroll = iclamp(sh.scroll + in.any_knob * TLH(ts(1, 3)), 0, sh.max);
+        if (sh.on == SH_FX && in.any_knob) sh.scroll = iclamp(sh.scroll + in.any_knob * TLH(ts(1, 3)), 0, sh.max);
         led_breathe_want |= 1u << BTN_REC;
     }
+    if (sh.on == SH_MACH) mtutor_tick(dt);
     if (sh.on == SH_INTRO) tutor_tick(dt);
     led_breathe_want |= 1u << BTN_HOME;
     return SA_NONE;
@@ -104,13 +107,7 @@ static void sheet_row(int32_t y, const char *lab, const char *val, col_t c)
 }
 static void sheet_draw(void)
 {
-    if (sh.on == SH_MACH) {
-        int ids[3];
-        static const int T1[3] = {T_RUN_1, T_TABLE_1, T_BLOOM_1};
-        ids[0] = T1[mc.which]; ids[1] = T1[mc.which] + 1; ids[2] = T1[mc.which] + 2;
-        sheet_page(MACH_NAME[mc.which], th->caps[mc.which * 2 % 5], ids, 3, 0);
-        return;
-    }
+    if (sh.on == SH_MACH) { mtutor_draw(); return; }
     if (sh.on == SH_FX) {
         static const int IDS[5] = {T_FX_1, T_FX_2, T_FX_3, T_FX_4, T_FX_5};
         sheet_page(TR(T_FX_TITLE), th->pad, IDS, 5, 1);

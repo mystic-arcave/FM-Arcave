@@ -450,15 +450,19 @@ static void bloom_spawn(uint32_t now, uint32_t seed)
             return;
         }
 }
-/* a spore's place: it drifts in slowly, reaching its own ring three beats after it is born (on the beat), the centre
- * two beats later */
+/* a spore's place: it comes in quickly from the edge and slows as it nears its own ring, reaching it three beats after
+ * it is born (on the beat); there it lingers half a beat, then falls to the flower. It can be caught all the while it is
+ * at its ring: from a little before it arrives until it leaves (NB_EARLY .. NB_LINGER), not in a single instant */
 #define NB_IN 288
+#define NB_EARLY 36
+#define NB_LINGER 48
 #define NB_OUT 192
 static void bloom_pos(uint32_t i, uint32_t now, int32_t *rad, int32_t *ang)
 {
-    int32_t age = (int32_t)(now - nb.sp[i].born), ring = NB_R[nb.sp[i].c];
-    /* slow at first, then faster: the way in goes with the square of the time, and still meets its ring on the beat */
-    *rad = age <= NB_IN ? 122 - (122 - ring) * age / NB_IN * age / NB_IN : ring - (ring - 6) * (age - NB_IN) / NB_OUT;
+    int32_t age = (int32_t)(now - nb.sp[i].born), ring = NB_R[nb.sp[i].c], q;
+    if (age <= NB_IN) { q = NB_IN - age; *rad = ring + (122 - ring) * q / NB_IN * q / NB_IN; }
+    else if (age <= NB_IN + NB_LINGER) *rad = ring - 3 * (age - NB_IN) / NB_LINGER;
+    else *rad = ring - 3 - (ring - 9) * imin(NB_OUT, age - NB_IN - NB_LINGER) / NB_OUT;
     *ang = nb.sp[i].a + nb.sp[i].curl * age / NB_IN;
 }
 static void bloom_tick(int32_t dt)
@@ -491,12 +495,12 @@ static void bloom_tick(int32_t dt)
         int32_t age;
         if (!nb.sp[i].on) continue;
         age = (int32_t)(now - nb.sp[i].born);
-        if (!nb.sp[i].past && age >= NB_IN) {      /* it is at its ring: is the petal there? */
+        if (!nb.sp[i].past && age >= NB_IN - NB_EARLY) {   /* it is at its ring: is the petal there? */
             int32_t rad, ang, d;
-            bloom_pos(i, nb.sp[i].born + (uint32_t)NB_IN, &rad, &ang);
+            bloom_pos(i, now, &rad, &ang);
             d = (int32_t)(int16_t)(uint16_t)(ang - nb.ang[nb.sp[i].c]);
 #ifdef AC_TEST_CATCH                             /* (tests) every spore is caught: the rings arriving one by one */
-            d = 0; nb.ang[nb.sp[i].c] = ang;
+            if (age >= NB_IN) { d = 0; nb.ang[nb.sp[i].c] = ang; }
 #endif
             if (iabs(d) < NB_ARC) {
                 int32_t c = nb.sp[i].c;
@@ -511,9 +515,11 @@ static void bloom_tick(int32_t dt)
                 if (nb.rings < 4 && nb.caught >= nb.rings * 5) {   /* five caught: the next ring, and its knob, join in */
                     nb.rings++; nb.ring_t = 2200; snd_chime(1);
                 }
-            } else { nb.sp[i].past = 1; mc.combo = 0; }
+                continue;
+            }
+            if (age > NB_IN + NB_LINGER) { nb.sp[i].past = 1; mc.combo = 0; }   /* gone by its ring: it will reach the flower */
         }
-        if (nb.sp[i].past && age >= NB_IN + NB_OUT) {       /* it reached the flower: a petal falls */
+        if (nb.sp[i].past && age >= NB_IN + NB_LINGER + NB_OUT) {       /* it reached the flower: a petal falls */
             nb.sp[i].on = 0; mc.lives--; mc.flash = 300; mach_msg(T_MISS);
             sfx_ex(43, 0, 400, W_SAW, 3200, 2, 120, 0, 0, 65200);
             if (mc.lives <= 0) { mach_over(); return; }

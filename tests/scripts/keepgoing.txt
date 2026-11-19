@@ -1,0 +1,10 @@
+# the course, standing still: a minute and a half after waking, a box at the right edge says to keep going, and goes
+# again after five seconds
+600 btn 12
+2600 btn 12
+95500 shot
+96200 shot
+99000 shot
+100900 shot
+101500 shot
+101700 end

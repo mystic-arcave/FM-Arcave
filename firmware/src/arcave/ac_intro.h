@@ -25,6 +25,7 @@ static const course_t *co = &CO_SHORT;
 #define CO_NPOOL (co->npool)
 
 enum { IP_TITLE, IP_WIDE, IP_WAKE, IP_PLAY, IP_OUT, IP_DONE };
+#define KEEP_AT 90000                            /* on the course this long and not at its end: "keep going" */
 
 typedef struct {
     int32_t x, y, vx, vy;                        /* Q8 px, px/s */
@@ -836,6 +837,18 @@ static void intro_draw(void)
             galpha(al); gtextc(120, 22 + h, b, th->text, a);
             if (race_new) gfit(120, 22 + h + 5 * a + 8 + 2 * ts(1, 3), 232, TR(T_NEWBEST), th->caps[3], ts(1, 3));
             galpha(256);
+        }
+        if (G.phase == IP_PLAY && !G.race && G.cave_a <= 0 && G.t >= KEEP_AT && G.t < KEEP_AT + 5000) {
+            /* a minute and a half on the course and not at its end: a box at the right edge says to keep going that way,
+             * and goes again by itself after five seconds */
+            int32_t u = G.t - KEEP_AT, a = imin(256, imin(u * 256 / 250, (5000 - u) * 256 / 300)), sc = ts(1, 3), w, h, x, bob;
+            while (sc > 1 && gtextw(TR(T_KEEP_GOING), sc) + 16 + 8 * sc > 236) sc--;
+            w = gtextw(TR(T_KEEP_GOING), sc) + 16 + 8 * sc; h = 5 * sc + 12;
+            x = 238 - w + (256 - ease8(a)) * (w + 4) / 256;           /* in from the edge, and out again */
+            bob = tsin((uint32_t)u, 60, 0) >> 13;
+            grect(x, 96, w, h, th->panel); gbox(x, 96, w, h, ipulse((uint32_t)u, 900) > 128 ? th->pad : th->caps[3]);
+            gtext(x + 6, 102, TR(T_KEEP_GOING), th->text, sc);
+            gtext(x + w - 7 * sc - 3 + bob, 102, "\xE2\x86\x92", th->pad, sc);
         }
         if (G.phase == IP_PLAY) {
             if (G.cave_a > 0) {

@@ -15,6 +15,7 @@ run() { echo "== $1"; shift; "$@" || { echo "   FAILED"; fail=1; }; }
 play() { tests/run_arcave.sh "$@" > "$OUT/$1.log" 2>&1 && grep -q '^sound' "$OUT/$1.log"; }
 
 run "the intro: title, wake, roll, pads, the last stretch" play intro
+run "the course, standing still: at a minute and a half \"keep going\" at the right edge, gone after five seconds" play keepgoing
 run "the title in each language" play lang
 run "the controls box by the start, HOME: the controls shown, a full loop (roll, hop, big hop, the jump onto the bounce mushroom, the other grip)" play controls
 run "the PLAY button drawn as the green button in the wake line" play playbtn
@@ -23,7 +24,9 @@ run "the hollow behind the start: hidden by a rock face until Rock is on the led
 run "the settings, line by line" play menu
 run "into the cave, the Hat, the jukebox, the settings" play story 1
 run "the jukebox past the Hat: its name at the screen's edge, Rock settling in its dip, PLAY: the rings" sh -c 'tests/run_arcave.sh juke 2 > build/host/juke.log 2>&1 && grep -q "^sound" build/host/juke.log'
-run "a machine's help page over black, a knob scrolling it" play help 4 4
+run "JUICE WORKS: HOME shows how it is played (a glass, the tap, the ticket's line, serving, moving a glass)" play help 4 4
+run "MYSTIC RUN: HOME shows how it is played (a hop, a high hop, a block's button, the tempo)" play helprun 4 3
+run "NIGHT BLOOM: HOME shows how it is played (KNOB 1's petal, catching, SELECT's ring, a breath)" play helpbloom 4 5
 run "a new song at the mended jukebox: a long slide, effects, their page, kept (and saved)" sh -c 'tests/run_arcave.sh newsong 4 2 > build/host/newsong.log 2>&1 && grep -q "settings 0 saved" build/host/newsong.log'
 run "the rings, stuck: a minute (the note, HOME breathing), the hint page and back, two minutes (HOME held three seconds: the rings glide into line, the light)" play hint 2 1
 run "the four rings, the dish, a song kept, the power back (and saved)" sh -c 'tests/run_arcave.sh mend 2 1 > build/host/mend.log 2>&1 && grep -q "settings 0 saved" build/host/mend.log'
