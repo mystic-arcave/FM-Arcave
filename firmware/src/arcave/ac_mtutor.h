@@ -24,13 +24,15 @@ static const uint8_t TU_KN[8][2] = {{12, 13}, {27, 13}, {12, 29}, {27, 29}, {85,
 enum { MK_MASTER, MK_SELECT, MK_PRESETS, MK_ALGO, MK_K1, MK_K2, MK_K3, MK_K4 };   /* the knobs as drawn */
 static int32_t mt_last;                          /* where in the loop the last tick was (for the sounds) */
 
-static int32_t mt_loop(int w) { int32_t k, s = 0; for (k = 0; k < MT_DEF[w].n; k++) s += MT_DEF[w].ms[k]; return s; }
-static void mt_where(int w, int32_t t, int32_t *step, int32_t *u)
+/* each step's scene plays TU_HOLD times before the loop moves on (ac_tutor.h); u: how far into the scene, ur: into the step */
+static int32_t mt_loop(int w) { int32_t k, s = 0; for (k = 0; k < MT_DEF[w].n; k++) s += MT_DEF[w].ms[k] * TU_HOLD; return s; }
+static void mt_where_r(int w, int32_t t, int32_t *step, int32_t *u, int32_t *ur)
 {
     int32_t k, lt = t % mt_loop(w);
-    for (k = 0; k < MT_DEF[w].n - 1 && lt >= MT_DEF[w].ms[k]; k++) lt -= MT_DEF[w].ms[k];
-    *step = k; *u = lt;
+    for (k = 0; k < MT_DEF[w].n - 1 && lt >= MT_DEF[w].ms[k] * TU_HOLD; k++) lt -= MT_DEF[w].ms[k] * TU_HOLD;
+    *step = k; *ur = lt; *u = lt % MT_DEF[w].ms[k];
 }
+static void mt_where(int w, int32_t t, int32_t *step, int32_t *u) { int32_t ur; mt_where_r(w, t, step, u, &ur); }
 static int32_t mt_in(int32_t u) { return u < 300 ? TU_SLIDE * (300 - u) / 300 * (300 - u) / 300 : 0; }   /* a hand coming in */
 static int32_t mt_out(int32_t u, int32_t ms) { return u > ms - 300 ? TU_SLIDE * (u - ms + 300) / 300 * (u - ms + 300) / 300 : 0; }
 static int32_t mt_ramp(int32_t u, int32_t a, int32_t b) { return ease8(iclamp((u - a) * 256 / imax(1, b - a), 0, 256)); }
@@ -413,9 +415,10 @@ static void mtutor_tick(int32_t dt)
     (void)dt;
     if (lt < a) a = -1;
     for (k = 0; k < 8 && EV[w][k][0] >= 0; k++) {
-        int32_t s, at;
-        for (s = 0, base = 0; s < EV[w][k][0]; s++) base += MT_DEF[w].ms[s];
-        at = base + EV[w][k][1] * MT_SLOW[w];
+        int32_t s, at, r;
+        for (s = 0, base = 0; s < EV[w][k][0]; s++) base += MT_DEF[w].ms[s] * TU_HOLD;
+        for (r = 0; r < TU_HOLD; r++) {          /* (each pass of the step's scene) */
+        at = base + r * MT_DEF[w].ms[EV[w][k][0]] + EV[w][k][1] * MT_SLOW[w];
         if (a < at && lt >= at) switch (EV[w][k][2]) {
             case 0: sfx(key_play(4) + 12, 0, 500, W_TRI, 2800, 5, 180); break;
             case 1: sfx(key_play(23) + 12, 0, 500, W_TRI, 2800, 5, 180); break;
@@ -424,6 +427,7 @@ static void mtutor_tick(int32_t dt)
             case 3: sfx(72 + SC_PEN[k % 5], 0, 600, W_SINE, 3000, 4, 170); break;
             case 4: sfx(90, 0, 160, W_SINE, 1800, 1, 160); break;
             default: snd_chime(1); break;
+        }
         }
     }
     mt_last = lt;
@@ -434,12 +438,12 @@ static void mtutor_tick(int32_t dt)
 static void mtutor_draw(void)
 {
     int w = mc.which;
-    int32_t step, u, k, n = 0, sc, a;
+    int32_t step, u, k, n = 0, sc, a, ur;
     uint32_t tm = (uint32_t)sh.t, lit = 0, rowmask = 0;
     int blit = -1, bdown = -1;
     mt_act_t act[4];
     col_t c = th->caps[w * 2 % 5];
-    mt_where(w, sh.t, &step, &u);
+    mt_where_r(w, sh.t, &step, &u, &ur);
     for (k = 0; k < 27; k++) mt_age[k] = -1;
     grect(0, 0, AC_W, AC_H, th->bg);
     gclip_y1 = TU_SCENE_H;
@@ -450,7 +454,7 @@ static void mtutor_draw(void)
     if (u < 250) { galpha(256 - u * 256 / 250); grect(0, 0, AC_W, TU_SCENE_H, th->bg); galpha(256); }   /* each step fades in */
     /* under the scene, a mark for each step (the machine is the one just left: the scene is all its own) */
     (void)sc;
-    for (k = 0; k < MT_DEF[w].n; k++) grect(120 - MT_DEF[w].n * 8 + k * 16, TU_SCENE_H + 1, 14, 2, k == step ? th->pad : th->mute);
+    tu_pips(MT_DEF[w].n, step, ur * 256 / (MT_DEF[w].ms[step] * TU_HOLD), TU_SCENE_H + 1, sh.t - sh.knob_t, tm);
     {   /* the step's line, under the scene, over the device */
         char buf[120];
         const char *s = TR(MT_DEF[w].text[step]);
@@ -483,8 +487,24 @@ static void mtutor_draw(void)
     }
     led_key_dim_want |= rowmask;
     if (bdown >= 0) led_btn_want |= 1u << (bdown + 2); else if (blit >= 0) led_btn_want |= 1u << (blit + 2);
-    /* the foot: HOME back to the machine, and (taking turns with it) REC back to the Arcave */
-    galpha(150 + ipulse(tm, 1400) * 106 / 256);
-    gfit(120, 231, 232, TR((tm / 3000u) & 1u ? T_REC_BACK : T_HELP_RETURN), (tm / 3000u) & 1u ? th->mute : th->pad, 1);
-    galpha(256);
+    /* the foot, taking turns: HOME back to the machine, any knob steps, REC back to the Arcave */
+    {
+        uint32_t f = (tm / 3000u) % 3u;
+        galpha(150 + ipulse(tm, 1400) * 106 / 256);
+        gfit(120, 231, 232, TR(f == 0u ? T_HELP_RETURN : f == 1u ? T_HELP_KNOB : T_REC_BACK), f == 0u ? th->pad : f == 1u ? th->caps[3] : th->mute, 1);
+        galpha(256);
+    }
+}
+/* any knob: the next step of the machine's loop (or the one before), from its start; the sounds skipped stay quiet */
+static void mtutor_step(int32_t d)
+{
+    int w = mc.which;
+    int32_t step, u, ur, k, base = 0, L = mt_loop(w), loops = sh.t / L, n = MT_DEF[w].n, to;
+    mt_where_r(w, sh.t, &step, &u, &ur);
+    to = step + (d > 0 ? 1 : -1);
+    if (to >= n) { to = 0; loops++; }
+    if (to < 0) { to = n - 1; if (loops > 0) loops--; }
+    for (k = 0; k < to; k++) base += MT_DEF[w].ms[k] * TU_HOLD;
+    sh.t = loops * L + base; sh.knob_t = sh.t; mt_last = base;
+    snd_ui(d > 0 ? 79 : 72);
 }

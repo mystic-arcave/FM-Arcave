@@ -1,0 +1,15 @@
+# HOME in CRYSTAL ROAD: each step plays its scene twice, the step's mark fills as it goes; any knob steps on (twice)
+# and back (once), the arrows by the marks flash; the foot takes turns: HOME, any knob, REC
+900 btn 8
+2000 shot
+5000 shot
+7200 shot
+8000 enc 4 1
+8300 shot
+9000 enc 2 1
+9300 shot
+10000 enc 0 -1
+10300 shot
+13000 shot
+16000 shot
+16500 end

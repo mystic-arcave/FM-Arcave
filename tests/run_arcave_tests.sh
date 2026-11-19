@@ -29,6 +29,7 @@ run "Dutch: into the cave, the Hat, the rings, the dish, the jukebox" play dutch
 run "into the cave, the Hat, the jukebox, the settings" play story 1
 run "the jukebox past the Hat: its name at the screen's edge, Rock settling in its dip, PLAY: the rings" sh -c 'tests/run_arcave.sh juke 2 > build/host/juke.log 2>&1 && grep -q "^sound" build/host/juke.log'
 run "JUICE WORKS: HOME shows how it is played (a glass, the tap, the ticket's line, serving, moving a glass)" play help 4 4
+run "HOME in a machine: each step plays twice, its mark fills as it goes; any knob steps on and back" play helpknob 4 3
 run "CRYSTAL ROAD: HOME shows how it is played (a crystal at the line and its keys, twice, the far side, twice, a miss, KNOB 1 and ALGO)" play helprun 4 3
 run "NIGHT BLOOM: HOME shows how it is played (KNOB 1's petal, catching, SELECT's ring, ALGORITHM's ring, an arrow to each)" play helpbloom 4 5
 run "a new song at the mended jukebox: a long slide, effects, their page, kept (and saved)" sh -c 'tests/run_arcave.sh newsong 4 2 > build/host/newsong.log 2>&1 && grep -q "settings 0 saved" build/host/newsong.log'

@@ -10,12 +10,13 @@
 
 enum { SH_NONE, SH_INTRO, SH_MACH, SH_SCORES, SH_FX };
 enum { SA_NONE, SA_CLOSED, SA_LEAVE };
-static struct { uint8_t on; int32_t t, scroll, max; } sh;   /* scroll: how far down a long page is; max: how far it goes */
+static struct { uint8_t on; int32_t t, scroll, max, knob_t; } sh;   /* scroll: how far down a long page is; max: how far it goes;
+                                                                   knob_t: when a knob last stepped a tutorial */
 static uint32_t play_s, play_ms;                 /* the time played: whole seconds (kept in the save) and the rest */
 
 #include "ac_tutor.h"
 #include "ac_mtutor.h"
-static void sheet_open(int kind) { tu_last = -1; mt_last = -1; sh.on = (uint8_t)kind; sh.t = 0; sh.scroll = 0; sh.max = 0; snd_ui(74); sy_rumble_want = 0; }
+static void sheet_open(int kind) { tu_last = -1; mt_last = -1; sh.on = (uint8_t)kind; sh.t = 0; sh.scroll = 0; sh.max = 0; sh.knob_t = -100000; snd_ui(74); sy_rumble_want = 0; }
 static int sheet_tick(int32_t dt)
 {
     sh.t += dt;
@@ -34,6 +35,9 @@ static int sheet_tick(int32_t dt)
         if (BDOWN(BTN_REC)) { sh.on = SH_NONE; return SA_LEAVE; }
         if (sh.on == SH_FX && in.any_knob) sh.scroll = iclamp(sh.scroll + in.any_knob * TLH(ts(1, 3)), 0, sh.max);
         led_breathe_want |= 1u << BTN_REC;
+    }
+    if (in.any_knob && (sh.on == SH_MACH || sh.on == SH_INTRO)) {   /* a tutorial: any knob steps on, or back */
+        if (sh.on == SH_MACH) mtutor_step(in.any_knob); else tutor_step(in.any_knob);
     }
     if (sh.on == SH_MACH) mtutor_tick(dt);
     if (sh.on == SH_INTRO) tutor_tick(dt);

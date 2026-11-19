@@ -42,13 +42,34 @@ static const tu_step_t TU_STEP[5] = {
 #define TU_DY 134
 static const uint8_t TU_SHARP_AFTER[11] = {0, 1, 2, 4, 5, 7, 8, 9, 11, 12, 14};   /* the white key each top key follows */
 static int32_t tu_last;                          /* where in the loop the last tick was (for the sounds) */
+/* every tutorial (this one and each machine's, ac_mtutor.h) plays each step's scene TU_HOLD times before it moves on,
+ * so there is time to read; any knob steps on or back (sheet_tick) */
+#define TU_HOLD 2
 
-static void tu_where(int32_t t, int32_t *step, int32_t *u, int32_t *loops)
+/* where t falls: the step, how far into its scene (u, the scene playing again on each pass), how many loops so far;
+ * ur: how far into the step itself */
+static void tu_where_r(int32_t t, int32_t *step, int32_t *u, int32_t *loops, int32_t *ur)
 {
-    int32_t k, lt = t % TU_LOOP;
-    *loops = t / TU_LOOP;
-    for (k = 0; k < TU_N - 1 && lt >= TU_STEP[k].ms; k++) lt -= TU_STEP[k].ms;
-    *step = k; *u = lt;
+    int32_t k, lt = t % (TU_LOOP * TU_HOLD);
+    *loops = t / (TU_LOOP * TU_HOLD);
+    for (k = 0; k < TU_N - 1 && lt >= TU_STEP[k].ms * TU_HOLD; k++) lt -= TU_STEP[k].ms * TU_HOLD;
+    *step = k; *ur = lt; *u = lt % TU_STEP[k].ms;
+}
+static void tu_where(int32_t t, int32_t *step, int32_t *u, int32_t *loops) { int32_t ur; tu_where_r(t, step, u, loops, &ur); }
+/* the marks under a tutorial's scene, one a step: the step playing fills as it goes (how long until the next), and
+ * arrows either side say any knob steps on or back (bright a moment after a knob has turned) */
+static void tu_pips(int32_t n, int32_t step, int32_t prog256, int32_t y, int32_t knob_ago, uint32_t tm)
+{
+    int32_t k, x0 = 120 - n * 8, hot = knob_ago >= 0 && knob_ago < 500;
+    for (k = 0; k < n; k++) {
+        int32_t x = x0 + k * 16;
+        grect(x, y - 1, 14, 3, k < step ? th->pad : th->mute);   /* (done: lit; to come: dim; this one fills, white) */
+        if (k == step) grect(x, y - 1, 14 * iclamp(prog256, 0, 256) / 256, 3, th->text);
+    }
+    galpha(hot ? 256 : 110 + ipulse(tm, 1800) * 70 / 256);
+    gtextr(x0 - 6, y - 2, "\xE2\x86\x90", hot ? th->text : th->pad, 1);
+    gtext(x0 + n * 16 + 4, y - 2, "\xE2\x86\x92", hot ? th->text : th->pad, 1);
+    galpha(256);
 }
 /* the press nearest u in a step: which row, and how long ago it went down (negative: not yet; -1000: none) */
 static int32_t tu_tap(int32_t step, int32_t u, int32_t *row)
@@ -60,7 +81,7 @@ static int32_t tu_tap(int32_t step, int32_t u, int32_t *row)
 }
 static void tutor_tick(int32_t dt)
 {
-    int32_t step, u, loops, lt = sh.t % TU_LOOP, a = tu_last, k, j, row, age, base = 0;
+    int32_t step, u, loops, lt = sh.t % (TU_LOOP * TU_HOLD), a = tu_last, k, j, row, age, base = 0, r;
     uint32_t rowmask = 0;
     (void)dt;
     tu_where(sh.t, &step, &u, &loops);
@@ -68,13 +89,14 @@ static void tutor_tick(int32_t dt)
 #define TU_AT(ms) (a < (ms) && lt >= (ms))
     for (k = 0; k < TU_N; k++) {
         const tu_step_t *s = &TU_STEP[k];
-        for (j = 0; j < 2; j++)                  /* a press: the key's own note, as on the course */
-            if (s->tap[j] && TU_AT(base + s->tap[j])) sfx(key_note(s->row[j] == 2 ? 22 : 23), 0, 600, W_TRI, 2800, 6, 200);
-        if (s->act == TA_JUMP) {
-            if (TU_AT(base + TU_T_OFF)) snd_whoosh();
-            if (TU_AT(base + TU_T_LAND)) { sfx(67, 0, 800, W_SINE, 3400, 4, 220); sfx(79, 60, 600, W_SINE, 1800, 4, 220); snd_chime(1); }
+        for (r = 0; r < TU_HOLD; r++, base += s->ms) {   /* (each pass of the step's scene) */
+            for (j = 0; j < 2; j++)              /* a press: the key's own note, as on the course */
+                if (s->tap[j] && TU_AT(base + s->tap[j])) sfx(key_note(s->row[j] == 2 ? 22 : 23), 0, 600, W_TRI, 2800, 6, 200);
+            if (s->act == TA_JUMP) {
+                if (TU_AT(base + TU_T_OFF)) snd_whoosh();
+                if (TU_AT(base + TU_T_LAND)) { sfx(67, 0, 800, W_SINE, 3400, 4, 220); sfx(79, 60, 600, W_SINE, 1800, 4, 220); snd_chime(1); }
+            }
         }
-        base += s->ms;
     }
 #undef TU_AT
     tu_last = lt;
@@ -390,13 +412,13 @@ static void tu_mini(int32_t step, int32_t u, int32_t loops, uint32_t tm)
 static void tutor_draw(void)
 {
     static const int IDS[3] = {T_HELP_ROLL, T_HELP_LOW, T_HELP_HIGH};
-    int32_t step, u, loops, k, n, sc, a, fade = 0, id, row, age;
+    int32_t step, u, loops, k, n, sc, a, fade = 0, id, row, age, ur;
     uint32_t tm = (uint32_t)sh.t;
     const tu_step_t *st;
     const char *s, *rest;
     char word[40];
     col_t c;
-    tu_where(sh.t, &step, &u, &loops);
+    tu_where_r(sh.t, &step, &u, &loops, &ur);
     st = &TU_STEP[step];
     age = tu_tap(step, u, &row);
     c = st->act == TA_ROLL ? th->caps[0] : st->act == TA_JUMP ? th->pad : st->act == TA_SWAP ? th->caps[3] : th->caps[row == 2 ? 4 : 2];
@@ -429,7 +451,7 @@ static void tutor_draw(void)
         galpha(256);
     }
     /* where in the loop it is: a mark for each step under the scene */
-    for (k = 0; k < TU_N; k++) grect(120 - TU_N * 8 + k * 16, TU_SCENE_H + 1, 14, 2, k == step ? th->pad : th->mute);
+    tu_pips(TU_N, step, ur * 256 / (st->ms * TU_HOLD), TU_SCENE_H + 1, sh.t - sh.knob_t, tm);
     {   /* the thumb moves to the top row as a step changes to it, and in the last step before its second press; the
          * hands go out to the sides and come back as the grip changes; the knob hand comes in first, alone */
         int32_t rf = 256, sl = 0, st_ = 0, e;
@@ -452,7 +474,19 @@ static void tutor_draw(void)
         k = gblock_h(232, buf, a);
         gblock(4, TU_SCENE_H + 5 + imax(0, (3 * TLH(ts(1, 2)) - k) / 2), 232, buf, th->text, a, 1);
     }
-    galpha(150 + ipulse(tm, 1400) * 106 / 256);
-    gfit(120, 231, 232, TR(T_HELP_RETURN), th->pad, 1);
+    galpha(150 + ipulse(tm, 1400) * 106 / 256);  /* the foot: HOME back, and (taking turns with it) any knob steps */
+    gfit(120, 231, 232, TR((tm / 3000u) & 1u ? T_HELP_KNOB : T_HELP_RETURN), (tm / 3000u) & 1u ? th->caps[3] : th->pad, 1);
     galpha(256);
+}
+/* any knob: the next step (or the one before), from its start; the sounds skipped over stay quiet */
+static void tutor_step(int32_t d)
+{
+    int32_t step, u, loops, ur, k, base = 0, to, L = TU_LOOP * TU_HOLD;
+    tu_where_r(sh.t, &step, &u, &loops, &ur);
+    to = step + (d > 0 ? 1 : -1);
+    if (to >= TU_N) { to = 0; loops++; }
+    if (to < 0) { to = TU_N - 1; if (loops > 0) loops--; }
+    for (k = 0; k < to; k++) base += TU_STEP[k].ms * TU_HOLD;
+    sh.t = loops * L + base; sh.knob_t = sh.t; tu_last = base;
+    snd_ui(d > 0 ? 79 : 72);
 }
