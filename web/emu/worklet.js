@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// FM ARCAVE's emulator, the audio side: the WebAssembly FM-1 runs here, clocked by the sound the browser asks for.
+// FM-ARCAVE's emulator, the audio side: the WebAssembly FM-1 runs here, clocked by the sound the browser asks for.
 // It gets { type: "load", wasm, store } and answers "ready"; then "buttons", "keys", "enc", "midi" come in and
 // "frame" (the screen when it changed, the lights, MIDI out, the settings when they were saved) goes out.
 class FmArcave extends AudioWorkletProcessor {

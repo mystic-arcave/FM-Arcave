@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
-/* FM ARCAVE's intro: the title, the wide shot, "press PLAY to wake up Rock", the roll down the course to the cave.
+/* FM-ARCAVE's intro: the title, the wide shot, "press PLAY to wake up Rock", the roll down the course to the cave.
  * A port of the browser prototype (mystic-arcave-intro.html) to whole numbers: positions and speeds are in 1/256 px,
  * the land comes from a table (tools/gen_course.py), the physics steps 128 times a second. */
 #include "arcave_course.h"
@@ -25,6 +25,7 @@ static const course_t *co = &CO_SHORT;
 #define CO_NPOOL (co->npool)
 
 enum { IP_TITLE, IP_WIDE, IP_WAKE, IP_PLAY, IP_OUT, IP_DONE };
+static uint8_t lang_touched;                     /* OCT- or OCT+ pressed since power-on (the title's tip, OCT's breaths) */
 #define KEEP_AT 90000                            /* on the course this long and not at its end: "keep going" */
 
 typedef struct {
@@ -49,6 +50,8 @@ static struct {
     int32_t veil;                                /* the rock face that hides the hollow behind the start: 256 solid .. 0 gone */
     uint8_t race;                                /* the race back: 0 not, 1 out of the door (before the line), 2 on the clock */
     int32_t race_ms, race_show, step_cd;
+    uint8_t oct;                                 /* the wide shot: OCT- and OCT+ breathing three times (1 to start, 2 on) */
+    int32_t wake_at;                             /* the wide shot: when "press PLAY" comes (after OCT's three breaths) */
 } G;
 /* the race back: out of the Arcave's upper door, over the start line, to where the game began. The pads and the
  * sky things are the mirrored set (CO_RPAD, CO_RSKY), a booster throws Rock up each of the four big steps, and
@@ -227,7 +230,7 @@ static void intro_sky_hits(int32_t dt)
 }
 
 #define CTRL_X 96                                /* the controls box: its middle, in the course's pixels */
-static int intro_want_play(void) { return (G.phase == IP_WIDE && G.t > 1000) || (G.phase == IP_PLAY && G.cave_a > 128); }
+static int intro_want_play(void) { return (G.phase == IP_WIDE && G.t > G.wake_at) || (G.phase == IP_PLAY && G.cave_a > 128); }
 
 static void intro_press_play(void)
 {
@@ -245,10 +248,17 @@ static int intro_tick(int32_t dt)
     if (in.kdown && G.phase != IP_TITLE) snd_key(in.hikey);
     if (G.phase == IP_TITLE) {
         G.fade = G.t > 5600 ? imin(256, (G.t - 5600) * 256 / 600) : 0;
-        if (G.t > 6200) { G.phase = IP_WIDE; G.t = -800; }
+        if (G.t > 6200) {                        /* the title has faded: OCT- and OCT+ breathe three times, then PLAY */
+            G.phase = IP_WIDE; G.t = -800;
+            G.oct = !lang_touched;               /* (not if a language was already chosen over the title) */
+            G.wake_at = G.oct ? 0x3FFFFFFF : 1000;
+        }
     } else if (G.phase == IP_WIDE) {
         G.fade = G.t < 0 ? -G.t * 256 / 800 : 0;
         intro_setcam(128, 26, 78);
+        if (G.oct == 1) { fm1_breath_sync(); G.oct = 2; }   /* (a breath from dark, now) */
+        if (G.oct && (fm1_breaths() >= 3u || lang_touched)) { G.oct = 0; G.wake_at = G.t + 300; }
+        if (G.oct) led_breathe_want |= 1u << BTN_OCT_DOWN | 1u << BTN_OCT_UP;
     } else if (G.phase == IP_WAKE) {
         int32_t t = G.t;
         if (t < 500) intro_mixcam(CAM_WIDE, CAM_ZOOM, t * 256 / 500);
@@ -371,6 +381,20 @@ static int intro_tick(int32_t dt)
             if (G.t > 1600) { G.phase = IP_DONE; sy_rumble_want = 0; return 1; }
         }
     }
+    if (G.race && G.phase == IP_PLAY) {           /* the race back: a cheer from each crowd as Rock rolls by */
+        static int32_t cheered = -1;
+        uint32_t ci;
+        for (ci = 0; ci < CO_NPROP; ci++) {
+            const co_prop_t *o = &CO_PROP[ci];
+            if (o->t == 4 && iabs((r->x >> 8) - o->x) < 40 && cheered != (int32_t)ci) {
+                static const uint8_t YAY[4] = {72, 76, 79, 84};
+                int32_t j;
+                cheered = (int32_t)ci;
+                for (j = 0; j < 4; j++) sfx(YAY[j], (uint32_t)j * 70u, 260, W_SQUARE, 1500, 2, 110);
+                sfx(96, 0, 400, W_NOISE, 2400, 40, 90);
+            }
+        }
+    }
     /* the lights: PLAY breathes when it is wanted; near a pad every key calls */
     if (intro_want_play()) led_play_breathe = 1;
     /* the controls box stands by the start: while it is on the screen HOME breathes (arcave.c opens the sheet) */
@@ -429,7 +453,6 @@ static void far_layer(int32_t tlx, int32_t tly, int32_t par256, int32_t base, in
 
 /* the tip at the foot of the title: "change language" between OCT- and OCT+ until one of them is pressed, the
  * language's name after. arcave.c draws it over the title and for three seconds past it. a: 0..256 */
-static uint8_t lang_touched;
 static void lang_tip_draw(int32_t a)
 {
     const char *s = TR(lang_touched ? T_LANG : T_CHANGE_LANG);
@@ -452,7 +475,7 @@ static void intro_draw_title(void)
 {
     int32_t tt = G.t, d = smooth8(0, 1150, tt), rise = (256 - d) * 12 / 256, open, lk = 0, i, w = 0, x0, sweep;
     int32_t up = ts(1, 2) > 1 ? 26 : 0;          /* larger text under the name: the hat and the name move up for it */
-    const char *s = "FM ARCAVE";
+    const char *s = "FM-ARCAVE";
     char one[2] = {0, 0};
     int32_t xs[16], n = 0;
     if (th->dark) { sky_draw(); gfade(256 - 179 * smooth8(0, 1500, tt) / 256); }
@@ -612,10 +635,37 @@ static void intro_draw(void)
         if (o->x < x0 || o->x > x1) continue;
         px = WX(o->x << 8); py = WY(land_y(o->x << 8));
         near = iabs((r->x >> 8) - o->x) < 70 && G.phase == IP_PLAY;
-        if (o->t == 0) {                         /* a sleeping rock friend: it looks up as you pass */
+        if (o->t == 0 && G.race) {               /* the race back: every rock friend is up, hopping, cheering you on */
+            int32_t s = (int32_t)o->n, hop = (iabs(tsin(tm, 140, o->x * 2900)) * ZS(7)) >> 14;
+            rock_draw(px, py - ((66 * s / 10) * z >> 16) - hop, (z * s) >> 8, tsin(tm, 140, o->x * 2900) >> 4, (tm + (uint32_t)o->x * 37u) % 2600u < 120u ? 40 : 256,
+                      th->rock, th->rock_rim, th->dark, th->caps[o->c], th->eye, th->pupil);
+        } else if (o->t == 0) {                  /* a sleeping rock friend: it looks up as you pass */
             int32_t s = (int32_t)o->n, e = near ? (tsin(tm, 30, o->x * 10430) > 15700 ? 26 : 256) : 0;
             rock_draw(px, py - ((66 * s / 10) * z >> 16), (z * s) >> 8, (land_sl(o->x << 8) * 6 / 10 * 10430) >> 8, e,
                       th->rock, th->rock_rim, th->dark, th->caps[o->c], th->eye, th->pupil);
+        } else if (o->t == 4 && G.race) {        /* the race back: where a sign stood going out, a crowd of rock friends
+                                                    cheering (the signs' words were for the way in), confetti over them */
+            for (k = 0; k < 3; k++) {             /* three friends, hopping out of step, arms waving over their heads */
+                static const int16_t SZ[3] = {300, 360, 280};
+                int32_t s = SZ[k], ph = (int32_t)o->n * 9000 + k * 21000, hop = (iabs(tsin(tm, 170, ph)) * ZS(10 + 4 * near)) >> 14;
+                int32_t fx = px + ZS(k * 28 - 28), fy = WY(land_y((o->x + k * 28 - 28) << 8)), rr = (66 * s / 10) * z >> 16, cy3 = fy - rr - hop, j;
+                col_t mc = th->caps[(o->n + (uint32_t)k * 2u) % 5u];
+                for (j = -1; j <= 1; j += 2) {
+                    int32_t wv = (tsin(tm, 260, ph + j * 8000) * rr) >> 15;
+                    int32_t hx = fx + j * (rr * 2 + wv / 2), hy = cy3 - rr * 2 + wv;
+                    gline(fx + j * rr * 4 / 5, cy3, hx, hy, th->text);
+                    gline(fx + j * rr * 4 / 5 + j, cy3, hx + j, hy, th->text);
+                    gdisc(hx, hy, imax(1, ZS(2)), mc);      /* (a hand) */
+                }
+                rock_draw(fx, cy3, (z * s) >> 8, tsin(tm, 170, ph) >> 4, 256, th->rock, th->rock_rim, th->dark, mc, th->eye, th->pupil);
+            }
+            for (k = 0; k < 14; k++) {            /* confetti: thrown up, drifting down, again and again */
+                int32_t q = (int32_t)((tm + (uint32_t)k * 173u) % 1500u), cx2 = px + ZS(((int32_t)(ihash((uint32_t)(k * 7) + o->n) % 70u) - 35) + q * ((k & 1) ? 1 : -1) / 80);
+                int32_t cy2 = py - ZS(36) - ZS(40) * q / 1500 * (1500 - q) / 375;
+                galpha(256 - q * 120 / 1500);
+                grect(cx2, cy2, imax(1, ZS(3)), imax(1, ZS(2)), th->caps[k % 5]);
+            }
+            galpha(256);
         } else if (o->t == 1) {
             for (k = 0; k < (int32_t)o->n; k++) {
                 int32_t h = ZS(8 + (int32_t)(ihash((uint32_t)(o->x * 7 + k)) * 16u >> 16)), w = ZS(3), bx = px + ZS(k * 7 - 7), xy[6];
@@ -806,8 +856,8 @@ static void intro_draw(void)
     rock_draw(WX(r->x), WY(r->y), z, r->th, G.eyes, th->rock, th->rock_rim, th->dark, th->moss, th->eye, th->pupil);
     {   /* words in the sky */
         int32_t pulse = 97 + 159 * ipulse(tm, 2600) / 256;
-        if (G.phase == IP_WIDE && G.t > 1000) {
-            int32_t a = imin(256, (G.t - 1000) * 256 / 800) * pulse / 256;
+        if (G.phase == IP_WIDE && G.t > G.wake_at) {
+            int32_t a = imin(256, (G.t - G.wake_at) * 256 / 800) * pulse / 256;
             /* the first time the PLAY button is shown: nice and large, the words making room for it */
             {
                 const char *q = TR(T_WAKE1);

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-"""FM ARCAVE's site, ready to publish: the home page, the emulator, the installer, the Link hub and the package.
+"""FM-ARCAVE's site, ready to publish: the home page, the emulator, the installer, the Link hub and the package.
 
     tools/make_site.py VERSION [PACKAGE.fwsc] [OUT]      (after web/emu/build.sh; OUT defaults to build/site)
 
@@ -13,7 +13,7 @@
 
 Without a package the installer is left out and the home page still stands (CI: the emulator goes up even when
 the FM-1 toolchain could not be fetched). A package is refused unless it carries the standard update loader and one
-of FM ARCAVE's own identities, FM-1_96N (from 0.10: FM-1_970 on).
+of FM-ARCAVE's own identities, FM-1_96N (from 0.10: FM-1_970 on).
 """
 import json
 import re
@@ -53,7 +53,7 @@ def main():
         data = pkg.read_bytes()
         product = product_of(data)
         if not re.fullmatch(r"FM-1_9[6-8]\d", product):
-            raise SystemExit(f"make_site: {pkg.name} says {product!r}, not one of FM ARCAVE's identities (FM-1_96N to FM-1_989)")
+            raise SystemExit(f"make_site: {pkg.name} says {product!r}, not one of FM-ARCAVE's identities (FM-1_96N to FM-1_989)")
         if LOADER_MARK not in data:
             raise SystemExit(f"make_site: {pkg.name} has no standard update loader ({LOADER_MARK.decode()})")
         name = f"fm-arcave-{ver}.fwsc"
@@ -70,7 +70,7 @@ def main():
     else:
         (out / "install").mkdir()
         (out / "install" / "index.html").write_text(
-            '<!DOCTYPE html><meta charset="utf-8"><title>FM ARCAVE</title><link rel="stylesheet" href="../site.css">'
+            '<!DOCTYPE html><meta charset="utf-8"><title>FM-ARCAVE</title><link rel="stylesheet" href="../site.css">'
             '<div class="wrap"><p style="padding:48px 0">This build has no FM-1 package. <a href="../">Back</a></p></div>')
         print("site: no package: the installer is left out")
     (out / "firmware" / "versions.json").write_text(json.dumps(versions, indent=1) + "\n")

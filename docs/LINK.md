@@ -38,7 +38,7 @@ the browser build: the follower lands within two ticks (about 12 ms at 100 BPM) 
 
 ## Bluetooth: what was found, and what is not done
 
-FM ARCAVE 0.1 has **no Bluetooth**: Dinghy's platform has none. The messages above were chosen so that the day it has,
+FM-ARCAVE 0.1 has **no Bluetooth**: Dinghy's platform has none. The messages above were chosen so that the day it has,
 nothing else changes. What reading the open FM-1 Bluetooth code (Optimist's stack, as JIANT and fm1-base carry it)
 showed:
 

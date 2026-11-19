@@ -1,0 +1,14 @@
+# the rings lock as they come into line: KNOB 4 puts the outer crack straight down, KNOB 3 brings ring 3 to it (both
+# lock: 3 and 4 boxed at the foot), KNOB 3 again does nothing, KNOB 2 and KNOB 1 follow, the light
+1000 shot
+1500 enc 5 3
+2000 enc 4 6
+2300 shot
+2600 enc 4 1
+2700 shot
+3500 enc 3 5
+3800 shot
+4500 enc 2 -2
+4700 shot
+6000 shot
+7000 end

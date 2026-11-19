@@ -1,0 +1,5 @@
+# OCT+ pressed over the title: the language is found, so no OCT breaths after it; PLAY comes as before
+3000 btn 1
+7000 shot
+8600 shot
+8800 end

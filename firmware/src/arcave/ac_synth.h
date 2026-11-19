@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
-/* FM ARCAVE's sound: a small bank of voices (sine, triangle, square, saw, noise) with an echo, the cave's hum, the
+/* FM-ARCAVE's sound: a small bank of voices (sine, triangle, square, saw, noise) with an echo, the cave's hum, the
  * rock's rumble, and the clock every tune runs on. It all runs in the audio interrupt; the game asks for sounds
  * through a queue (one writer: the main loop), so nothing is shared half-written.
  *

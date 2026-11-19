@@ -1,4 +1,5 @@
-# NIGHT BLOOM with every spore caught (CATCH=1): the second, third and fourth ring join after five each
+# NIGHT BLOOM with every spore caught (CATCH=1): SELECT joins at five caught, ALGORITHM at fifteen, KNOB 2 at fifty,
+# each with its arrow
 300 shot
 500 btn 12
 4000 shot
@@ -8,4 +9,11 @@
 33000 shot
 40000 shot
 52000 shot
-53000 end
+54500 shot
+56000 shot
+57500 shot
+60000 shot
+64000 shot
+68000 shot
+76000 shot
+77000 end

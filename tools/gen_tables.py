@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-"""FM ARCAVE's tables: firmware/gen/arcave_tab.h (a sine, the notes' phase steps, the pixel font).
+"""FM-ARCAVE's tables: firmware/gen/arcave_tab.h (a sine, the notes' phase steps, the pixel font).
 
 The font is the game's own: capitals five pixels tall in the manner of the title's lettering, with the
 accented letters German, Danish, French, Spanish and Turkish need (two rows above the capitals, one below).
@@ -142,7 +142,7 @@ cps = sorted(glyphs)
 out = []
 w_ = out.append
 w_("/* SPDX-License-Identifier: GPL-3.0-only */")
-w_("/* FM ARCAVE's tables. Written by tools/gen_tables.py: do not edit. */")
+w_("/* FM-ARCAVE's tables. Written by tools/gen_tables.py: do not edit. */")
 w_("static const int16_t AC_SIN[257] = {   /* a quarter wave, Q14 */")
 q = [round(math.sin(i / 256 * math.pi / 2) * 16384) for i in range(257)]
 for k in range(0, 257, 16):

@@ -1,6 +1,6 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-3.0-only
-# FM ARCAVE on this computer (tests/host.c): a script presses keys and turns knobs, out come the screens and the sound.
+# FM-ARCAVE on this computer (tests/host.c): a script presses keys and turns knobs, out come the screens and the sound.
 #   tests/run_arcave.sh NAME [STORY]     runs tests/scripts/NAME.txt -> build/host/NAME-<ms>.ppm, NAME.wav, NAME.png
 #   tests/run_arcave.sh NAME STORY SCENE  STORY 0-4: start that far into the story (4: the jukebox mended);
 #                                        SCENE 1 the rings, 2 the dish, 3-5 a machine, 6 the race back, 7 the room by the door, 8 the ledge behind the start, 9 the cave at AT=X,Y: straight there

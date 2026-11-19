@@ -1,10 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
-/* FM ARCAVE's three machines. All three run on the jukebox's clock, so what you do in them lands in the music.
+/* FM-ARCAVE's three machines. All three run on the jukebox's clock, so what you do in them lands in the music.
  *   MYSTIC RUN        Rock runs on the beat; a key hops a crystal, the top row hops higher. KNOB 1 is the tempo.
  *   JUICE WORKS       four taps of mushroom juice (KNOB 1-4), glasses put under them, moved and served with the
  *                     keys, tickets that say what to pour: many things to keep going at once.
  *   NIGHT BLOOM       new here: four knobs turn four petals round a flower, one to a ring, a click a twenty-fourth
- *                     of a turn, as the knob itself. Spores drift in; catch each on the petal of its own colour. */
+ *                     of a turn, as the knob itself. Spores drift in slowly from beyond the screen; catch each on the
+ *                     petal of its own colour. An arrow points off the screen to each knob as it joins. */
 
 enum { MS_TITLE, MS_PLAY, MS_OVER };
 static struct { uint8_t which, state; int32_t t, score, lives, combo, msg_t, flash; uint8_t msg; } mc;
@@ -71,21 +72,29 @@ static int mr_blk_btn(uint32_t h, int which)     /* a block's button (its second
     return which ? (b1 + 1 + (int)(ihash(h * 19u + mr.seed) % 5u)) % 6 : b1;
 }
 #define MR_HOP 62                                /* ticks in the air */
+/* the way gets harder slowly: crystals few and far apart at first, more of them over two minutes or so; tall ones only
+ * after half a minute, and rarely at first; blocks from the twenty-fourth beat, a double block only after eighty */
+static int mr_raw(uint32_t h)                    /* a crystal at (even) half-beat h, before the spacing rule: 0, 1, 2 */
+{
+    uint32_t r = ihash(h * 7u + mr.seed), dens = 11000u + (uint32_t)imin(37000, ((int32_t)h - 12) * 90);
+    if (h > 56u && r < dens * (uint32_t)imin(256, ((int32_t)h - 56) * 2) / 1024u) return 2;
+    return r < dens ? 1 : 0;
+}
 static int mr_obs(uint32_t h)                    /* what stands at half-beat h: 0 nothing, 1 a crystal, 2 a tall one, 3 a spore,
                                                     4 a block (its button makes it go), 5 a double block (two buttons) */
 {
     uint32_t r;
-    if (h < 8u) return 0;
-    if (h >= 24u && !(h & 7u)) {                 /* every fourth beat may be a block: never two on the screen at once */
+    if (h < 12u) return 0;
+    if (h >= 48u && !(h & 7u)) {                 /* every fourth beat may be a block: never two on the screen at once */
         uint32_t rb = ihash(h * 13u + mr.seed);
-        if (rb < (h < 72u ? 24000u : 36000u)) return (h >= 88u && !(rb & 3u)) ? 5 : 4;
+        if (rb < (h < 120u ? 16000u : 30000u)) return (h >= 160u && !(rb & 3u)) ? 5 : 4;
+    }
+    if (!(h & 1u)) {
+        int c = mr_raw(h);
+        if (c && h < 200u && h >= 14u && mr_raw(h - 2u)) return 0;   /* (early on, never two crystals a beat apart) */
+        return c;
     }
     r = ihash(h * 7u + mr.seed);
-    if (!(h & 1u)) {
-        uint32_t dens = 26000u + imin(26000, (int32_t)h * 120);
-        if (r < dens / 4u && h > 24u) return 2;
-        return r < dens ? 1 : 0;
-    }
     return (r < 16000u && mr_obs(h + 1u) == 0) ? 3 : 0;
 }
 static int32_t mr_height(uint32_t now)           /* how high Rock is, px */
@@ -151,6 +160,21 @@ static void run_tick(void)
     }
     if (now % 96u < 12u) led_btn_want |= 1u << BTN_PLAY;   /* (PLAY's green light, on the beat) */
 }
+/* a crystal to hop: solid in the text's colour, a hot outline and a glow that pulses on the beat, so it stands out from
+ * everything behind it (here and in HOME's loop) */
+static void mr_crystal(int32_t x, int32_t g, int tall, int32_t beat)
+{
+    int32_t hh = tall ? 30 : 13, k, xy[6];
+    galpha(90 + beat * 70 / 256); gdisc(x, g - hh / 2, hh / 2 + 8, th->caps[0]); galpha(256);
+    for (k = 0; k < (tall ? 3 : 2); k++) {
+        xy[0] = x - 5 + k * 5 - 4; xy[1] = g; xy[2] = x - 5 + k * 5 + (k - 1); xy[3] = g - hh + iabs(k - 1) * 5; xy[4] = x - 5 + k * 5 + 4; xy[5] = g;
+        gpoly(xy, 3, th->text);
+    }
+    for (k = 0; k < (tall ? 3 : 2); k++) {
+        xy[0] = x - 5 + k * 5 - 4; xy[1] = g; xy[2] = x - 5 + k * 5 + (k - 1); xy[3] = g - hh + iabs(k - 1) * 5; xy[4] = x - 5 + k * 5 + 4; xy[5] = g;
+        gpolyline(xy, 3, 1, th->caps[0]);
+    }
+}
 static void run_draw(void)
 {
     uint32_t now = (tr_now_q8() >> 8) - mr.t0, h, tm = (uint32_t)mc.t;
@@ -159,10 +183,12 @@ static void run_draw(void)
     sky_draw();
     far_layer((int32_t)now / 6, 0, 256, 120, 0, th->far1, th->fill);
     far_layer((int32_t)now / 3, 0, 256, 142, 1, th->far2, th->fill);
-    for (i = 0; i < 6; i++) {                    /* mushrooms that swell on the beat */
+    galpha(th->dark ? 70 : 90);                 /* mushrooms that swell on the beat: dim, far back (nothing to jump) */
+    for (i = 0; i < 6; i++) {
         int32_t wx = ((int32_t)(now * 60u / 96u) / 80 + i) * 80, x = wx - (int32_t)(now * 60u / 96u), s = 90 + (int32_t)(ihash((uint32_t)(wx / 80)) >> 10);
         mush_draw(x, gy, s + beat * 16 / 256, th->caps[ihash((uint32_t)(wx / 80 + 3)) * 5u >> 16], th->stem, beat);
     }
+    galpha(256);
     grect(0, gy, 240, 62, th->ground);
     for (i = 0; i < 4; i++) {
         static const uint8_t BD[4] = {4, 9, 15, 23};
@@ -186,17 +212,7 @@ static void run_draw(void)
                 gfit(x, by + 10, 46, nm, th->text, 2);
             }
         }
-        else {                                   /* crystals: plain to see at first, then less and less so */
-            int32_t hh = o == 1 ? 13 : 30, xy[6], k, vis = iclamp(256 - ((int32_t)h - 8) * 2, 84, 256);
-            if (vis > 100) { galpha((vis - 84) * 150 / 172); gdisc(x, gy - hh / 2, hh / 2 + 9, th->caps[h % 5u]); }
-            for (k = 0; k < (o == 1 ? 2 : 3); k++) {
-                xy[0] = x - 5 + k * 5 - 4; xy[1] = gy; xy[2] = x - 5 + k * 5 + (k - 1); xy[3] = gy - hh + iabs(k - 1) * 5; xy[4] = x - 5 + k * 5 + 4; xy[5] = gy;
-                galpha(256); gpoly(xy, 3, th->dark ? 0 : th->bands[k]);
-                if (vis > 128) { galpha((vis - 128) * 2); gpoly(xy, 3, th->caps[(h + (uint32_t)k) % 5u]); }
-                galpha(vis); gpolyline(xy, 3, 1, vis > 190 ? th->pad : th->caps[(h + (uint32_t)k) % 5u]);
-                galpha(256);
-            }
-        }
+        else mr_crystal(x, gy, o == 2, beat);   /* crystals: the danger, bright and outlined, always */
     }
     rock_draw(rx, gy - 8 - mr_height(now), 256, (int32_t)(now * 400u), (tm % 3100u) < 150u ? 40 : 256, th->rock, th->rock_rim, th->dark, th->moss, th->eye, th->pupil);
     if (mc.flash > 0) { galpha(mc.flash * 120 / 300); grect(0, 0, 240, 240, th->caps[0]); galpha(256); }
@@ -214,8 +230,9 @@ static void run_draw(void)
 /* Four taps of mushroom juice over a counter with four bays. KNOB 1-4 open and close the taps (three clicks:
  * a trickle, a pour, a gush). The keys under a tap put a glass in its bay; pressed again (as they are let go) the
  * glass is served; held while a key under another tap is pressed, the glass moves there. Tickets hang between the
- * taps: each shows the drink to make, layer by layer, a mark on the glass to a part. Juice on the floor, a glass
- * run over, a wrong drink or a ticket left too long costs a drop of the five. */
+ * taps: each shows the drink to make, layer by layer, in a glass the very size and shape of the ones under the taps.
+ * The first two drinks of more than one juice wait twice as long. Juice on the floor, a glass run over, a wrong drink
+ * or a ticket left too long costs a drop of the five. */
 #define JW_NTK 3
 #define JW_UPX 6                                 /* px to a part, on a glass and on a ticket alike */
 #define JW_CAP 6                                 /* parts a glass holds */
@@ -230,7 +247,7 @@ static struct {
     jw_glass_t g[4], out;
     int32_t puddle[4], splash[4], out_t, out_x, out_ok;
     struct { uint8_t on, n, c[3], u[3]; int32_t t, life; } tk[JW_NTK];
-    int32_t spawn_t, served;
+    int32_t spawn_t, served, multi;              /* multi: drinks of two juices or more asked for so far */
     uint32_t prev_keys, seed, nseed;
 } jw;
 static int jw_zone(int key) { return key * 4 / AC_NKEY; }
@@ -256,6 +273,7 @@ static void jw_ticket(void)
         jw.tk[i].c[k] = (uint8_t)c; jw.tk[i].u[k] = (uint8_t)u;
     }
     jw.tk[i].life = imax(20000, 42000 - jw.served * 1100) + (jw.tk[i].n - 1) * 9000;
+    if (jw.tk[i].n > 1 && jw.multi++ < 2) jw.tk[i].life *= 2;   /* the first two mixed drinks: twice the time */
     jw.tk[i].t = jw.tk[i].life; jw.tk[i].on = 1;
     sfx(79, 0, 120, W_SQUARE, 1400, 2, 120); sfx(86, 90, 200, W_SQUARE, 1400, 2, 120);   /* a bell: an order */
 }
@@ -409,10 +427,10 @@ static void juice_draw(void)
             g.n = jw.tk[i].n;
             for (k = 0; k < g.n; k++) { g.c[k] = jw.tk[i].c[k]; g.v[k] = Q8(jw.tk[i].u[k]); }
             if (left < 64 && (tm / 160u) & 1u) galpha(120);
-            gline(x, 16, x + sway, 78, th->mute);
-            grect(x - 13 + sway, 78, 27, 62, th->panel); gbox(x - 13 + sway, 78, 27, 62, left < 64 ? th->caps[0] : th->text);
-            grect(x - 11 + sway, 81, 23 * left / 256, 3, left < 64 ? th->caps[0] : left < 128 ? JW_COL[0] : JW_COL[2]);
-            jw_glass_draw(x + sway, 135, 8, &g, th->text);
+            gline(x, 16, x + sway, 74, th->mute);   /* (the glass on it is the one under the taps: same width, same marks) */
+            grect(x - 17 + sway, 74, 35, 66, th->panel); gbox(x - 17 + sway, 74, 35, 66, left < 64 ? th->caps[0] : th->text);
+            grect(x - 15 + sway, 77, 31 * left / 256, 3, left < 64 ? th->caps[0] : left < 128 ? JW_COL[0] : JW_COL[2]);
+            jw_glass_draw(x + sway, 135, 13, &g, th->text);
             galpha(256);
         }
     if (jw.out_t > 0) {                          /* a glass on its way out: up and off if it was right, dropped if not */
@@ -425,21 +443,62 @@ static void juice_draw(void)
 }
 
 /* ---------------------------------------------------------------- NIGHT BLOOM */
-#define NB_MAX 14
+#define NB_MAX 24
 static const uint8_t NB_R[4] = {26, 42, 58, 74};   /* drawn in from the frame: the spores have room to be seen coming */
 #define NB_ARC 7000                              /* a petal's half width */
 /* a ring, its petal and its spores share one colour no other ring could be taken for: yellow, white, green, blue */
-/* the four rings' knobs, in the order they join: two from the right hand's side of the panel, two from the left */
-static const uint8_t NB_ENC[4] = {ENC_KNOB1, ENC_SELECT, ENC_KNOB2, ENC_ALGORITHM};
-static const char *const NB_KNOB[4] = {"KNOB 1", "SELECT", "KNOB 2", "ALGORITHM"};
+/* the four rings' knobs, in the order they join: KNOB 1 (right of the screen), SELECT (left, above), ALGORITHM (left,
+ * below), and KNOB 2 only for whoever has caught fifty */
+static const uint8_t NB_ENC[4] = {ENC_KNOB1, ENC_SELECT, ENC_ALGORITHM, ENC_KNOB2};
+static const char *const NB_KNOB[4] = {"KNOB 1", "SELECT\nKNOB", "ALGORITHM\nKNOB", "KNOB 2"};
+static const uint8_t NB_JOIN[4] = {0, 5, 15, 50};   /* spores caught before each ring joins */
 static const col_t NB_COL[4] = {AC_RGB(255, 214, 40), AC_RGB(255, 255, 255), AC_RGB(40, 224, 96), AC_RGB(48, 112, 255)};
+/* where each knob's arrow points from (the FM-1's knobs are off the screen that way): its tip, its direction (angle
+ * units), the middle of its words */
+static const int16_t NB_TAG[4][5] = {{226, 28, -8192, 172, 46}, {14, 28, -24576, 58, 46}, {12, 212, 24576, 76, 172}, {232, 40, -2500, 170, 36}};
+#define NB_TAG_MS 4200                           /* how long a joining knob's arrow stays */
 static struct {
     int32_t ang[4], hit[4];
     struct { uint32_t born; int16_t a, curl; uint8_t c, on, past; } sp[NB_MAX];
     struct { int16_t x, y; uint8_t c; } fl[48];
     uint32_t nfl, last_beat, t0;
-    int32_t breath, rings, caught, ring_t, rip_t;
+    int32_t rings, caught, ring_t;
 } nb;
+/* an arrow at (x, y) pointing along ang (bobbing toward where it points), and the words of knob k by it, centred on
+ * (lx, ly), each line its own: for a new knob, here and in HOME's loop (ac_mtutor.h) */
+static void nb_tag(int32_t x, int32_t y, int32_t ang, int32_t lx, int32_t ly, int k, int32_t a, uint32_t tm, int32_t sc)
+{
+    int32_t bob = (tsin(tm, 70, 0) + 16384) * 4 / 32768, len = 10 * sc + 6, dx = icos(ang), dy = isin(ang), i, xy[6], nl = 1, wmax = 0;
+    const char *s = NB_KNOB[k], *p;
+    char line[12];
+    col_t c = NB_COL[k];
+    if (a <= 0) return;
+    x += (bob * dx) >> 14; y += (bob * dy) >> 14;
+    galpha(a);
+    for (i = -1; i <= 1; i++)                    /* the shaft, three px thick, and the head */
+        gline(x - ((len * dx) >> 14) + ((i * -dy) >> 14), y - ((len * dy) >> 14) + ((i * dx) >> 14), x - ((6 * dx) >> 14) + ((i * -dy) >> 14), y - ((6 * dy) >> 14) + ((i * dx) >> 14), c);
+    xy[0] = x + ((2 * dx) >> 14); xy[1] = y + ((2 * dy) >> 14);
+    xy[2] = x - ((9 * dx + 6 * -dy) >> 14); xy[3] = y - ((9 * dy + 6 * dx) >> 14);
+    xy[4] = x - ((9 * dx - 6 * -dy) >> 14); xy[5] = y - ((9 * dy - 6 * dx) >> 14);
+    gpoly(xy, 3, c);
+    for (p = s; *p; p++) if (*p == '\n') nl++;
+    for (p = s; *p; ) {                          /* the words: a dark plate, then each line centred */
+        int32_t m = 0;
+        while (*p && *p != '\n' && m < 11) line[m++] = *p++;
+        line[m] = 0; if (*p) p++;
+        wmax = imax(wmax, gtextw(line, sc));
+    }
+    galpha(a * 200 / 256);
+    grect(lx - wmax / 2 - 4, ly - nl * TLH(sc) / 2 - 3, wmax + 8, nl * TLH(sc) + 4, th->bg);
+    galpha(a);
+    for (p = s, i = 0; *p; i++) {
+        int32_t m = 0;
+        while (*p && *p != '\n' && m < 11) line[m++] = *p++;
+        line[m] = 0; if (*p) p++;
+        gtextc(lx, ly - nl * TLH(sc) / 2 + i * TLH(sc) + sc, line, c, sc);
+    }
+    galpha(256);
+}
 static void bloom_spawn(uint32_t now, uint32_t seed)
 {
     uint32_t i;
@@ -450,17 +509,18 @@ static void bloom_spawn(uint32_t now, uint32_t seed)
             return;
         }
 }
-/* a spore's place: it comes in quickly from the edge and slows as it nears its own ring, reaching it three beats after
- * it is born (on the beat); there it lingers half a beat, then falls to the flower. It can be caught all the while it is
- * at its ring: from a little before it arrives until it leaves (NB_EARLY .. NB_LINGER), not in a single instant */
-#define NB_IN 288
-#define NB_EARLY 36
-#define NB_LINGER 48
+/* a spore's place: it comes in slowly from beyond the screen's corners (seven beats on the way), easing a little as it
+ * nears its own ring; there it lingers two thirds of a beat, then falls to the flower. It can be caught all the while it
+ * is at its ring: from half a beat before it arrives until it leaves (NB_EARLY .. NB_LINGER) */
+#define NB_IN 672
+#define NB_FAR 182                               /* where it starts: past the corners (the farthest is 174 px out) */
+#define NB_EARLY 48
+#define NB_LINGER 64
 #define NB_OUT 192
 static void bloom_pos(uint32_t i, uint32_t now, int32_t *rad, int32_t *ang)
 {
     int32_t age = (int32_t)(now - nb.sp[i].born), ring = NB_R[nb.sp[i].c], q;
-    if (age <= NB_IN) { q = NB_IN - age; *rad = ring + (122 - ring) * q / NB_IN * q / NB_IN; }
+    if (age <= NB_IN) { q = (NB_IN - age) * 256 / NB_IN; *rad = ring + (NB_FAR - ring) * (3 * q + q * q / 256) / 1024; }
     else if (age <= NB_IN + NB_LINGER) *rad = ring - 3 * (age - NB_IN) / NB_LINGER;
     else *rad = ring - 3 - (ring - 9) * imin(NB_OUT, age - NB_IN - NB_LINGER) / NB_OUT;
     *ang = nb.sp[i].a + nb.sp[i].curl * age / NB_IN;
@@ -468,28 +528,22 @@ static void bloom_pos(uint32_t i, uint32_t now, int32_t *rad, int32_t *ang)
 static void bloom_tick(int32_t dt)
 {
     uint32_t now = (tr_now_q8() >> 8) - nb.t0, i, beat2;
-    int32_t k, hard = nb.caught >= 30;
+    int32_t k, hard = nb.caught >= 90;
     for (k = 0; k < 4; k++) {
         if (k < nb.rings && in.enc[NB_ENC[k]]) nb.ang[k] += in.enc[NB_ENC[k]] * 2731;   /* a click of the knob: a twenty-fourth of a turn */
         if (nb.hit[k] > 0) nb.hit[k] -= dt;
     }
-    if (in.kdown && nb.breath >= 1000) {         /* a breath: a ripple goes out and every spore is pushed back a beat */
-        nb.breath -= 1000; nb.rip_t = 450;
-        for (i = 0; i < NB_MAX; i++) if (nb.sp[i].on && !nb.sp[i].past) nb.sp[i].born = (uint32_t)imin((int32_t)nb.sp[i].born + 96, (int32_t)now);
-        sfx(96, 0, 600, W_NOISE, 1400, 80, 220);
-    }
-    nb.breath = imin(3000, nb.breath + dt / 6);
-    if (nb.rip_t > 0) nb.rip_t -= dt;
     if (nb.ring_t > 0) nb.ring_t -= dt;
-    /* the pace: one ring, a spore every other beat; two or three, most beats; all four, every beat, then the half beats too */
+    /* the pace: one ring, a spore every other beat; two or three, now and then one between; all four, most beats; and
+     * past ninety caught, every beat and then half beats too */
     beat2 = now / (hard ? 48u : 96u);
     if (beat2 != nb.last_beat) {
         uint32_t r = ihash(beat2 * 5u + nb.t0);
         int go;
         nb.last_beat = beat2;
-        if (hard) go = !(beat2 & 1u) || r < (uint32_t)imin(40000, 6000 + (nb.caught - 30) * 700);
-        else go = nb.rings == 1 ? !(beat2 & 1u) : nb.rings < 4 ? (!(beat2 & 1u) || r < 30000u) : 1;
-        if (go && nb.ring_t < 900) bloom_spawn(beat2 * (hard ? 48u : 96u), beat2 * 11u + nb.t0);   /* (a breather while a new ring arrives) */
+        if (hard) go = !(beat2 & 1u) || r < (uint32_t)imin(36000, 4000 + (nb.caught - 90) * 600);
+        else go = nb.rings == 1 ? !(beat2 & 1u) : !(beat2 & 1u) || r < (nb.rings < 4 ? 18000u : 34000u);
+        if (go && (nb.rings == 1 || nb.ring_t < NB_TAG_MS - 2400)) bloom_spawn(beat2 * (hard ? 48u : 96u), beat2 * 11u + nb.t0);   /* (a breather while a new ring arrives) */
     }
     for (i = 0; i < NB_MAX; i++) {
         int32_t age;
@@ -512,8 +566,8 @@ static void bloom_tick(int32_t dt)
                     nb.fl[nb.nfl].y = (int16_t)(e == 0u ? 28 + (int32_t)(s & 7u) : e == 1u ? 222 + (int32_t)(s & 7u) : 40 + (int32_t)(s * 170u >> 16));
                     nb.fl[nb.nfl].c = (uint8_t)c; nb.nfl++;
                 }
-                if (nb.rings < 4 && nb.caught >= nb.rings * 5) {   /* five caught: the next ring, and its knob, join in */
-                    nb.rings++; nb.ring_t = 2200; snd_chime(1);
+                if (nb.rings < 4 && nb.caught >= NB_JOIN[nb.rings]) {   /* enough caught: the next ring, and its knob, join in */
+                    nb.rings++; nb.ring_t = NB_TAG_MS; snd_chime(1);
                 }
                 continue;
             }
@@ -526,23 +580,18 @@ static void bloom_tick(int32_t dt)
         }
     }
     led_btn_want |= (now % 96u < 14u) ? 1u << BTN_PLAY : 0u;
-    led_key_dim_want = nb.breath >= 1000 ? (1u << AC_NKEY) - 1u : 0u;
-    led_key_want |= in.keys;
 }
 static void bloom_draw(void)
 {
     uint32_t now = (tr_now_q8() >> 8) - nb.t0, i, tm = (uint32_t)mc.t;
     int32_t cx = 120, cy = 126, k, beat = 256 - imin(256, (int32_t)(now % 96u) * 256 / 50);
     sky_draw();
-    for (i = 0; i < nb.nfl; i++) {               /* the garden so far */
+    for (i = 0; i < nb.nfl; i++) {               /* the garden so far: faint, flat little flowers (nothing like a spore's glow) */
         col_t c = NB_COL[nb.fl[i].c];
-        int32_t x = nb.fl[i].x, y = nb.fl[i].y, s = 2 + ((tsin(tm, 20, (int32_t)i * 7000) + 16384) >> 13);
-        galpha(60); gdisc(x, y, s + 3, c); galpha(256);
-        gp(x - s, y, c); gp(x + s, y, c); gp(x, y - s, c); gp(x, y + s, c); grect(x - 1, y - 1, 3, 3, c); gp(x, y, th->text);
-    }
-    if (nb.rip_t > 0) {                          /* the breath going out */
-        int32_t rr = 12 + (450 - nb.rip_t) * 110 / 450;
-        galpha(nb.rip_t * 200 / 450); garc(cx, cy, rr, rr, 0, 65536, th->text, 1); garc(cx, cy, rr - 5, rr - 5, 0, 65536, th->mute, 0); galpha(256);
+        int32_t x = nb.fl[i].x, y = nb.fl[i].y, s = 2 + ((tsin(tm, 20, (int32_t)i * 7000) + 16384) >> 14);
+        galpha(80);
+        gp(x - s, y, c); gp(x + s, y, c); gp(x, y - s, c); gp(x, y + s, c); gp(x, y, c);
+        galpha(256);
     }
     for (k = 0; k < nb.rings; k++) {
         col_t c = NB_COL[k];
@@ -561,8 +610,9 @@ static void bloom_draw(void)
         bloom_pos(i, now, &rad, &ang);
         c = NB_COL[nb.sp[i].c];
         x = cx + ((rad * icos(ang)) >> 14); y = cy + ((rad * isin(ang)) >> 14);
-        galpha(nb.sp[i].past ? 50 : 110); gdisc(x, y, 7, c); galpha(256);
+        galpha(nb.sp[i].past ? 50 : 130 + (tsin(tm, 50, (int32_t)i * 9000) >> 10)); gdisc(x, y, 7, c); galpha(256);
         gdisc(x, y, 3, nb.sp[i].past ? th->mute : c);
+        if (!nb.sp[i].past) gp(x, y, th->text);
     }
     for (k = 0; k < 5; k++) {                    /* the flower: a petal for each life */
         int32_t a = k * 13107 + (int32_t)(tm * 2u), on = k < mc.lives;
@@ -570,11 +620,9 @@ static void bloom_draw(void)
         gdisc(cx + (((7 + beat / 64) * icos(a)) >> 14), cy + (((7 + beat / 64) * isin(a)) >> 14), 4, on ? th->caps[0] : th->mute);
     }
     galpha(256); gdisc(cx, cy, 4 + beat / 100, th->pad);
-    for (k = 0; k < 3; k++) grect(100 + k * 14, 232, 12, 3, nb.breath >= (k + 1) * 1000 ? th->pad : th->mute);   /* breaths in hand */
-    if (nb.ring_t > 0) {                         /* a new ring: which knob turns it, in the ring's own colour */
-        galpha(imin(256, nb.ring_t));
-        gfit(120, 30 + 2 * ts(2, 4), 232, NB_KNOB[nb.rings - 1], NB_COL[nb.rings - 1], ts(2, 4));
-        galpha(256);
+    if (nb.ring_t > 0) {                         /* a new ring: an arrow to its knob, in the ring's own colour */
+        const int16_t *t = NB_TAG[nb.rings - 1];
+        nb_tag(t[0], t[1], t[2], t[3], t[4], (int)nb.rings - 1, imin(256, imin(nb.ring_t, NB_TAG_MS - nb.ring_t + 150) * 256 / 300), tm, 2);
     }
     if (mc.flash > 0 && mc.msg == T_MISS && mc.msg_t > 0) { galpha(mc.flash * 110 / 300); grect(0, 0, 240, 240, th->caps[0]); galpha(256); }
 }
@@ -596,7 +644,7 @@ static void mach_start(void)
 #endif
     } else if (mc.which == 2) {
         for (i = 0; i < sizeof nb; i++) ((uint8_t *)&nb)[i] = 0;
-        mc.lives = 5; nb.t0 = (now / 96u) * 96u; nb.breath = 3000; nb.rings = 1; nb.ring_t = 2200;
+        mc.lives = 5; nb.t0 = (now / 96u) * 96u; nb.rings = 1; nb.ring_t = NB_TAG_MS;
         for (i = 0; i < 4u; i++) nb.ang[i] = (int32_t)i * 16384 - 16384;
     }
 #ifdef AC_TEST_CATCH                             /* (tests) lives enough to see a long way in */

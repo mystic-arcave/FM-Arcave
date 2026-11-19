@@ -59,9 +59,9 @@ BOARD_PREFIX = {"fm1": "FM-1_96", "smk37": "SMK-37 Pro_96"}   # identity: prefix
 BOARD_DEFS = {"fm1": [], "smk37": ["-DBOARD_SMK37=1"]}
 MODELS = {"pro": "SMK-37 Pro", "elite": "SMK-37 Elite", "mke": "MKE-P37"}   # smk37: one keyboard, three names
 DATA_FAMILY = "ARCAVE"              # the SMK store's owner tag (store.h): 1..7 of A-Z 0-9. Your fork: your own
-SCREEN_NAME = "FM ARCAVE"              # the update loader's screen (FM-1, ldr_screen.c): the name and its colour (RGB565)
+SCREEN_NAME = "FM-ARCAVE"              # the update loader's screen (FM-1, ldr_screen.c): the name and its colour (RGB565)
 SCREEN_COLOUR = 0x7F3A              # opal, #7FE6D2
-PRODUCT = "FM-1_960"                # FM ARCAVE: 96N; Dinghy itself is 99N (OUR_LOADER in the installer wants FM-1_9NN). Your fork: pick your own
+PRODUCT = "FM-1_960"                # FM-ARCAVE: 96N; Dinghy itself is 99N (OUR_LOADER in the installer wants FM-1_9NN). Your fork: pick your own
 VERSION = None                      # APP_VER for release builds
 
 

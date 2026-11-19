@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
-/* FM ARCAVE in a browser: a fake FM-1 for WebAssembly, as tests/host.c is one for a computer. The game
+/* FM-ARCAVE in a browser: a fake FM-1 for WebAssembly, as tests/host.c is one for a computer. The game
  * (firmware/src/arcave/arcave.c) runs unchanged on it. The page's audio worklet asks for sound (web_render);
  * every 44.1 frames of it are a millisecond of the FM-1's time, in which the game's loop runs once.
  * Built by web/emu/build.sh (emcc, no JS glue, no imports). */
@@ -31,6 +31,9 @@ static uint32_t w_play_led;                     /* PLAY's green LED: 0 dark, 1 l
 static void fm1_play_led(uint32_t mode) { w_play_led = mode; }
 static uint32_t w_breathe;                      /* breathing buttons, bit = BTN_... */
 static void fm1_led_key_breathe(uint32_t id, int on) { if (on) w_breathe |= 1u << id; else w_breathe &= ~(1u << id); }
+static uint32_t w_br_t0;                        /* a breath is 2.25 s, as panel.js draws it (from when a light starts) */
+static void fm1_breath_sync(void) { w_br_t0 = fm1_ms; }
+static uint32_t fm1_breaths(void) { return (fm1_ms - w_br_t0) / 2250u; }
 static void fm1_led_key_glow(uint32_t id, int on)
 {
     if (id >= 14u && id < 41u) { if (on) w_dim_keys |= 1u << (id - 14u); else w_dim_keys &= ~(1u << (id - 14u)); }

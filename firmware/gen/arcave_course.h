@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
-/* FM ARCAVE's intro courses: the opening roll (short) and the race back (long, the first build's length).
+/* FM-ARCAVE's intro courses: the opening roll (short) and the race back (long, the first build's length).
  * Written by tools/gen_course.py: do not edit. */
 #define CO_XS 130
 #define CO_WALLX 18

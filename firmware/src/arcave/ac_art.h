@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
-/* FM ARCAVE's two looks and the things drawn everywhere: the sky, a mushroom, the rock, the Hat. */
+/* FM-ARCAVE's two looks and the things drawn everywhere: the sky, a mushroom, the rock, the Hat. */
 
 typedef struct {
     col_t bg, ground, rim, bands[5], far1, far2, far_stem, rock, rock_rim, eye, pupil, moss, text, caps[5], stem,

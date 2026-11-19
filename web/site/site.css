@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
-/* FM ARCAVE's pages: black stone, opal light. The pixel face is the game's own lettering; colour is kept for what
+/* FM-ARCAVE's pages: black stone, opal light. The pixel face is the game's own lettering; colour is kept for what
    glows (mushroom caps, the screen, key lights). */
 :root{
   --stone:#000; --rock:#07090c; --panel:#0e1217; --line:#1d242c; --line2:#2c3640;

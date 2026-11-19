@@ -1,6 +1,6 @@
 # Licensing
 
-FM ARCAVE is free software under the GNU General Public License, version 3 only (`GPL-3.0-only`, full text in
+FM-ARCAVE is free software under the GNU General Public License, version 3 only (`GPL-3.0-only`, full text in
 `LICENSE`). You may use, study, change and share it. If you give someone a firmware built from it, give them its
 complete source under the same licence too.
 
@@ -14,7 +14,7 @@ complete source under the same licence too.
 | The update loader's screen: `firmware/loader/ldr_screen.c`, `tests/ldr_screen_test.c` | Copyright (C) 2026 zvenson (from OberVave, the Firmware Hub's look); the idea, a loader that draws, its 5 x 7 letters and the order of things from [Skiff](https://github.com/illuminus5/skiff) by illuminus5, GPL-3.0 |
 | From OberVave: the storage (blobs, slots), `LCD_IDLE`, the SMK-37 wiring of `platform.c`, `store.h`, the pad event queue in `smk_input.h`, `tests/smk_flash_test.c`, `tests/run_tests.sh`, the CI workflow | Copyright (C) 2026 zvenson |
 | The sample app `firmware/src/dinghy.c`, the wiring `platform.c`, the host mode `tests/host.c`, the platform's docs (`docs/API.md`, `RULES.md`, `MAKE-IT-YOURS.md`, `SMK37.md`) | zvenson ([Dinghy](https://github.com/zvenson/dinghy)) |
-| The game: `firmware/src/arcave/`, `firmware/src/fm_arcave.c`, `firmware/gen/arcave_*.h`, `tools/gen_tables.py`, `gen_course.py`, `make_site.py`, `sheet.py`, `site_shots.sh`, `web/emu/`, `web/site/`, `web/install/`, `web/link/`, `tests/run_arcave*.sh`, `tests/emu_test.mjs`, `tests/scripts/` (all but `midi.txt`, `smk37.txt`), `docs/LINK.md` | Copyright (C) 2026 benjamuels (FM ARCAVE, from the Mystic Arcave) |
+| The game: `firmware/src/arcave/`, `firmware/src/fm_arcave.c`, `firmware/gen/arcave_*.h`, `tools/gen_tables.py`, `gen_course.py`, `make_site.py`, `sheet.py`, `site_shots.sh`, `web/emu/`, `web/site/`, `web/install/`, `web/link/`, `tests/run_arcave*.sh`, `tests/emu_test.mjs`, `tests/scripts/` (all but `midi.txt`, `smk37.txt`), `docs/LINK.md` | Copyright (C) 2026 benjamuels (FM-ARCAVE, from the Mystic Arcave) |
 | The rings and the dish (`ac_juke.h`): the rules are those of the lamp and the ring in UMBRA OBSCURA | benjamuels |
 | The update protocol in the browser: `web/lib/fm1ota.js`, `fm1pkg.js` | Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments, as JIANT / UMBRA LIVE carry them |
 | The voices' sine (`ac_synth.h` `sy_sine`) | after `dinghy.c` |
@@ -29,7 +29,7 @@ complete source under the same licence too.
 ## The logo
 
 `assets/logo.svg` / `logo.png` are Dinghy's (the designburg signet: Copyright (C) designburg, all rights reserved, not
-under the GPL). They mark Dinghy itself and are kept here only beside its docs; FM ARCAVE does not use them.
+under the GPL). They mark Dinghy itself and are kept here only beside its docs; FM-ARCAVE does not use them.
 
 ## Fonts on the pages
 
@@ -39,4 +39,4 @@ game's own pixel font is drawn in `tools/gen_tables.py`.
 ## Trademarks
 
 "Felucca" and "Hügelton Instruments" are names of Hügelton Instruments; "M-VAVE", "FM-1", "SMK-37" and "MKE-P37"
-belong to their owners. FM ARCAVE is not made or endorsed by them.
+belong to their owners. FM-ARCAVE is not made or endorsed by them.

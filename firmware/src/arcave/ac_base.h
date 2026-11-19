@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
-/* FM ARCAVE: the ground everything stands on. Integer maths, a 240 x 240 picture in RAM that is compared with
+/* FM-ARCAVE: the ground everything stands on. Integer maths, a 240 x 240 picture in RAM that is compared with
  * the last one sent (only what changed goes to the screen), drawing, the pixel font, the panel read once a frame.
  *
  * The platform under it (Dinghy's platform.c on the FM-1, tests/host.c on a computer, web/emu/web_host.c in a

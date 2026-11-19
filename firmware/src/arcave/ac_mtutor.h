@@ -6,8 +6,8 @@
  *   MYSTIC RUN    a key: hop a crystal; the top row: a tall one; a block: the button that lights; KNOB 1: the tempo
  *   JUICE WORKS   keys under a tap: a glass; KNOB 1: pour; to the ticket's line; the same keys: serve; hold and press
  *                 under another tap: the glass moves
- *   NIGHT BLOOM   KNOB 1 turns the petal to a spore; each spore on its colour; SELECT and the second ring; a key: a
- *                 breath blows them back
+ *   NIGHT BLOOM   KNOB 1 turns the petal to a spore; each spore on its colour; SELECT and the second ring; ALGORITHM
+ *                 and the third (an arrow to each knob as it joins, as in the game)
  * HOME again returns; REC goes back to the Arcave. */
 
 #define MT_MAXS 5
@@ -15,7 +15,7 @@ typedef struct { uint8_t n; uint16_t ms[MT_MAXS]; int16_t text[MT_MAXS]; uint8_t
 static const mt_def_t MT_DEF[3] = {
     {4, {3200, 3200, 3600, 3600, 0}, {T_RUN_1, T_RUN_1, T_RUN_2, T_RUN_3, 0}, {0, 1, 0, 0, 0}},
     {5, {2400, 3600, 3000, 2400, 3800}, {T_TABLE_2, T_TABLE_1, T_TABLE_3, T_TABLE_2, T_TABLE_2}, {0, 0, 0, 1, 2}},
-    {4, {3600, 3600, 3800, 3400, 0}, {T_BLOOM_1, T_BLOOM_2, T_BLOOM_1, T_BLOOM_3, 0}, {0, 0, 1, 0, 0}},
+    {4, {3600, 3600, 3800, 3800, 0}, {T_BLOOM_1, T_BLOOM_2, T_BLOOM_1, T_BLOOM_3, 0}, {0, 0, 1, 0, 0}},
 };
 static const uint8_t TU_KN[8][2] = {{12, 13}, {27, 13}, {12, 29}, {27, 29}, {85, 14}, {102, 14}, {120, 14}, {137, 14}};
 enum { MK_MASTER, MK_SELECT, MK_PRESETS, MK_ALGO, MK_K1, MK_K2, MK_K3, MK_K4 };   /* the knobs as drawn */
@@ -135,13 +135,17 @@ static int32_t mt_age[27];                       /* how long ago each key went d
 static int32_t mt_keyage(int a) { return mt_age[a]; }
 static void mt_press(int a, int32_t u, int32_t at) { if (u >= at && u - at < 420) mt_age[a] = u - at; }
 
-static void mt_crystal(int32_t x, int32_t g, int tall, uint32_t h)
+static void mt_crystal(int32_t x, int32_t g, int tall, int32_t beat)   /* the game's own crystal (mr_crystal), larger */
 {
     int32_t hh = tall ? 40 : 20, k, xy[6];
-    galpha(70); gdisc(x, g - hh / 2, hh / 2 + 9, th->caps[h % 5u]); galpha(256);
+    galpha(90 + beat * 70 / 256); gdisc(x, g - hh / 2, hh / 2 + 9, th->caps[0]); galpha(256);
     for (k = 0; k < (tall ? 3 : 2); k++) {
         xy[0] = x - 11 + k * 7; xy[1] = g; xy[2] = x - 5 + k * 7 + (k - 1); xy[3] = g - hh + iabs(k - 1) * 6; xy[4] = x + 1 + k * 7; xy[5] = g;
-        gpoly(xy, 3, th->bands[k]); gpolyline(xy, 3, 1, th->caps[(h + (uint32_t)k) % 5u]);
+        gpoly(xy, 3, th->text);
+    }
+    for (k = 0; k < (tall ? 3 : 2); k++) {
+        xy[0] = x - 11 + k * 7; xy[1] = g; xy[2] = x - 5 + k * 7 + (k - 1); xy[3] = g - hh + iabs(k - 1) * 6; xy[4] = x + 1 + k * 7; xy[5] = g;
+        gpolyline(xy, 3, 1, th->caps[0]);
     }
 }
 static int mt_run(int32_t step, int32_t u, uint32_t tm, mt_act_t *act, uint32_t *lit, int *blit, int *bdown)
@@ -152,10 +156,12 @@ static int mt_run(int32_t step, int32_t u, uint32_t tm, mt_act_t *act, uint32_t 
     if (step == 3) { int32_t f = mt_ramp(u, 400, 2800); v = 90 + 60 * f / 256; bpm = 110 + 30 * f / 256; }
     s = (int32_t)(tm * 9u / 100u) + (step == 3 ? 60 * u / 1000 * mt_ramp(u, 400, 2800) / 256 : 0);
     beat = 256 - imin(256, (int32_t)((tm * (uint32_t)bpm / 60u) % 1000u) * 256 / 400);
-    for (k = -1; k < 5; k++) {                   /* mushrooms that swell on the beat */
+    galpha(th->dark ? 70 : 90);                 /* mushrooms that swell on the beat: dim, far back */
+    for (k = -1; k < 5; k++) {
         int32_t wx = (s / 70 + k) * 70, x = wx - s + 20;
         mush_draw(x, g, 120 + (int32_t)(ihash((uint32_t)(wx / 70)) >> 11) + beat * 16 / 256, th->caps[ihash((uint32_t)(wx / 70 + 3)) * 5u >> 16], th->stem, beat);
     }
+    galpha(256);
     galpha(140 + beat * 116 / 256); ghl(0, 240, g, th->rim); galpha(256);
     for (k = 0; k < 240; k += 4) if (((k + s) / 4) % 3) { galpha(110); gp(k, g + 4, th->bands[0]); gp(k + 2, g + 8, th->bands[1]); }
     galpha(256);
@@ -164,7 +170,7 @@ static int mt_run(int32_t step, int32_t u, uint32_t tm, mt_act_t *act, uint32_t 
             int32_t ta = TA[step][k], d, x;
             if (!ta) continue;
             x = rx + (ta - u) * v / 1000;
-            if (x > -20 && x < 260) mt_crystal(x, g, step == 1, (uint32_t)(k + step * 3));
+            if (x > -20 && x < 260) mt_crystal(x, g, step == 1, beat);
             d = u - (ta - 250);
             if (d >= 0 && d < 500) hop = (step == 1 ? 50 : 28) * 4 * d / 500 * (500 - d) / 500;
             mt_press(step ? 16 + 6 : 9, u, ta - 250);
@@ -250,7 +256,7 @@ static int mt_juice(int32_t step, int32_t u, uint32_t tm, mt_act_t *act, uint32_
         galpha(step == 3 ? 256 - imin(256, imax(0, u - 700) * 256 / 500) : 256);
         gline(tx, 3, tx, 10, th->mute);
         grect(tx - 11, 10, 23, 58, th->panel); gbox(tx - 11, 10, 23, 58, hl ? th->pad : th->text);
-        jw_glass_draw(tx, 62, 6, &tk, th->text);
+        jw_glass_draw(tx, 62, 8, &tk, th->text);   /* (the same glass as the one being filled) */
         galpha(256);
         if (step == 2) {                         /* the glass and the ticket: the same line */
             int32_t ly = floor - 1 - 3 * JW_UPX, ty = 61 - 3 * JW_UPX, x;
@@ -291,66 +297,69 @@ static void mt_spore(int32_t cx, int32_t cy, int32_t r, int32_t ang, col_t c)
     int32_t x = cx + ((r * icos(ang)) >> 14), y = cy + ((r * isin(ang)) >> 14);
     galpha(110); gdisc(x, y, 6, c); galpha(256); gdisc(x, y, 2, c);
 }
-/* a spore coming in from far to ring r, quick and then slowing (as in the game), arriving at t1 */
+/* a spore coming in from far to ring r, slowing a little near it (as in the game), arriving at t1 */
 static int32_t mt_in_r(int32_t u, int32_t t0, int32_t t1, int32_t r)
 {
-    int32_t q = iclamp(t1 - u, 0, t1 - t0);
-    return r + (90 - r) * q / (t1 - t0) * q / (t1 - t0);
+    int32_t q = iclamp(t1 - u, 0, t1 - t0) * 256 / (t1 - t0);
+    return r + (130 - r) * (3 * q + q * q / 256) / 1024;
 }
 static int mt_bloom(int32_t step, int32_t u, uint32_t tm, mt_act_t *act, uint32_t *lit, int *blit, int *bdown)
 {
-    static const int16_t R[2] = {20, 33};
-    int32_t cx = 120, cy = 40, n = 0, k, a1 = -16384, a2 = -16384, w2 = 0, hit1 = 0, hit2 = 0, bloomed = 0;
+    static const int16_t R[3] = {14, 25, 36};
+    int32_t cx = 120, cy = 40, n = 0, k, a1 = -16384, a2 = -16384, a3 = -16384, w2 = 0, w3 = 0, hit1 = 0, hit2 = 0, hit3 = 0, bloomed = 0;
     (void)blit; (void)bdown;
     /* where the petals are: turned toward each spore before it arrives */
     if (step == 0) a1 = -16384 + (8000 + 16384) * mt_ramp(u, 500, 2200) / 256;
     else if (step == 1) a1 = 8000 + (30000 - 8000) * mt_ramp(u, 300, 1100) / 256 + (45536 - 30000) * mt_ramp(u, 1700, 2700) / 256;
     else a1 = 45536;
     if (step >= 2) { w2 = step == 2 ? mt_ramp(u, 0, 600) : 256; a2 = step == 2 ? -16384 + (20000 + 16384) * mt_ramp(u, 800, 2400) / 256 : 20000; }
+    if (step == 3) { w3 = mt_ramp(u, 0, 600); a3 = -16384 + (-16384 + 40000) * mt_ramp(u, 800, 2400) / 256; }
     galpha(140); for (k = 0; k < 18; k++) gp((int32_t)(ihash((uint32_t)k * 7u + 1u) % 240u), (int32_t)(ihash((uint32_t)k * 3u + 9u) % 76u), th->mute); galpha(256);
     /* the garden: a flower for each spore caught so far in the loop */
-    bloomed = step == 0 ? (u >= 2600) : step == 1 ? 1 + (u >= 1300) + (u >= 3000) : step == 2 ? 3 + (u >= 3000) : 4;
+    bloomed = step == 0 ? (u >= 2600) : step == 1 ? 1 + (u >= 1300) + (u >= 3000) : step == 2 ? 3 + (u >= 3000) : 4 + (u >= 3000);
     for (k = 0; k < bloomed; k++) {
-        int32_t x = k < 2 ? 14 + k * 18 : 190 + (k - 2) * 18, y = k & 1 ? 66 : 14;
-        col_t c = NB_COL[k == 3 ? 1 : 0];
+        int32_t x = k < 3 ? 14 + k * 18 : 190 + (k - 3) * 18, y = k & 1 ? 66 : 14;
+        col_t c = NB_COL[k == 3 ? 1 : k == 4 ? 2 : 0];
         galpha(60); gdisc(x, y, 6, c); galpha(256);
         gp(x - 3, y, c); gp(x + 3, y, c); gp(x, y - 3, c); gp(x, y + 3, c); grect(x - 1, y - 1, 3, 3, c);
     }
     /* the spores and their catches */
-    if (step == 0) { if (u < 2600) mt_spore(cx, cy, mt_in_r(u, 600, 2600, R[0]), 8000, NB_COL[0]); else hit1 = u < 2850; }
+    if (step == 0) { if (u < 2600) mt_spore(cx, cy, mt_in_r(u, 200, 2600, R[0]), 8000, NB_COL[0]); else hit1 = u < 2850; }
     if (step == 1) {
-        if (u < 1300) mt_spore(cx, cy, mt_in_r(u, 0, 1300, R[0]), 30000, NB_COL[0]); else if (u < 1550) hit1 = 1;
-        if (u < 3000) mt_spore(cx, cy, mt_in_r(u, 1000, 3000, R[0]), 45536, NB_COL[0]); else if (u < 3250) hit1 = 1;
+        if (u < 1300) mt_spore(cx, cy, mt_in_r(u, -800, 1300, R[0]), 30000, NB_COL[0]); else if (u < 1550) hit1 = 1;
+        if (u < 3000) mt_spore(cx, cy, mt_in_r(u, 800, 3000, R[0]), 45536, NB_COL[0]); else if (u < 3250) hit1 = 1;
     }
-    if (step == 2) { if (u < 3000) { if (u > 900) mt_spore(cx, cy, mt_in_r(u, 900, 3000, R[1]), 20000, NB_COL[1]); } else hit2 = u < 3250; }
-    if (step == 3) {                             /* three on their way; the breath goes out and pushes them back */
-        int32_t push = 18 * mt_ramp(u, 1300, 1700) / 256;
-        static const int16_t SA[3] = {0, 22000, -21536};
-        for (k = 0; k < 3; k++) mt_spore(cx, cy, 70 - u * 12 / 1000 + push - k * 6, SA[k], NB_COL[k == 1 ? 1 : 0]);
-        if (u >= 1300 && u < 1750) {
-            int32_t rr = 10 + (u - 1300) * 70 / 450;
-            galpha((1750 - u) * 200 / 450); garc(cx, cy, rr, rr, 0, 65536, th->text, 1); garc(cx, cy, rr - 5, rr - 5, 0, 65536, th->mute, 0); galpha(256);
-        }
-    }
+    if (step == 2) { if (u < 3000) { if (u > 700) mt_spore(cx, cy, mt_in_r(u, 700, 3000, R[1]), 20000, NB_COL[1]); } else hit2 = u < 3250; }
+    if (step == 3) { if (u < 3000) { if (u > 700) mt_spore(cx, cy, mt_in_r(u, 700, 3000, R[2]), 40000, NB_COL[2]); } else hit3 = u < 3250; }
     mt_ring(cx, cy, R[0], a1, NB_COL[0], hit1, 256);
     if (hit1) { galpha(160); gdisc(cx + ((R[0] * icos(a1)) >> 14), cy + ((R[0] * isin(a1)) >> 14), 8, NB_COL[0]); galpha(256); }
     if (w2) {
         mt_ring(cx, cy, R[1], a2, NB_COL[1], hit2, w2);
         if (hit2) { galpha(160); gdisc(cx + ((R[1] * icos(a2)) >> 14), cy + ((R[1] * isin(a2)) >> 14), 8, NB_COL[1]); galpha(256); }
-        if (step == 2 && u < 2600) { galpha(imin(256, (2600 - u) * 256 / 400) * w2 / 256); gtext(cx + 36, cy - 4, NB_KNOB[1], NB_COL[1], 1); galpha(256); }
+    }
+    if (w3) {
+        mt_ring(cx, cy, R[2], a3, NB_COL[2], hit3, w3);
+        if (hit3) { galpha(160); gdisc(cx + ((R[2] * icos(a3)) >> 14), cy + ((R[2] * isin(a3)) >> 14), 8, NB_COL[2]); galpha(256); }
     }
     for (k = 0; k < 5; k++) {                    /* the flower in the middle */
         int32_t a = k * 13107 + (int32_t)(tm * 2u);
-        gdisc(cx + ((7 * icos(a)) >> 14), cy + ((7 * isin(a)) >> 14), 3, th->caps[0]);
+        gdisc(cx + ((6 * icos(a)) >> 14), cy + ((6 * isin(a)) >> 14), 3, th->caps[0]);
     }
     gdisc(cx, cy, 3, th->pad);
-    /* the hands: the right hand on KNOB 1 throughout; the left on SELECT for the second ring; a thumb for the breath */
+    /* the arrow to the knob that joins, as in the game: KNOB 1 at the start, SELECT, ALGORITHM */
+    {
+        int32_t ta = step == 0 ? imin(256, imax(0, 1800 - u) * 256 / 300) : (step == 2 || step == 3) ? imin(mt_ramp(u, 0, 300), imax(0, 2600 - u) * 256 / 300) : 0;
+        if (step == 0) nb_tag(228, 10, -8192, 192, 18, 0, ta, tm, 1);
+        if (step == 2) nb_tag(12, 10, -24576, 36, 22, 1, ta, tm, 1);
+        if (step == 3) nb_tag(12, 70, 24576, 40, 50, 2, ta, tm, 1);
+    }
+    /* the hands: the right hand on KNOB 1 throughout; the left on SELECT for the second ring, ALGORITHM for the third */
     act[n].kind = MTA_PINCH; act[n].a = MK_K1; act[n].side = 1;
     act[n].f = (step == 0 && u > 500 && u < 2200) || (step == 1 && ((u > 300 && u < 1100) || (u > 1700 && u < 2700)));
     act[n].sl = step == 0 ? mt_in(u) : step == 3 ? mt_out(u, MT_DEF[2].ms[3]) : 0; n++;
     if (step == 2) { act[n].kind = MTA_PINCH; act[n].a = MK_SELECT; act[n].side = -1; act[n].f = u > 800 && u < 2400; act[n].sl = imax(mt_in(u - 300), mt_out(u, MT_DEF[2].ms[2])); n++; }
-    if (step == 3) { act[n].kind = MTA_THUMB; act[n].a = 3; act[n].side = -1; act[n].f = tu_press(u - 1300); act[n].sl = mt_in(u); n++; mt_press(3, u, 1300); }
-    *lit = step == 3 ? 0xFFFFu | 0x7FFu << 16 : 0;
+    if (step == 3) { act[n].kind = MTA_PINCH; act[n].a = MK_ALGO; act[n].side = -1; act[n].f = u > 800 && u < 2400; act[n].sl = imax(mt_in(u - 300), mt_out(u, MT_DEF[2].ms[3])); n++; }
+    *lit = 0;
     return (int)n;
 }
 
@@ -363,7 +372,7 @@ static void mtutor_tick(int32_t dt)
     static const int16_t EV[3][8][3] = {
         {{0, 750, 0}, {0, 2150, 0}, {1, 1450, 1}, {2, 1500, 2}, {-1, 0, 0}},
         {{0, 700, 4}, {3, 700, 5}, {4, 200, 4}, {4, 1500, 0}, {-1, 0, 0}},
-        {{0, 2600, 3}, {1, 1300, 3}, {1, 3000, 3}, {2, 3000, 3}, {3, 1300, 0}, {-1, 0, 0}},
+        {{0, 2600, 3}, {1, 1300, 3}, {1, 3000, 3}, {2, 3000, 3}, {3, 3000, 3}, {-1, 0, 0}},
     };
     (void)dt;
     if (lt < a) a = -1;

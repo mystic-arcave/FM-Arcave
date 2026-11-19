@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
-/* FM ARCAVE's tunes. Each is read off the one clock (ac_synth.h): the bar and the sixteenth come from tr_tick, so
+/* FM-ARCAVE's tunes. Each is read off the one clock (ac_synth.h): the bar and the sixteenth come from tr_tick, so
  * every tune, on every FM-1 that shares the clock, turns its bars over at the same moment. All of them stay in the
  * notes of C major pentatonic (A minor pentatonic is the same five), so two machines on different tunes still agree.
  * Runs in the audio interrupt. */

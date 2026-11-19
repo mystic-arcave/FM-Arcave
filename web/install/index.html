@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Install FM ARCAVE on your FM-1</title>
-<meta name="description" content="Install FM ARCAVE on an M-VAVE FM-1 from the browser, over USB.">
+<title>Install FM-ARCAVE on your FM-1</title>
+<meta name="description" content="Install FM-ARCAVE on an M-VAVE FM-1 from the browser, over USB.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Silkscreen&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../site.css">
@@ -36,16 +36,16 @@ details p{color:var(--mute);margin-top:10px}
 <body>
 <div class="wrap">
 <header class="top">
-  <a class="name" href="../">FM ARCAVE</a>
+  <a class="name" href="../">FM-ARCAVE</a>
   <nav><a href="../emu/">PLAY</a><a href="./" aria-current="page">INSTALL</a><a href="../link/">LINK</a><a href="https://github.com/mystic-arcave/FM-Arcave">SOURCE</a></nav>
 </header>
 <main>
   <div>
     <p class="kicker">Installer</p>
-    <h1 style="font-size:clamp(28px,5vw,48px);margin:14px 0 18px">FM ARCAVE on your FM-1</h1>
-    <p class="lead">This page puts FM ARCAVE <span id="ver"></span> on an M-VAVE FM-1 over USB. It takes about two minutes. You need Chrome or Edge on a computer, and a USB cable that carries data.</p>
+    <h1 style="font-size:clamp(28px,5vw,48px);margin:14px 0 18px">FM-ARCAVE on your FM-1</h1>
+    <p class="lead">This page puts FM-ARCAVE <span id="ver"></span> on an M-VAVE FM-1 over USB. It takes about two minutes. You need Chrome or Edge on a computer, and a USB cable that carries data.</p>
   </div>
-  <p class="note">FM ARCAVE replaces the firmware that is on the FM-1 now, and that firmware's songs and presets may not survive. It is a community firmware: installing it is at your own risk; see "Where this stands" below.</p>
+  <p class="note">FM-ARCAVE replaces the firmware that is on the FM-1 now, and that firmware's songs and presets may not survive. It is a community firmware: installing it is at your own risk; see "Where this stands" below.</p>
   <ol class="steps">
     <li><div>
       <h2>CONNECT</h2>
@@ -54,9 +54,9 @@ details p{color:var(--mute);margin-top:10px}
     </div></li>
     <li><div>
       <h2>INSTALL</h2>
-      <p>Leave the cable in and the FM-1 on until this page says it is done. The FM-1's screen shows FM ARCAVE and a bar while it writes.</p>
+      <p>Leave the cable in and the FM-1 on until this page says it is done. The FM-1's screen shows FM-ARCAVE and a bar while it writes.</p>
       <label class="ck"><input type="checkbox" id="ok"><span>I understand that this replaces the firmware on my FM-1 and that I install it at my own risk.</span></label>
-      <div class="row"><button class="btn on" id="go" disabled>INSTALL FM ARCAVE</button></div>
+      <div class="row"><button class="btn on" id="go" disabled>INSTALL FM-ARCAVE</button></div>
       <progress id="bar" max="100" value="0" aria-label="Install progress"></progress>
       <div id="say" role="status"></div>
     </div></li>
@@ -67,7 +67,7 @@ details p{color:var(--mute);margin-top:10px}
   </ol>
   <div>
     <details><summary>THE WAY BACK</summary>
-      <p>Any other firmware installs over FM ARCAVE the usual way: the <a href="https://thefirmwarehub.com">Firmware Hub</a>, another firmware's installer, or M-VAVE's own updater with the official file.</p>
+      <p>Any other firmware installs over FM-ARCAVE the usual way: the <a href="https://thefirmwarehub.com">Firmware Hub</a>, another firmware's installer, or M-VAVE's own updater with the official file.</p>
       <p>If the FM-1 does not start, hold OCT- while switching it on. That is the USB rescue: no sound, only the updater, and this page (or any installer) can reach it. If an install was cut off, plug in again and press INSTALL: the FM-1 stays in update mode until one finishes.</p>
     </details>
     <details><summary>WHERE THIS STANDS</summary>
@@ -116,7 +116,7 @@ $("find").addEventListener("click", async () => {
     else {
       dev.link.close();
       const loader = /^ota-/i.test(dev.id.model);
-      $("dev").textContent = loader ? "An FM-1 waiting in update mode: INSTALL finishes it." : dev.id.text === META.product ? "FM-1 found. It already runs this version of FM ARCAVE." : "FM-1 found, running " + dev.id.text + ".";
+      $("dev").textContent = loader ? "An FM-1 waiting in update mode: INSTALL finishes it." : dev.id.text === META.product ? "FM-1 found. It already runs this version of FM-ARCAVE." : "FM-1 found, running " + dev.id.text + ".";
       found = true;
       log("device: " + dev.id.text + " on " + dev.name);
     }
@@ -133,9 +133,9 @@ $("go").addEventListener("click", async () => {
       if (k === "start") say("Talking to the FM-1 (" + a + ")...");
       if (k === "verify") { say("Sending the update loader..."); $("bar").value = Math.min(99, s1 * Math.min(1, a / n1) * 100); }
       if (k === "loader") say("The FM-1 restarts into its update mode...");
-      if (k === "write") { const f = Math.min(1, a / n2); say("Writing FM ARCAVE: " + Math.min(99, Math.floor(f * 100)) + "%. Leave the cable in."); $("bar").value = Math.min(99, (s1 + (1 - s1) * f) * 100); }
+      if (k === "write") { const f = Math.min(1, a / n2); say("Writing FM-ARCAVE: " + Math.min(99, Math.floor(f * 100)) + "%. Leave the cable in."); $("bar").value = Math.min(99, (s1 + (1 - s1) * f) * 100); }
       if (k === "reboot") say("Written. The FM-1 restarts...");
-      if (k === "done") { $("bar").value = 100; say("Done. Your FM-1 runs FM ARCAVE " + META.version + ". Press PLAY.", "good"); }
+      if (k === "done") { $("bar").value = 100; say("Done. Your FM-1 runs FM-ARCAVE " + META.version + ". Press PLAY.", "good"); }
     };
     const ota = await up.find((id) => /^ota-/i.test(id.model));
     if (ota) {

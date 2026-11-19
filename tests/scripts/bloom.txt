@@ -1,4 +1,4 @@
-# NIGHT BLOOM: one ring first, the others join; a breath
+# NIGHT BLOOM: one ring first, KNOB 1's arrow; the spores coming slowly from beyond the edges
 300 shot
 500 btn 12
 900 enc 2 1

@@ -1,4 +1,4 @@
-# FM ARCAVE: build the FM-1 package on GitHub, run the tests, and on a tag vX.Y publish the release with a build
+# FM-ARCAVE: build the FM-1 package on GitHub, run the tests, and on a tag vX.Y publish the release with a build
 # attestation (the Firmware Hub shows "Built from source" for exactly these files). After Dinghy's workflow: the
 # JieLi toolchain comes from pkgman.jieliapp.com (tools/get_toolchain.sh), the AC79 SDK from gitee.com.
 # Run by hand (workflow_dispatch) for a test build without a release.

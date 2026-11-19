@@ -68,7 +68,7 @@ static void menu_draw(void)
             if (batt_raw >= 0) { int32_t v = batt_raw; buf[n++] = ' '; buf[n++] = 'B'; buf[n++] = (char)('0' + v / 1000 % 10); buf[n++] = (char)('0' + v / 100 % 10); buf[n++] = (char)('0' + v / 10 % 10); buf[n++] = (char)('0' + v % 10); }
         }
         buf[n] = 0;
-        gfit(120, 6 + 2 * sh, 232, "FM ARCAVE", th->caps[3], sh);
+        gfit(120, 6 + 2 * sh, 232, "FM-ARCAVE", th->caps[3], sh);
         top = 6 + TLH(sh) + 4; room = 238 - TLH(sf) - 4 - top;
         gtext_wrap(12, top + 2 * sc, 216, buf + imin(mn.win, n), th->text, sc, TLH(sc), -1, 0, 0, 1, imax(1, room / TLH(sc)), &rest);
         mn.rest = *rest ? (int32_t)(rest - (buf + imin(mn.win, n))) : 0;

@@ -77,10 +77,13 @@ static uint64_t host_leds;                      /* bit id: LED id lit (0..13 but
 static void fm1_irq_off(void) {}                 /* (the host's audio runs between the main loop's passes) */
 static void fm1_irq_on(void) {}
 static void fm1_led_key(uint32_t id, int on) { if (on) host_leds |= (uint64_t)1 << id; else host_leds &= ~((uint64_t)1 << id); }
-static uint32_t host_play_led;                  /* (FM ARCAVE) PLAY's green LED: 0 dark, 1 lit, 2 breathing */
+static uint32_t host_play_led;                  /* (FM-ARCAVE) PLAY's green LED: 0 dark, 1 lit, 2 breathing */
 static void fm1_play_led(uint32_t mode) { host_play_led = mode; }
-static uint32_t host_breathe;                   /* (FM ARCAVE) breathing buttons */
+static uint32_t host_breathe;                   /* (FM-ARCAVE) breathing buttons */
 static void fm1_led_key_breathe(uint32_t id, int on) { if (on) host_breathe |= 1u << id; else host_breathe &= ~(1u << id); }
+static uint32_t host_br_t0;                     /* a breath is 2.25 s, as on the FM-1 (and the emulator's) */
+static void fm1_breath_sync(void) { host_br_t0 = fm1_ms; }
+static uint32_t fm1_breaths(void) { return (fm1_ms - host_br_t0) / 2250u; }
 static uint64_t host_glow;                      /* the dim layer (not in the film log) */
 static void fm1_led_key_glow(uint32_t id, int on) { if (on) host_glow |= (uint64_t)1 << id; else host_glow &= ~((uint64_t)1 << id); }
 
@@ -250,6 +253,7 @@ static void write_ppm(uint32_t t)
     snprintf(name, sizeof name, "%s-%u.ppm", host_out, t);
     write_ppm_as(name);
     printf("%6u ms  screen -> %s\n", t, name);
+    printf("%6u ms  lights: breathing %04X, PLAY %u\n", t, host_breathe, host_play_led);   /* (bit = BTN_...; PLAY 2: breathing) */
 }
 
 static void write_wav(void)

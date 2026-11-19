@@ -1,4 +1,4 @@
-# FM ARCAVE's site: the home page, the browser emulator, the installer with the package, the Link hub.
+# FM-ARCAVE's site: the home page, the browser emulator, the installer with the package, the Link hub.
 # Published on every push to main as a Pages artifact (Settings > Pages > Source: "GitHub Actions").
 # The version is the newest tag vX.Y (0.1 before the first). If the FM-1 toolchain or the SDK cannot be fetched the
 # site still goes up, without the installer.

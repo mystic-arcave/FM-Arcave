@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-"""The intro course of FM ARCAVE as tables: firmware/gen/arcave_course.h.
+"""The intro course of FM-ARCAVE as tables: firmware/gen/arcave_course.h.
 
 The land and everything on it were tuned in floating point in the browser prototype
 (mystic-arcave-intro.html). The FM-1 has no FPU, so the shape is worked out here, with the
@@ -191,7 +191,7 @@ LONG = build(L_LONG)
 out = []
 w = out.append
 w("/* SPDX-License-Identifier: GPL-3.0-only */")
-w("/* FM ARCAVE's intro courses: the opening roll (short) and the race back (long, the first build's length).")
+w("/* FM-ARCAVE's intro courses: the opening roll (short) and the race back (long, the first build's length).")
 w(" * Written by tools/gen_course.py: do not edit. */")
 w(f"#define CO_XS {XS}")
 w(f"#define CO_WALLX {WALLX}")

@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
-/* FM ARCAVE's tables. Written by tools/gen_tables.py: do not edit. */
+/* FM-ARCAVE's tables. Written by tools/gen_tables.py: do not edit. */
 static const int16_t AC_SIN[257] = {   /* a quarter wave, Q14 */
     0,101,201,302,402,503,603,704,804,904,1005,1105,1205,1306,1406,1506,
     1606,1706,1806,1906,2006,2105,2205,2305,2404,2503,2603,2702,2801,2900,2999,3098,

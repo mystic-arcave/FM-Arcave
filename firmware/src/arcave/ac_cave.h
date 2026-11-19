@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
-/* FM ARCAVE's cave: the hub, a platforming one. Rock rolls in on the ground floor, past the dark jukebox, to the
+/* FM-ARCAVE's cave: the hub, a platforming one. Rock rolls in on the ground floor, past the dark jukebox, to the
  * Hat; the three arcade machines stand on ledges above. Until the jukebox is mended the only light is the
  * mushrooms' and the only sound the hum and Rock's own. Also here: the banner that slides in from the top edge
  * and the dialogue box, which every scene may use. */

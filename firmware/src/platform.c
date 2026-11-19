@@ -70,7 +70,7 @@ static void fm1_led_key_glow(uint32_t id, int on)   /* as fm1_led_key, the dim l
                 else fm1_led_dim[p] &= (uint8_t)~(1u << r);
             }
 }
-/* (FM ARCAVE) as fm1_led_key, the breathing layer (hal/fm1_input.h fm1_led_breath): "press me" */
+/* (FM-ARCAVE) as fm1_led_key, the breathing layer (hal/fm1_input.h fm1_led_breath): "press me" */
 static void fm1_led_key_breathe(uint32_t id, int on)
 {
     uint32_t p, r;
@@ -81,7 +81,7 @@ static void fm1_led_key_breathe(uint32_t id, int on)
                 else fm1_led_breath[p] &= (uint8_t)~(1u << r);
             }
 }
-/* (FM ARCAVE) PLAY's second, green LED: not in the key matrix (no key there), on the hardware at column 8, row bit 1
+/* (FM-ARCAVE) PLAY's second, green LED: not in the key matrix (no key there), on the hardware at column 8, row bit 1
  * (JIANT's ui_input.c found it). mode 0 dark, 1 lit, 2 breathing */
 static void fm1_play_led(uint32_t mode)
 {
@@ -113,6 +113,11 @@ static void fm1_play_led(uint32_t mode)
 
 bootguard_t bootguard __attribute__((section(".noinit")));
 static volatile uint32_t fm1_ms;                /* milliseconds since power-on (TIMER5) */
+#if BOARD_SMK37
+static uint32_t smk_br_t0;                      /* (no breathing layer: count breaths of the FM-1's length by the clock) */
+static void fm1_breath_sync(void) { smk_br_t0 = fm1_ms; }
+static uint32_t fm1_breaths(void) { return (fm1_ms - smk_br_t0) / 2250u; }
+#endif
 
 #define RING_PUBLISH() __asm__ volatile("" ::: "memory")
 #include "libc.c"
