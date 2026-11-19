@@ -1,23 +1,39 @@
-# a machine's start card (HOME above REC at the foot); HOME: how it is played, a loop of little scenes over the FM-1 and the
-# hands doing each step, the scene again on the FM-1's own screen; HOME again: back
-600 shot
+# CRYSTAL ROAD, HOME: the lesson, on its own song (FIRST LIGHT, 92 BPM, a count-in before each part). A: the demo
+# catches a low crystal on the beat; your turn: the first let go (sour, the song goes round), the next caught PERFECT.
+# B: a high then a low; your turn: the high caught and the low missed (round again), then both. C, the miss: only
+# shown, on by itself. D: KNOB 1 through the modes, ALGO to another song. ALL DONE; HOME: back to the start card.
+# (the host prints when each part's notes land: "lesson step ...")
 900 btn 8
-1400 shot
-2400 shot
-3400 shot
-4400 shot
-5400 shot
-6400 shot
-7400 shot
-8400 shot
-9400 shot
-10400 shot
-11400 shot
-12400 shot
-13400 shot
-14400 shot
-15400 shot
-16400 shot
-17000 btn 8
-17500 shot
-17700 end
+3000 shot
+6750 shot
+9000 shot
+12900 shot
+13700 shot
+18462 keys 0x1
+18500 shot
+18560 keys 0
+23700 shot
+25000 shot
+29000 shot
+30200 keys 0x800000
+30250 shot
+30300 keys 0
+31900 shot
+35418 keys 0x800000
+35500 keys 0
+36722 keys 0x1
+36780 shot
+36800 keys 0
+40500 shot
+43200 shot
+43700 shot
+46500 shot
+49000 shot
+49200 enc 2 1
+49500 enc 2 1
+49800 enc 1 1
+49900 shot
+51800 shot
+52500 btn 8
+53000 shot
+53200 end

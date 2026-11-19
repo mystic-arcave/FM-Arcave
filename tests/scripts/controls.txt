@@ -1,35 +1,55 @@
-# the controls box by the start; HOME: the controls shown (roll, hop, big hop; the jump over the white keys onto the
-# bounce mushroom; the other grip), a full loop of it; HOME again, then rolling past the box
+# the controls box by the start; HOME: the controls lesson. Each step is shown (WATCH), then waits for the player (YOUR
+# TURN), ticks off and goes on: roll (KNOB turned 12 clicks), hop (two bottom keys), big hop (two top keys), the jump
+# (rolled up the hill, a top key on the white keys: thrown onto the bounce mushroom, BONUS); the other grip: only
+# shown, ticked off as it ends. ALL DONE; HOME again, then rolling past the box
 600 btn 12
 2600 btn 12
 6800 shot
 7000 btn 8
 8200 shot
-9750 shot
+9700 shot
+10000 enc 6 4
+10200 enc 6 4
 10300 shot
-11550 shot
-11800 shot
-12100 shot
-14300 shot
-14950 shot
-15300 shot
-15900 shot
-16400 shot
-17000 shot
-18700 shot
-19950 shot
-20350 shot
-21100 shot
-22500 shot
-23000 btn 8
+10400 enc 6 4
+10600 shot
+12500 shot
+13600 keys 1
+13700 keys 0
+13750 shot
+13900 keys 1
+14000 keys 0
+14100 shot
+17100 keys 2
+17200 keys 0
+17250 shot
+17400 keys 2
+17500 keys 0
+20500 shot
 23400 shot
-23600 enc 2 8
-23850 enc 2 8
-24100 enc 2 8
-24350 enc 2 8
-24600 enc 2 8
-24850 enc 2 8
-25100 enc 2 8
-25350 enc 2 8
-25900 shot
-26400 end
+23500 enc 6 8
+23700 enc 6 8
+23900 shot
+24000 keys 2
+24100 keys 0
+24500 shot
+25100 shot
+25700 shot
+26500 shot
+29500 shot
+31000 shot
+32000 shot
+35500 shot
+37500 shot
+38000 btn 8
+38400 shot
+38600 enc 2 8
+38850 enc 2 8
+39100 enc 2 8
+39350 enc 2 8
+39600 enc 2 8
+39850 enc 2 8
+40100 enc 2 8
+40350 enc 2 8
+40900 shot
+41400 end

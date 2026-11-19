@@ -19,7 +19,7 @@ run "power on: OCT- and OCT+ breathe three times from \"change language\", the w
 run "a language chosen over the title: no OCT breaths after it, PLAY as before" sh -c 'tests/run_arcave.sh octpulse2 > build/host/octpulse2.log 2>&1 && grep -q " 7000 ms  lights: breathing 0000, PLAY 0" build/host/octpulse2.log && grep -q " 8600 ms  lights: breathing 0000, PLAY 2" build/host/octpulse2.log'
 run "the course, standing still: at a minute and a half \"keep going\" at the right edge, gone after five seconds" play keepgoing
 run "the title in each language" play lang
-run "the controls box by the start, HOME: the controls shown, a full loop (roll, hop, big hop, the jump onto the bounce mushroom, the other grip)" play controls
+run "the controls box by the start, HOME: the controls lesson, each step shown then done by the player (roll, hop, big hop, the jump onto the bounce mushroom; the other grip only shown), ALL DONE" play controls
 run "the PLAY button drawn as the green button in the wake line" play playbtn
 run "Turkish: the title, the tip fading as the wake text comes in, the controls sheet" play turkish
 run "the hollow behind the start: hidden by a rock face until Rock is on the ledge and rolls in" play hollow 0 8
@@ -28,10 +28,10 @@ run "Dutch: the title, the wake text, the controls sheet, the settings, ABOUT" p
 run "Dutch: into the cave, the Hat, the rings, the dish, the jukebox" play dutchstory 1
 run "into the cave, the Hat, the jukebox, the settings" play story 1
 run "the jukebox past the Hat: its name at the screen's edge, Rock settling in its dip, PLAY: the rings" sh -c 'tests/run_arcave.sh juke 2 > build/host/juke.log 2>&1 && grep -q "^sound" build/host/juke.log'
-run "JUICE WORKS: HOME shows how it is played (a glass, the tap, the ticket's line, serving, moving a glass)" play help 4 4
-run "HOME in a machine: each step plays twice, its mark fills as it goes; any knob steps on and back" play helpknob 4 3
-run "CRYSTAL ROAD: HOME shows how it is played (a crystal at the line and its keys, twice, the far side, twice, a miss, KNOB 1 and ALGO)" play helprun 4 3
-run "NIGHT BLOOM: HOME shows how it is played (KNOB 1's petal, catching, SELECT's ring, ALGORITHM's ring, an arrow to each)" play helpbloom 4 5
+run "JUICE WORKS: HOME, the lesson played through (a glass, pouring to the ticket's line, serving, moving a glass)" play help 4 4
+run "HOME in a machine: PLAY skips a step (the language stays); left alone, a step is shown again; a knob during the replay goes straight to the turn" play helpknob 4 4
+run "CRYSTAL ROAD: HOME, the lesson on its own song, on the beat (a low crystal, missed then caught; a high then a low; the miss only shown; KNOB 1 and ALGO)" play helprun 4 3
+run "NIGHT BLOOM: HOME, the lesson played through (KNOB 1's petal onto its spore; each on its colour only shown, a key goes on; SELECT's ring, ALGORITHM's ring)" play helpbloom 4 5
 run "a new song at the mended jukebox: a long slide, effects, their page, kept (and saved)" sh -c 'tests/run_arcave.sh newsong 4 2 > build/host/newsong.log 2>&1 && grep -q "settings 0 saved" build/host/newsong.log'
 run "the rings, stuck: a minute (the note, HOME breathing), the hint page and back, two minutes (HOME held three seconds: the rings glide into line, the light)" play hint 2 1
 run "the rings lock as they come into line (the foot shows which), a locked knob does nothing, the light" play lock 2 1

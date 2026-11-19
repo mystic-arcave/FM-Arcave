@@ -1,19 +1,22 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
-/* HOME on the course: the controls, shown rather than told. A loop of five short steps, each a little scene with
- * Rock above a line drawing of the FM-1 and the two hands that hold it:
- *   roll        the left hand turns PRESETS: Rock rolls
- *   hop         the right thumb, holding the bottom right corner, on a bottom key: a hop
- *   big hop     the same thumb on a top key: a big hop
+/* HOME on the course: the controls, shown and then done. A lesson of five steps, each a little scene with Rock above a
+ * line drawing of the FM-1 and the two hands that hold it; each is shown once (WATCH), then waits for the player to do
+ * it on the real FM-1 (YOUR TURN: the scene answers the real knobs and keys) and is ticked off:
+ *   roll        the left hand turns PRESETS: Rock rolls                         yours: any knob but ALGORITHM, 12 clicks
+ *   hop         the right thumb, holding the bottom right corner, on a bottom key: a hop     yours: two bottom keys
+ *   big hop     the same thumb on a top key: a big hop                                       yours: two top keys
  *   the jump    rolling over the white keys in a hill, a top key: Rock is thrown from the crest, lands on a glowing
- *               bounce mushroom and is thrown again: BONUS
- *   or          the other grip, last and once: the right hand on KNOB 4, the left thumb on the keys
+ *               bounce mushroom and is thrown again: BONUS        yours: roll up onto the white keys, then a top key
+ *   or          the other grip, last: the right hand on KNOB 4, the left thumb on the keys   (only shown: on at its end,
+ *               or at a key, knob or button)
  * The device and the hands are lit lines on the dark, as the Hat and Rock are. The knob hand pinches its knob and
  * twists it, lets go and twists again; the thumb waits just off its key, comes down on it (a ring goes out from under
- * it, three small strokes stand over the key) and lifts. The knob hand comes in alone for the first
- * step, the key hand with the second; both slide out and in again when the grip changes.
+ * it, three small strokes stand over the key) and lifts. At your turn the hands go out to the sides: the knob to use
+ * glows, the keys to use are lit (on the drawing and on the FM-1), and the key pressed goes down on the drawing.
  * The words are the controls sheet's own ("BIG HOP = TOP KEYS": the word large over the scene, the rest
- * under the scene, over the device), so every language has them. The keys of the row being shown light up on the
- * FM-1 itself. The first step has a line of its own under its word: TURN KNOB TO ROLL. */
+ * under the scene, over the device), so every language has them. The first step has a line of its own under its word:
+ * TURN KNOB TO ROLL. The lesson's own engine (WATCH, YOUR TURN, DONE, the marks, ALL DONE) is below, shared with the
+ * machines' (ac_mtutor.h). */
 
 typedef struct { uint8_t grip, act; uint16_t ms; uint16_t tap[2]; uint8_t row[2]; } tu_step_t;
 enum { TA_ROLL, TA_HOP, TA_JUMP, TA_SWAP };      /* tap: when the thumb presses (0: it does not); row: 1 bottom, 2 top */
@@ -41,37 +44,125 @@ static const tu_step_t TU_STEP[5] = {
 #define TU_DX 45
 #define TU_DY 134
 static const uint8_t TU_SHARP_AFTER[11] = {0, 1, 2, 4, 5, 7, 8, 9, 11, 12, 14};   /* the white key each top key follows */
-static int32_t tu_last;                          /* where in the loop the last tick was (for the sounds) */
-/* every tutorial (this one and each machine's, ac_mtutor.h) plays each step's scene TU_HOLD times before it moves on,
- * so there is time to read; any knob steps on or back (sheet_tick) */
-#define TU_HOLD 2
-
-/* where t falls: the step, how far into its scene (u, the scene playing again on each pass), how many loops so far;
- * ur: how far into the step itself */
-static void tu_where_r(int32_t t, int32_t *step, int32_t *u, int32_t *loops, int32_t *ur)
+/* Every tutorial (this one and each machine's, ac_mtutor.h) is a lesson of steps, and each step comes in three parts:
+ *   WATCH      the step's scene plays once, the hands on the drawn FM-1 doing what it asks
+ *   YOUR TURN  the hands go; the knob or the keys to use glow, on the drawing and on the FM-1 itself, and the scene
+ *              answers the real knobs and keys. It waits as long as it takes; left alone a while, it shows the step again
+ *   DONE       a tick over the scene and on the step's mark, a chime; then the next step
+ * A step that only tells (info) is its WATCH alone: it ticks itself off as its demo ends, and a key, a knob or a button
+ * goes on at once. After the last, a card: all done. PLAY skips a step, HOME returns. A step's mark fills as its demo plays, then as it
+ * is done (some ask for a few turns or presses). Once a demo has played out, pressing or turning cuts its replays short. */
+enum { TP_WATCH, TP_TRY, TP_DONE, TP_END };
+#define TP_DONE_MS 1200
+#define TP_IDLE_MS 9000                          /* left alone this long at your turn: the step is shown again */
+#define TP_SWAP_MS 800                           /* "YOUR TURN" over the scene as the hands go */
+#define TP_LONG 100000
+static struct {
+    int32_t step, phase, pt, prev, idle, idle_max, seen, started;   /* idle_max: how long left alone before the demo again */
+    int32_t prog, goal, meter;                   /* how much of the step is done, of how much; meter: the same, 0..256 */
+    int32_t ev, evk, kev;                        /* ms since a press that the step answered, its key; ms since a knob turned */
+    int32_t v[8];                                /* the step's own state */
+    uint32_t done;                               /* the steps ticked off, a bit each */
+} tp;
+static void tp_go(int32_t step)
 {
-    int32_t k, lt = t % (TU_LOOP * TU_HOLD);
-    *loops = t / (TU_LOOP * TU_HOLD);
-    for (k = 0; k < TU_N - 1 && lt >= TU_STEP[k].ms * TU_HOLD; k++) lt -= TU_STEP[k].ms * TU_HOLD;
-    *step = k; *ur = lt; *u = lt % TU_STEP[k].ms;
+    tp.step = step; tp.phase = TP_WATCH; tp.pt = 0; tp.prev = -1; tp.idle = 0; tp.idle_max = TP_IDLE_MS; tp.seen = 0; tp.started = 0;
+    tp.prog = 0; tp.goal = 1; tp.meter = 0; tp.ev = tp.kev = TP_LONG; tp.evk = -1;
 }
-static void tu_where(int32_t t, int32_t *step, int32_t *u, int32_t *loops) { int32_t ur; tu_where_r(t, step, u, loops, &ur); }
-/* the marks under a tutorial's scene, one a step: the step playing fills as it goes (how long until the next), and
- * arrows either side say any knob steps on or back (bright a moment after a knob has turned) */
-static void tu_pips(int32_t n, int32_t step, int32_t prog256, int32_t y, int32_t knob_ago, uint32_t tm)
+static void tp_begin(void) { int k; tp.done = 0; for (k = 0; k < 8; k++) tp.v[k] = 0; tp_go(0); }
+static void tp_after(int32_t n) { if (tp.step + 1 >= n) { tp.phase = TP_END; tp.pt = 0; } else tp_go(tp.step + 1); }
+/* a frame of a lesson of n steps, whose step's demo lasts watch_ms: start() sets a step's own state the first time its
+ * turn comes, live() answers the knobs and keys (in.* only at YOUR TURN; it goes on animating while DONE shows) */
+static void tp_run(int32_t dt, int32_t n, int32_t watch_ms, int info, void (*start)(void), void (*live)(int32_t))
 {
-    int32_t k, x0 = 120 - n * 8, hot = knob_ago >= 0 && knob_ago < 500;
+    int act = in.kdown || in.any_knob;
+    tp.prev = tp.pt; tp.pt += dt;
+    tp.ev = imin(TP_LONG, tp.ev + dt); tp.kev = imin(TP_LONG, tp.kev + dt);
+    if (tp.phase == TP_END) return;
+    if (BDOWN(BTN_PLAY)) { if (info) tp.done |= 1u << tp.step; snd_ui(79); tp_after(n); return; }   /* (OCT is the language, everywhere) */
+    if (tp.phase == TP_WATCH && info) {          /* only to watch: on at its end, or at once on a key, knob or button */
+        uint32_t b = in.bdown & ~(1u << BTN_HOME | 1u << BTN_REC | 1u << BTN_OCT_UP | 1u << BTN_OCT_DOWN);
+        if (tp.pt >= watch_ms || act || b) { tp.done |= 1u << tp.step; snd_ui(79); tp_after(n); }
+        return;
+    }
+    if (tp.phase == TP_WATCH) {
+        if (tp.pt < watch_ms && !(act && tp.seen)) return;
+        tp.seen = 1; tp.phase = TP_TRY; tp.pt = 0; tp.prev = -1; tp.idle = 0;
+        if (!tp.started) { tp.started = 1; tp.prog = 0; tp.meter = 0; tp.ev = tp.kev = TP_LONG; tp.evk = -1; start(); }
+        snd_ui(84);
+    }
+    if (tp.phase == TP_TRY) {
+        tp.idle = act ? 0 : tp.idle + dt;
+        live(dt);
+        tp.meter = iclamp(tp.prog * 256 / imax(1, tp.goal), 0, 256);
+        if (tp.prog >= tp.goal) { tp.phase = TP_DONE; tp.pt = 0; tp.done |= 1u << tp.step; snd_chime(1); }
+        else if (tp.idle >= tp.idle_max) { tp.phase = TP_WATCH; tp.pt = 0; tp.prev = -1; }
+        return;
+    }
+    live(dt);
+    if (tp.pt >= TP_DONE_MS) { tp_after(n); if (tp.phase == TP_END) snd_chime(1); }
+}
+#define TP_AT(ms) (tp.prev < (ms) && tp.pt >= (ms))   /* the demo has just passed ms */
+static int tp_live(void) { return tp.phase == TP_TRY || tp.phase == TP_DONE; }
+/* a tick, s across, a little bold */
+static void tp_check(int32_t cx, int32_t cy, int32_t s, col_t c)
+{
+    gline2(cx - s / 2, cy, cx - s / 6, cy + s / 3, c); gline2(cx - s / 6, cy + s / 3, cx + s / 2, cy - s / 3, c);
+    gline(cx - s / 2, cy + 1, cx - s / 6, cy + s / 3 + 1, c); gline(cx - s / 6, cy + s / 3 + 1, cx + s / 2, cy - s / 3 + 1, c);
+}
+/* the marks under a lesson's scene, one a step: ticked when done; the step on fills (white as its demo plays, in the
+ * step's colour as it is done); to their left what the step is at: WATCH, or YOUR TURN, breathing */
+static void tp_pips(int32_t n, int32_t y, int32_t watch_ms, col_t c, uint32_t tm)
+{
+    int32_t k, x0 = 120 - n * 8;
     for (k = 0; k < n; k++) {
         int32_t x = x0 + k * 16;
-        grect(x, y - 1, 14, 3, k < step ? th->pad : th->mute);   /* (done: lit; to come: dim; this one fills, white) */
-        if (k == step) grect(x, y - 1, 14 * iclamp(prog256, 0, 256) / 256, 3, th->text);
+        if (tp.done >> k & 1u) { tp_check(x + 7, y, 9, th->pad); continue; }
+        grect(x, y - 1, 14, 3, th->mute);
+        if (k == tp.step && tp.phase != TP_END) {
+            int32_t f = tp.phase == TP_WATCH ? tp.pt * 256 / imax(1, watch_ms) : tp.meter;
+            grect(x, y - 1, 14 * iclamp(f, 0, 256) / 256, 3, tp.phase == TP_WATCH ? th->text : c);
+        }
     }
-    galpha(hot ? 256 : 110 + ipulse(tm, 1800) * 70 / 256);
-    gtextr(x0 - 6, y - 2, "\xE2\x86\x90", hot ? th->text : th->pad, 1);
-    gtext(x0 + n * 16 + 4, y - 2, "\xE2\x86\x92", hot ? th->text : th->pad, 1);
-    galpha(256);
+    if (tp.phase == TP_WATCH || tp.phase == TP_TRY) {
+        galpha(tp.phase == TP_TRY ? 150 + ipulse(tm, 1000) * 106 / 256 : 190);
+        gtextr(x0 - 6, y - 2, TR(tp.phase == TP_WATCH ? T_TU_WATCH : T_TU_TURN), tp.phase == TP_WATCH ? th->text : c, 1);
+        galpha(256);
+    }
 }
-/* the press nearest u in a step: which row, and how long ago it went down (negative: not yet; -1000: none) */
+/* over the scene (its middle at cy): YOUR TURN as the hands go; the tick when a step is done */
+static void tp_overlay(int32_t cy, col_t c)
+{
+    if (tp.phase == TP_TRY && tp.pt < TP_SWAP_MS && tp.seen == 1) {
+        int32_t a = tp.pt < TP_SWAP_MS - 250 ? imin(256, tp.pt * 256 / 120) : (TP_SWAP_MS - tp.pt) * 256 / 250, sc = ts(2, 3);
+        galpha(a * 3 / 4); grect(0, cy - 3 * sc - 3, AC_W, 5 * sc + 6, th->bg);
+        galpha(a); gfit(120, cy - 3 * sc + 1, 228, TR(T_TU_TURN), c, sc); galpha(256);
+    }
+    if (tp.phase == TP_DONE) {
+        int32_t a = imin(256, tp.pt * 256 / 150), r = 8 + 6 * ease8(imin(256, tp.pt * 256 / 260)) / 256;
+        if (tp.pt > TP_DONE_MS - 250) a = imax(0, (TP_DONE_MS - tp.pt) * 256 / 250);
+        galpha(a * 3 / 4); gdisc(120, cy, r + 5, th->bg);
+        galpha(a); gcirc(120, cy, r + 5, th->pad); gcirc(120, cy, r + 4, th->pad);
+        tp_check(120, cy, r * 3 / 2, th->pad);
+        galpha(256);
+    }
+}
+/* the end of a lesson: every step ticked, Rock bouncing for joy, ALL DONE */
+static void tp_end_card(int32_t n, col_t c, uint32_t tm)
+{
+    int32_t k, sc = ts(2, 4), b = (int32_t)(tm % 700u), hop = 4 * 18 * b / 700 * (700 - b) / 700;
+    grect(0, 0, AC_W, AC_H, th->bg);
+    for (k = 0; k < 22; k++) gp((int32_t)(ihash((uint32_t)k * 7u + 3u) % 240u), (int32_t)(ihash((uint32_t)k * 13u + 5u) % 200u), th->mute);
+    for (k = 0; k < 6; k++) {                    /* rings going out, in the caps' colours */
+        int32_t q = (int32_t)((tm + (uint32_t)k * 400u) % 2400u) * 256 / 2400;
+        galpha(256 - q); gcirc(120, 70, 20 + q * 80 / 256, th->caps[k % 5]);
+    }
+    galpha(256);
+    ghl(70, 170, 92, th->rim);
+    rock_draw(120, 80 - hop, 300, (int32_t)tm * 30, (tm % 3100u) < 150u ? 30 : 256, th->rock, th->rock_rim, th->dark, th->moss, th->eye, th->pupil);
+    gfit(120, 112, 228, TR(T_TU_ALL), c, sc);
+    for (k = 0; k < n; k++) tp_check(120 - n * 8 + k * 16 + 7, 120 + 5 * sc + 10, 9, th->pad);
+}
 static int32_t tu_tap(int32_t step, int32_t u, int32_t *row)
 {
     const tu_step_t *s = &TU_STEP[step];
@@ -79,33 +170,81 @@ static int32_t tu_tap(int32_t step, int32_t u, int32_t *row)
     *row = s->row[k];
     return s->tap[k] ? u - (int32_t)s->tap[k] : -1000;
 }
-static void tutor_tick(int32_t dt)
+/* the course's lesson at your turn: what the scene shows is the player's own doing */
+#define TV_ROLL tp.v[0]                          /* how far Rock has rolled, in the demo's ms of rolling (46 px a second) */
+#define TV_SHOWN tp.v[1]                         /* the same, eased toward it */
+#define TV_JX tp.v[2]                            /* the jump: Rock along the hill (px * 16), and where it was thrown from */
+#define TV_JX0 tp.v[3]
+#define TV_FLY tp.v[4]                           /* ms since the key that threw it (-1: not yet) */
+#define TU_FLY_UP 300                            /* the jump: thrown, Rock goes on up to the crest, then flies as in the demo */
+static int tu_live;                              /* the scene being drawn is the player's: Rock where they put him */
+static int32_t tu_live_s, tu_live_hop, tu_jrx = -1, tu_want_knob;
+static void tu_start(void)
 {
-    int32_t step, u, loops, lt = sh.t % (TU_LOOP * TU_HOLD), a = tu_last, k, j, row, age, base = 0, r;
-    uint32_t rowmask = 0;
-    (void)dt;
-    tu_where(sh.t, &step, &u, &loops);
-    if (lt < a) a = -1;                          /* (the loop came round) */
-#define TU_AT(ms) (a < (ms) && lt >= (ms))
-    for (k = 0; k < TU_N; k++) {
-        const tu_step_t *s = &TU_STEP[k];
-        for (r = 0; r < TU_HOLD; r++, base += s->ms) {   /* (each pass of the step's scene) */
-            for (j = 0; j < 2; j++)              /* a press: the key's own note, as on the course */
-                if (s->tap[j] && TU_AT(base + s->tap[j])) sfx(key_note(s->row[j] == 2 ? 22 : 23), 0, 600, W_TRI, 2800, 6, 200);
-            if (s->act == TA_JUMP) {
-                if (TU_AT(base + TU_T_OFF)) snd_whoosh();
-                if (TU_AT(base + TU_T_LAND)) { sfx(67, 0, 800, W_SINE, 3400, 4, 220); sfx(79, 60, 600, W_SINE, 1800, 4, 220); snd_chime(1); }
+    const tu_step_t *s = &TU_STEP[tp.step];
+    TV_SHOWN = TV_ROLL; TV_JX = 10 * 16; TV_FLY = -1;
+    tp.goal = s->act == TA_ROLL ? 12 : s->act == TA_HOP ? 2 : 1;
+}
+static void tu_live_tick(int32_t dt)
+{
+    const tu_step_t *s = &TU_STEP[tp.step];
+    int32_t d = in.any_knob - in.enc[ENC_ALGORITHM], k, was;   /* every knob but ALGORITHM rolls, as on the course */
+    if (tp.phase == TP_TRY) {
+        if (d) { tp.kev = 0; TV_ROLL += d * 160; }
+        if (in.kdown) {
+            for (k = AC_NKEY - 1; k > 0 && !(in.kdown >> k & 1u); k--) ;
+            tp.ev = 0; tp.evk = k;
+            sfx(key_note(k), 0, 600, W_TRI, 2800, 6, 200);
+        }
+        switch (s->act) {
+        case TA_ROLL: tp.prog = imin(tp.goal, tp.prog + iabs(d)); break;
+        case TA_HOP: if (in.kdown && KEY_IS_SHARP[tp.evk] == (s->row[0] == 2)) tp.prog++; break;   /* the row it teaches */
+        default:                                 /* the jump: roll up the hill; a top key on the white keys throws */
+            if (TV_FLY < 0) {
+                TV_JX = iclamp(TV_JX + d * 80, 10 * 16, TU_CREST * 16);
+                if (in.kdown && KEY_IS_SHARP[tp.evk] && TV_JX >= 80 * 16) { TV_FLY = 0; TV_JX0 = TV_JX; }
             }
         }
     }
-#undef TU_AT
-    tu_last = lt;
-    /* on the FM-1 itself: the row being shown glows, and lights as the key goes down */
-    age = tu_tap(step, u, &row);
-    if (row)
-        for (k = 0; k < AC_NKEY; k++) if (KEY_IS_SHARP[k] == (row == 2)) rowmask |= 1u << k;
+    TV_SHOWN += (TV_ROLL - TV_SHOWN) * imin(dt, 100) / 150;
+    if (s->act == TA_JUMP && TV_FLY >= 0) {
+        was = TV_FLY; TV_FLY += dt;
+#define TU_PAST(ms) (was < (ms) && TV_FLY >= (ms))
+        if (TU_PAST(TU_FLY_UP)) snd_whoosh();
+        if (TU_PAST(TU_FLY_UP + TU_T_LAND - TU_T_OFF)) { sfx(67, 0, 800, W_SINE, 3400, 4, 220); sfx(79, 60, 600, W_SINE, 1800, 4, 220); snd_chime(1); }
+#undef TU_PAST
+        if (TV_FLY >= TU_FLY_UP + TU_T_OUT - TU_T_OFF + 500) tp.prog = 1;   /* (once BONUS is up) */
+    }
+}
+/* the row a step asks for: 1 the bottom keys, 2 the top, 3 both, 0 none */
+static int32_t tu_want_row(const tu_step_t *s) { return s->act == TA_HOP ? s->row[0] : s->act == TA_JUMP ? 2 : s->act == TA_SWAP ? 3 : 0; }
+static void tutor_tick(int32_t dt)
+{
+    const tu_step_t *s;
+    int32_t j, row, age, k;
+    uint32_t rowmask = 0;
+    tp_run(dt, TU_N, TU_STEP[tp.step].ms, TU_STEP[tp.step].act == TA_SWAP, tu_start, tu_live_tick);   /* (the other grip: only shown) */
+    if (tp.phase == TP_END) return;
+    s = &TU_STEP[tp.step];
+    if (tp.phase == TP_WATCH) {                  /* the demo's sounds: a press is the key's own note, as on the course */
+        for (j = 0; j < 2; j++)
+            if (s->tap[j] && TP_AT((int32_t)s->tap[j])) sfx(key_note(s->row[j] == 2 ? 22 : 23), 0, 600, W_TRI, 2800, 6, 200);
+        if (s->act == TA_JUMP) {
+            if (TP_AT(TU_T_OFF)) snd_whoosh();
+            if (TP_AT(TU_T_LAND)) { sfx(67, 0, 800, W_SINE, 3400, 4, 220); sfx(79, 60, 600, W_SINE, 1800, 4, 220); snd_chime(1); }
+        }
+        /* on the FM-1 itself: the row being shown glows, and lights as the key goes down */
+        age = tu_tap(tp.step, tp.pt % s->ms, &row);
+        if (row) for (k = 0; k < AC_NKEY; k++) if (KEY_IS_SHARP[k] == (row == 2)) rowmask |= 1u << k;
+        led_key_dim_want |= rowmask;
+        if (age >= 0 && age < 220) led_key_want |= rowmask;
+        return;
+    }
+    /* your turn: the keys to use glow on the FM-1, and light as they are pressed */
+    row = tu_want_row(s);
+    for (k = 0; k < AC_NKEY; k++) if (row >> KEY_IS_SHARP[k] & 1) rowmask |= 1u << k;
     led_key_dim_want |= rowmask;
-    if (age >= 0 && age < 220) led_key_want |= rowmask;
+    led_key_want |= in.keys;
 }
 
 /* the hands, as icons: a closed hand and the one or two digits doing the work, each a few round-ended pieces drawn as
@@ -201,9 +340,18 @@ static void tu_device(int grip, int turn, int32_t row, int32_t rf, int32_t age, 
         gline(x0 + KN[k][0], y0 + KN[k][1], x0 + KN[k][0] + ((3 * icos(a)) >> 14), y0 + KN[k][1] + ((3 * isin(a)) >> 14), th->rim);
     }
     galpha(256);
-    /* the keys: sixteen below, eleven above in threes and twos; the row the thumb is over is lit */
-    for (k = 0; k < 16; k++) tu_key(x0 + 11 + k * 8, y0 + 69, row == 1, row == 1 && k == hw ? age : -1, c);
-    for (k = 0; k < 11; k++) tu_key(x0 + 15 + TU_SHARP_AFTER[k] * 8, y0 + 54, row == 2, row == 2 && TU_SHARP_AFTER[k] == hs ? age : -1, c);
+    /* the keys: sixteen below, eleven above in threes and twos; the row the thumb is over is lit (at your turn: the row
+     * or rows to use, and the key the player pressed goes down, whichever it is) */
+    {
+        int32_t pw = hw, ps = hs, aw = row == 1 ? age : -1, as = row == 2 ? age : -1;
+        if (tu_live && tp.evk >= 0) {
+            int32_t j, nw = 0, ns = 0;
+            for (j = 0; j < tp.evk; j++) { if (KEY_IS_SHARP[j]) ns++; else nw++; }
+            if (KEY_IS_SHARP[tp.evk]) { ps = TU_SHARP_AFTER[imin(ns, 10)]; as = tp.ev; aw = -1; } else { pw = nw; aw = tp.ev; as = -1; }
+        }
+        for (k = 0; k < 16; k++) tu_key(x0 + 11 + k * 8, y0 + 69, row & 1, k == pw ? aw : -1, c);
+        for (k = 0; k < 11; k++) tu_key(x0 + 15 + TU_SHARP_AFTER[k] * 8, y0 + 54, (row & 2) != 0, TU_SHARP_AFTER[k] == ps ? as : -1, c);
+    }
     /* the hand on the knob: it twists the knob a little way, lets go and takes a new hold, again and again */
     kx = x0 + KN[kn][0]; ky = y0 + KN[kn][1];
     if (turn) {
@@ -220,6 +368,9 @@ static void tu_device(int grip, int turn, int32_t row, int32_t rf, int32_t age, 
     }
     gdisc(kx, ky, 4, th->bg); gcirc(kx, ky, 4, turn ? c : th->rim);
     gline(kx, ky, kx + ((3 * icos(ka)) >> 14), ky + ((3 * isin(ka)) >> 14), turn ? c : th->rim);
+    if (tu_live && tu_want_knob) {               /* your turn: the knob to use, glowing */
+        galpha(110 + ipulse(tm, 900) * 146 / 256); gcirc(kx, ky, 7, c); gcirc(kx, ky, 8, c); galpha(256);
+    }
     /* the hand at the corner: its thumb waits just off the key, comes down on it and lifts */
     kp[0][0] = x0 + 11 + hw * 8 + 3; kp[0][1] = y0 + 69 + 6;
     kp[1][0] = x0 + 15 + hs * 8 + 3; kp[1][1] = y0 + 54 + 6;
@@ -228,7 +379,7 @@ static void tu_device(int grip, int turn, int32_t row, int32_t rf, int32_t age, 
     f = tu_press(age);
     tx = px + s * (1 + 7 * (256 - f) / 256); ty = py + 4 * (256 - f) / 256;
     tu_icon(TU_TAP, 2, TU_TAP_L, 3, tx + s * tslide, ty, s, 0, 256);
-    if (age >= 0 && age < 420) {                 /* the press: a ring out from under the thumb, three strokes over the key */
+    if (!tu_live && age >= 0 && age < 420) {     /* the press: a ring out from under the thumb, three strokes over the key */
         int32_t fa = imax(0, 256 - imax(0, age - 180) * 256 / 240), rr = 8 + age * 12 / 420;
         galpha(imax(0, 256 - age * 256 / 420)); gcirc(px, py, rr, c);
         galpha(fa);
@@ -262,6 +413,7 @@ static void tu_roll_state(int32_t step, int32_t u, int32_t loops, int32_t *s, in
 {
     const tu_step_t *st = &TU_STEP[step];
     int32_t k, roll = loops * 6200 + (step > 0 ? 2400 : 0) + (st->act == TA_ROLL || st->act == TA_SWAP ? u : 0);
+    if (tu_live) { *s = tu_live_s; *hop = tu_live_hop; return; }
     *s = roll * 46 / 1000; *hop = 0;
     for (k = 0; k < 2; k++) {
         int32_t d = u - (int32_t)st->tap[k], len = st->row[k] == 2 ? 640 : 480, h = st->row[k] == 2 ? 26 : 12;
@@ -272,6 +424,7 @@ static void tu_roll_state(int32_t step, int32_t u, int32_t loops, int32_t *s, in
 static void tu_jump_pos(int32_t u, int32_t *rx, int32_t *ry)
 {
     int32_t sq = u >= TU_T_LAND && u < TU_T_LAND + 250 ? 256 - (u - TU_T_LAND) * 256 / 250 : 0;
+    if (tu_jrx >= 0 && u < TU_T_OFF) { *rx = tu_jrx; *ry = tu_hill(*rx) - 9 - tu_live_hop; return; }   /* (the player's) */
     if (u < TU_T_OFF) {                          /* rolling up, faster and faster */
         int32_t f = u * 256 / TU_T_OFF;
         *rx = 10 + 110 * (f + f * f / 256) / 512; *ry = tu_hill(*rx) - 9;
@@ -310,7 +463,7 @@ static void tu_scene_jump(int32_t u, uint32_t tm)
     for (x = 84; x < 109; x++) {                 /* the white keys in the hill; the one under Rock goes down */
         int32_t key = (x - 84) / 5, sink = 0;
         if ((x - 84) % 5 == 4) continue;
-        if (u < TU_T_OFF) { int32_t rxn = 10 + 110 * (u * 256 / TU_T_OFF + (u * 256 / TU_T_OFF) * (u * 256 / TU_T_OFF) / 256) / 512; if (iabs(rxn - (86 + key * 5)) < 5) sink = 2; }
+        if (u < TU_T_OFF) { int32_t rxn, ryn; tu_jump_pos(u, &rxn, &ryn); if (iabs(rxn - (86 + key * 5)) < 5 && ryn >= tu_hill(rxn) - 10) sink = 2; }
         grect(x, tu_hill(x) - 2 + sink, 1, 7, th->pad);
     }
     {   /* the bounce mushroom: a jelly cap, glowing, squashed as it throws */
@@ -409,28 +562,55 @@ static void tu_mini(int32_t step, int32_t u, int32_t loops, uint32_t tm)
     if (u < TU_T_OUT) tu_mrock(16 + (rx - cx) / 3, 22 + (ry - TU_GY) / 3, rx * 1304);
 }
 
+/* the foot, taking turns: HOME back, PLAY skips a step (and in a machine, REC back to the Arcave) */
+static void tp_foot(int n, uint32_t tm)
+{
+    static const int ID[3] = {T_HELP_RETURN, T_TU_SKIP, T_REC_BACK};
+    uint32_t f = (tm / 3000u) % (uint32_t)n;
+    if (tp.phase == TP_END) f = 0;
+    galpha(150 + ipulse(tm, 1400) * 106 / 256);
+    gfit(120, 231, 232, TR(ID[f]), f == 0u ? th->pad : f == 1u ? th->caps[3] : th->mute, 1);
+    galpha(256);
+}
 static void tutor_draw(void)
 {
     static const int IDS[3] = {T_HELP_ROLL, T_HELP_LOW, T_HELP_HIGH};
-    int32_t step, u, loops, k, n, sc, a, fade = 0, id, row, age, ur;
+    int32_t step, u, loops = 0, k, n, sc, a, fade = 0, id, row, age, live = tp_live();
     uint32_t tm = (uint32_t)sh.t;
     const tu_step_t *st;
     const char *s, *rest;
     char word[40];
     col_t c;
-    tu_where_r(sh.t, &step, &u, &loops, &ur);
-    st = &TU_STEP[step];
-    age = tu_tap(step, u, &row);
+    if (tp.phase == TP_END) { tp_end_card(TU_N, th->caps[0], tm); tp_foot(2, tm); return; }
+    step = tp.step; st = &TU_STEP[step];
+    u = tp.pt % st->ms;
+    tu_live = live; tu_jrx = -1; tu_live_hop = 0; tu_want_knob = st->act != TA_HOP;
+    if (live) {                                  /* your turn: Rock where the player has put him */
+        if (tp.evk >= 0) {                       /* a hop from the last key pressed: small from the bottom row, big from the top */
+            int32_t big = KEY_IS_SHARP[tp.evk], len = big ? 640 : 480, h = big ? 26 : 12;
+            if (tp.ev < len) tu_live_hop = 4 * h * tp.ev / len * (len - tp.ev) / len;
+        }
+        tu_live_s = TV_SHOWN * 46 / 1000;
+        if (st->act == TA_JUMP) {
+            u = 1000;
+            if (TV_FLY < 0) tu_jrx = TV_JX / 16;
+            else if (TV_FLY < TU_FLY_UP) { tu_jrx = (TV_JX0 + (TU_CREST * 16 - TV_JX0) * TV_FLY / TU_FLY_UP) / 16; tu_live_hop = 0; }
+            else u = TU_T_OFF + TV_FLY - TU_FLY_UP;
+        }
+        age = tp.ev; row = tu_want_row(st);
+    } else age = tu_tap(step, u, &row);
     c = st->act == TA_ROLL ? th->caps[0] : st->act == TA_JUMP ? th->pad : st->act == TA_SWAP ? th->caps[3] : th->caps[row == 2 ? 4 : 2];
     grect(0, 0, AC_W, AC_H, th->bg);
     for (k = 0; k < 22; k++) gp((int32_t)(ihash((uint32_t)k * 7u + 3u) % 240u), (int32_t)(ihash((uint32_t)k * 13u + 5u) % 60u), th->mute);
     gclip_y1 = TU_SCENE_H;
     if (st->act == TA_JUMP) tu_scene_jump(u, tm); else tu_scene_roll(step, u, loops, tm);
-    gclip_y1 = AC_H;
-    /* the jump's scene is another place: it fades in, and out again before the next step */
-    if (st->act == TA_JUMP) fade = u < 250 ? 256 - u * 256 / 250 : u > st->ms - 300 ? 256 - (st->ms - u) * 256 / 300 : 0;
-    else if (st->act == TA_SWAP && u < 250) fade = 256 - u * 256 / 250;
+    /* the demo's jump is another place: it fades in, and out again before your turn; so does the other grip's start */
+    if (!live) {
+        if (st->act == TA_JUMP) fade = u < 250 ? 256 - u * 256 / 250 : u > st->ms - 300 ? 256 - (st->ms - u) * 256 / 300 : 0;
+        else if (st->act == TA_SWAP && u < 250) fade = 256 - u * 256 / 250;
+    }
     if (fade > 0) { galpha(fade); grect(0, 0, AC_W, TU_SCENE_H, th->bg); galpha(256); }
+    gclip_y1 = AC_H;
     /* the word, large: what this step's control does. One size for the three of them, in every language */
     sc = ts(2, 3);
     for (id = 0; id < 3; id++) {
@@ -441,27 +621,37 @@ static void tutor_draw(void)
     }
     rest = TR(st->act == TA_JUMP ? T_HELP_PADS : T_HELP_SWAP);
     if (st->act == TA_ROLL || st->act == TA_HOP) {
-        s = TR(IDS[st->act == TA_ROLL ? 0 : row]);
+        s = TR(IDS[st->act == TA_ROLL ? 0 : st->row[0]]);
         for (n = 0; s[n] && !(s[n] == ' ' && s[n + 1] == '=') && n < 38; n++) word[n] = s[n];
         word[n] = 0;
         rest = s[n] ? s + n + 3 : s + n;
         if (st->act == TA_ROLL) rest = TR(T_HELP_TURN);   /* the first step says what to do, not which knobs */
-        galpha(imin(256, u * 256 / 200));
+        galpha(live ? 256 : imin(256, u * 256 / 200));
         gtextc(120, 4 + 2 * sc, word, c, sc);
         galpha(256);
     }
-    /* where in the loop it is: a mark for each step under the scene */
-    tu_pips(TU_N, step, ur * 256 / (st->ms * TU_HOLD), TU_SCENE_H + 1, sh.t - sh.knob_t, tm);
-    {   /* the thumb moves to the top row as a step changes to it, and in the last step before its second press; the
-         * hands go out to the sides and come back as the grip changes; the knob hand comes in first, alone */
+    tp_overlay(42, c);
+    /* where in the lesson it is: a mark for each step under the scene */
+    tp_pips(TU_N, TU_SCENE_H + 1, st->ms, c, tm);
+    {   /* the demo: the thumb moves to the top row as a step changes to it, and in the last step before its second press;
+         * the hands go out to the sides and come back as the grip changes; the knob hand comes in first, alone.
+         * Your turn: both hands go out to the sides (they are the player's now) */
         int32_t rf = 256, sl = 0, st_ = 0, e;
-        if (step == 2) rf = imin(256, u * 256 / 300);
-        if (st->tap[1] && st->row[1] != st->row[0] && u >= (int32_t)st->tap[1] - TU_REACH) rf = imin(256, (u - (int32_t)st->tap[1] + TU_REACH) * 256 / 300);
-        if ((step == 0 || step == 4) && u < 350) { e = 350 - u; sl = TU_SLIDE * e / 350 * e / 350; }
-        if ((step == 3 || step == 4) && u > st->ms - 300) { e = u - (st->ms - 300); sl = TU_SLIDE * e / 300 * e / 300; }
-        /* the hand at the keys: away while the first step only turns the knob, in as the second begins */
-        st_ = step == 0 ? 3 * TU_SLIDE / 2 : step == 1 && u < 300 ? TU_SLIDE * (300 - u) / 300 * (300 - u) / 300 : sl;
-        tu_device(st->grip, st->act == TA_ROLL || st->act == TA_SWAP || (st->act == TA_JUMP && u < TU_T_OFF), row, rf, age, sl, st_, c, tm);
+        if (live) {
+            e = tp.phase == TP_TRY ? imin(300, tp.pt) : 300;
+            sl = st_ = 2 * TU_SLIDE * e / 300 * e / 300;
+            row = tu_want_row(st);
+            if (st->act == TA_ROLL) st_ = 2 * TU_SLIDE;
+        } else {
+            if (step == 2) rf = imin(256, u * 256 / 300);
+            if (st->tap[1] && st->row[1] != st->row[0] && u >= (int32_t)st->tap[1] - TU_REACH) rf = imin(256, (u - (int32_t)st->tap[1] + TU_REACH) * 256 / 300);
+            if ((step == 0 || step == 4) && u < 350) { e = 350 - u; sl = TU_SLIDE * e / 350 * e / 350; }
+            if ((step == 3 || step == 4) && u > st->ms - 300) { e = u - (st->ms - 300); sl = TU_SLIDE * e / 300 * e / 300; }
+            /* the hand at the keys: away while the first step only turns the knob, in as the second begins */
+            st_ = step == 0 ? 3 * TU_SLIDE / 2 : step == 1 && u < 300 ? TU_SLIDE * (300 - u) / 300 * (300 - u) / 300 : sl;
+        }
+        tu_device(st->grip, live ? tp.kev < 250 : st->act == TA_ROLL || st->act == TA_SWAP || (st->act == TA_JUMP && u < TU_T_OFF),
+                  row, rf, age, sl, st_, c, tm);
         tu_mini(step, u, loops, tm);
     }
     /* under the scene, over the device: the rest of the line, in the size the settings ask for, on as many lines as it needs */
@@ -474,19 +664,6 @@ static void tutor_draw(void)
         k = gblock_h(232, buf, a);
         gblock(4, TU_SCENE_H + 5 + imax(0, (3 * TLH(ts(1, 2)) - k) / 2), 232, buf, th->text, a, 1);
     }
-    galpha(150 + ipulse(tm, 1400) * 106 / 256);  /* the foot: HOME back, and (taking turns with it) any knob steps */
-    gfit(120, 231, 232, TR((tm / 3000u) & 1u ? T_HELP_KNOB : T_HELP_RETURN), (tm / 3000u) & 1u ? th->caps[3] : th->pad, 1);
-    galpha(256);
-}
-/* any knob: the next step (or the one before), from its start; the sounds skipped over stay quiet */
-static void tutor_step(int32_t d)
-{
-    int32_t step, u, loops, ur, k, base = 0, to, L = TU_LOOP * TU_HOLD;
-    tu_where_r(sh.t, &step, &u, &loops, &ur);
-    to = step + (d > 0 ? 1 : -1);
-    if (to >= TU_N) { to = 0; loops++; }
-    if (to < 0) { to = TU_N - 1; if (loops > 0) loops--; }
-    for (k = 0; k < to; k++) base += TU_STEP[k].ms * TU_HOLD;
-    sh.t = loops * L + base; sh.knob_t = sh.t; tu_last = base;
-    snd_ui(d > 0 ? 79 : 72);
+    tp_foot(2, tm);
+    tu_live = 0; tu_jrx = -1;
 }

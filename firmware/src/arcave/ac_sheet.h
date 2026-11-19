@@ -1,7 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /* Sheets laid over a paused game, and the FX button's effects.
- *   controls   HOME on the course: the controls shown, in a loop of little scenes (ac_tutor.h). HOME in a machine: how that
- *              machine is played, the same way (ac_mtutor.h; REC from there goes back to the Arcave).
+ *   controls   HOME on the course: a lesson in the controls, each step shown and then waiting for the player to do it
+ *              (ac_tutor.h). HOME in a machine: how that machine is played, the same way (ac_mtutor.h; REC from there goes
+ *              back to the Arcave).
  *              HOME at the dish, once it has a tempo: what the song's four effects do. HOME again returns.
  *   scores     EDIT anywhere, or the board in the Arcave: the best score of each machine, the time played, the
  *              secrets found; any knob turns to CRYSTAL ROAD's page, every song's crystals and best (EDIT in that
@@ -10,13 +11,12 @@
 
 enum { SH_NONE, SH_INTRO, SH_MACH, SH_SCORES, SH_FX };
 enum { SA_NONE, SA_CLOSED, SA_LEAVE };
-static struct { uint8_t on; int32_t t, scroll, max, knob_t; } sh;   /* scroll: how far down a long page is; max: how far it goes;
-                                                                   knob_t: when a knob last stepped a tutorial */
+static struct { uint8_t on; int32_t t, scroll, max; } sh;   /* scroll: how far down a long page is; max: how far it goes */
 static uint32_t play_s, play_ms;                 /* the time played: whole seconds (kept in the save) and the rest */
 
 #include "ac_tutor.h"
 #include "ac_mtutor.h"
-static void sheet_open(int kind) { tu_last = -1; mt_last = -1; sh.on = (uint8_t)kind; sh.t = 0; sh.scroll = 0; sh.max = 0; sh.knob_t = -100000; snd_ui(74); sy_rumble_want = 0; }
+static void sheet_open(int kind) { tp_begin(); if (kind == SH_MACH) mtutor_open(); sh.on = (uint8_t)kind; sh.t = 0; sh.scroll = 0; sh.max = 0; snd_ui(74); sy_rumble_want = 0; }
 static int sheet_tick(int32_t dt)
 {
     sh.t += dt;
@@ -29,15 +29,12 @@ static int sheet_tick(int32_t dt)
         led_btn_want |= 1u << BTN_EDIT;
         return SA_NONE;
     }
-    if (BDOWN(BTN_HOME)) { sh.on = SH_NONE; snd_ui(67); return SA_CLOSED; }
+    if (BDOWN(BTN_HOME)) { if (sh.on == SH_MACH) mtutor_close(); sh.on = SH_NONE; snd_ui(67); return SA_CLOSED; }
     if (sh.on == SH_MACH || sh.on == SH_FX) {    /* REC goes back to the Arcave; the effects' page may be longer than the
                                                     screen: any knob moves it, a line a click */
-        if (BDOWN(BTN_REC)) { sh.on = SH_NONE; return SA_LEAVE; }
+        if (BDOWN(BTN_REC)) { if (sh.on == SH_MACH) mtutor_close(); sh.on = SH_NONE; return SA_LEAVE; }
         if (sh.on == SH_FX && in.any_knob) sh.scroll = iclamp(sh.scroll + in.any_knob * TLH(ts(1, 3)), 0, sh.max);
         led_breathe_want |= 1u << BTN_REC;
-    }
-    if (in.any_knob && (sh.on == SH_MACH || sh.on == SH_INTRO)) {   /* a tutorial: any knob steps on, or back */
-        if (sh.on == SH_MACH) mtutor_step(in.any_knob); else tutor_step(in.any_knob);
     }
     if (sh.on == SH_MACH) mtutor_tick(dt);
     if (sh.on == SH_INTRO) tutor_tick(dt);

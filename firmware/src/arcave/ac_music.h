@@ -5,7 +5,7 @@
  * key, C major pentatonic (A minor pentatonic is the same five), so FM-1s on different tunes still agree. The little
  * sounds of the games stay in C major pentatonic, which sits inside every one of the keys. Runs in the audio interrupt. */
 
-enum { MUS_OFF, MUS_INTRO, MUS_JUKE };
+enum { MUS_OFF, MUS_INTRO, MUS_JUKE, MUS_LESSON };
 static volatile uint8_t mus_mode = MUS_OFF, mus_track;
 
 static const uint8_t SC_PEN[5] = {0, 2, 4, 7, 9}, SC_MPEN[5] = {0, 3, 5, 7, 10};
@@ -294,11 +294,53 @@ static int32_t mus_chart_build(uint32_t track, uint32_t group)
     return cnt;
 }
 
+/* ---- CRYSTAL ROAD's lesson (ac_mtutor.h): a little song of its own, FIRST LIGHT, two bars round and round at 92 BPM
+ * in C major, the beat as plain as can be: a kick on every beat, a tick between, the bass on one and three. Before its
+ * bar 0 (les_step0) a bar of count-in: the kick and a click on each beat. Its melody rises to a high note on the third
+ * beat and lands low on the next bar's one: the notes in les_mask (steps of the 32) are the player's, left out of the
+ * tune; les_auto: the demo plays them itself, on the beat. Ladder steps as in MELODY, in C (SONGS[0]'s key). */
+#define LES_BPM 92
+static const char *const LES_MEL[2] = {"5.7.9.a.d...a.9.", "2...5.7.9.....7."};
+static const int8_t LES_CH[2][3] = {{0, 2, 4}, {-2, 0, 2}};
+static volatile uint32_t les_step0, les_mask;
+static volatile uint8_t les_auto;
+static int32_t les_deg(uint32_t s)               /* the melody's ladder step at step s of the 32, or MUS_NONE */
+{
+    char c = LES_MEL[(s / 16u) & 1u][s % 16u];
+    return c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 : MUS_NONE;
+}
+static int32_t les_pitch(int32_t d) { return mus_ladder(&SONGS[0], d) + 12; }
+static void mus_lesson(uint32_t step)
+{
+    const song_t *g = &SONGS[0];
+    int32_t ss = (int32_t)(step - les_step0), d, k;
+    uint32_t s, b;
+    if (ss < 0) {                                /* the count-in: one, two, three, four */
+        if (ss >= -16 && !((ss + 16) & 3)) {
+            sy_now(47, 230, W_SINE, 9000, 1, 0, 0, 0, 65010);
+            sy_now(ss == -16 ? 84 : 79, 60, W_SQUARE, 1300, 1, 0, 0, 0, 0);
+        }
+        return;
+    }
+    s = (uint32_t)ss % 32u; b = s % 16u;
+    if (b == 0u)
+        for (k = 0; k < 3; k++) sy_now(mus_deg(g, LES_CH[s / 16u][k] + 5), 3200, W_SINE, 1200, 600, 40, -4, k * 30 - 30, 0);
+    if (!(b & 3u)) sy_now(47, 230, W_SINE, 9000, 1, 0, 0, 0, 65010);   /* every beat */
+    if ((b & 3u) == 2u) sy_now(0, 45, W_HAT, 800, 1, 0, 0, 20, 0);
+    if (b == 0u || b == 8u) sy_now(mus_deg(g, LES_CH[s / 16u][0]) - 12, 420, W_SINE, 5200, 6, 0, 0, 0, 0);
+    d = les_deg(s);
+    if (d != MUS_NONE) {
+        if (!(les_mask >> s & 1u)) mus_mel_voice(les_pitch(d), 1, les_mask ? 90u : 170u, 0);
+        else if (les_auto) mus_mel_voice(les_pitch(d), 1, 256, 0);   /* (the demo: played for the player, perfectly) */
+    }
+}
+
 static void mus_tick(uint32_t tick)
 {
     if (tick % TICKS_STEP) return;
     if (mus_mode == MUS_INTRO) mus_intro(tick / TICKS_STEP);
     else if (mus_mode == MUS_JUKE) mus_juke(tick / TICKS_STEP);
+    else if (mus_mode == MUS_LESSON) mus_lesson(tick / TICKS_STEP);
 }
 
 static uint8_t tr_follow;                        /* another FM-1 (or the Link page) leads the tempo: leave it alone */
@@ -309,6 +351,7 @@ static void mus_set(uint32_t mode, uint32_t track)
     if (!tr_follow) {
         if (mode == MUS_INTRO) tr_bpm_q8 = 120u << 8;
         else if (mode == MUS_JUKE) tr_bpm_q8 = (uint32_t)(track == 0u ? take_bpm : SONGS[track % JUKE_N].bpm) << 8;
+        else if (mode == MUS_LESSON) tr_bpm_q8 = (uint32_t)LES_BPM << 8;
     }
 }
 
