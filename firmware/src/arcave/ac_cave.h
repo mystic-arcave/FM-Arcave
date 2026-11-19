@@ -146,7 +146,7 @@ static const cv_shroom_t CV_SHROOM[] = {
 #define CV_NSHROOM (sizeof CV_SHROOM / sizeof CV_SHROOM[0])
 #define CV_HAT_X 392
 static const int16_t CV_MACH[3][2] = {{740, 344}, {466, 288}, {706, 232}};
-static const char *const MACH_NAME[3] = {"MYSTIC RUN", "JUICE WORKS", "NIGHT BLOOM"};
+static const char *const MACH_NAME[3] = {"CRYSTAL ROAD", "JUICE WORKS", "NIGHT BLOOM"};
 
 enum { CVA_NONE, CVA_LAMP, CVA_M1, CVA_M2, CVA_M3, CVA_SCORES, CVA_EXIT, CVA_DISH };
 #define CV_BOARD_X 824                           /* the scores board, on the small ledge high on the right wall */
@@ -198,6 +198,7 @@ static int cave_tick(int32_t dt)
     int32_t knob, jump = -1, first = 1, hx = cv.x >> 8, hy = cv.y >> 8, i;
     int act = CVA_NONE;
     cv.t += dt;
+    if (in.kdown) snd_keys(in.kdown, 0);         /* the keyboard is an instrument here: every key its note, in the tune's key */
     cv.fade = imax(0, cv.fade - dt * 256 / 1200);
     if (cv.power_t > 0) cv.power_t = imax(0, cv.power_t - dt);
     if (dlg_tick(dt)) { sy_rumble_want = 0; return CVA_NONE; }
@@ -235,8 +236,7 @@ static int cave_tick(int32_t dt)
         }
         if (cv.g) cv.coy = 13; else if (cv.coy > 0) cv.coy--;
         if (first && jump >= 0 && cv.coy > 0) {
-            cv.vy = -Q8(JMIN) - (345 - JMIN) * jump; cv.g = 0; cv.coy = 0;
-            sfx(key_note(in.hikey), 0, 700, W_TRI, 3600, 6, 200);
+            cv.vy = -Q8(JMIN) - (345 - JMIN) * jump; cv.g = 0; cv.coy = 0;   /* (its sound: the key's own note, above) */
         }
         first = 0;
         cv.x += cv.vx >> 7; cv.y += cv.vy >> 7;
@@ -333,7 +333,7 @@ static int cave_tick(int32_t dt)
 }
 
 /* the three machines, each built like its game. Dark (before the power) they are only their outlines; lit, they move:
- *   MYSTIC RUN    a crystal standing on end, shards at its foot; on its screen a tiny Rock hops crystals going by
+ *   CRYSTAL ROAD  a crystal standing on end, shards at its foot; on its screen crystals come down a road to a tiny Rock
  *   JUICE WORKS   a juice press: a glass tank of juice on top, bubbling; four taps dripping into a glass that fills
  *   NIGHT BLOOM   a flower in a pot: petals turning round a round screen, leaves on the stem, spores drifting up */
 static void cave_cabinet(int32_t x, int32_t y, int which, int32_t lit, uint32_t tm)
@@ -342,7 +342,7 @@ static void cave_cabinet(int32_t x, int32_t y, int which, int32_t lit, uint32_t 
     col_t c = on ? th->caps[which * 2 % 5] : th->rim, line = on ? c : th->rim;
     int32_t k, xy[12];
     galpha(lit);
-    if (which == 0) {                            /* MYSTIC RUN */
+    if (which == 0) {                            /* CRYSTAL ROAD */
         static const int8_t BODY[5][2] = {{-13, -5}, {-15, -40}, {0, -64}, {15, -40}, {13, -5}};
         static const int8_t SH[2][4][2] = {{{-14, -1}, {-22, -14}, {-19, -22}, {-12, -10}}, {{13, -1}, {20, -10}, {18, -16}, {12, -8}}};
         if (on) { galpha(50 + (tsin(tm, 40, 0) >> 9)); gdisc(x, y - 58, 16, c); galpha(lit); }
@@ -357,16 +357,18 @@ static void cave_cabinet(int32_t x, int32_t y, int which, int32_t lit, uint32_t 
         grect(x - 16, y - 5, 33, 5, th->panel); gbox(x - 16, y - 5, 33, 5, line);       /* the plinth */
         gbox(x - 10, y - 38, 21, 16, th->rim);   /* the screen */
         for (k = 0; k < 3; k++) grect(x - 7 + k * 6, y - 15, 2, 2, th->rim);
-        if (on) {                                /* the game on it: the ground, crystals going by, Rock hopping them */
-            int32_t g = y - 25, hop = (int32_t)(tm % 700u);
+        if (on) {                                /* the game on it: a road, crystals coming down it, Rock leaping to meet them */
+            int32_t q;
             galpha(256);
-            ghl(x - 9, x + 10, g, th->rim);
+            gline(x - 1, y - 35, x - 9, y - 24, th->rim); gline(x + 1, y - 35, x + 9, y - 24, th->rim);
+            ghl(x - 9, x + 10, y - 24, th->rim);
             for (k = 0; k < 2; k++) {
-                int32_t cxp = x + 9 - (int32_t)((tm / 40u + (uint32_t)k * 10u) % 19u);
-                gline(cxp - 1, g - 1, cxp, g - 4, th->caps[k * 2]); gline(cxp, g - 4, cxp + 1, g - 1, th->caps[k * 2]);
+                int32_t ph = (int32_t)((tm / 30u + (uint32_t)k * 13u) % 26u), side = (int32_t)((tm / 780u + (uint32_t)k) % 3u) - 1;
+                int32_t cy = y - 35 + ph * 10 / 26, cxp = x + side * ph * 7 / 26, h = 1 + ph / 9;
+                gline(cxp - 1, cy, cxp, cy - h, th->caps[(k * 2 + (int)(tm / 780u)) % 5]); gline(cxp, cy - h, cxp + 1, cy, th->caps[(k * 2 + (int)(tm / 780u)) % 5]);
             }
-            hop = hop < 350 ? 6 * hop / 350 * (350 - hop) / 350 * 4 / 4 : 0;
-            gdisc(x - 4, g - 3 - hop, 2, th->rock_rim);
+            q = (int32_t)((tm / 780u) % 3u) - 1;
+            gdisc(x + q * 6, y - 26, 2, th->rock_rim);
             gp(x - 4, y - 58, th->text); gp(x - 3, y - 52, th->text);   /* glints on the point */
             if ((tm / 600u) & 1u) gp(x + 4, y - 48, th->text);
         }

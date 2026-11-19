@@ -1,0 +1,35 @@
+# CRYSTAL ROAD (CATCH=1): all six songs one after another, each its own road (YOUR SONG the dish and its stars, SPORE
+# DRIFT spores, CRYSTAL STEPS crystals, MYCELIUM NIGHTS threads and fireflies, OPAL TIDE waves, ROLL ON rock friends);
+# SELECT turns the song after each, slowest first from OPAL TIDE (the card shows the new song, its best)
+200 enc 0 1
+500 btn 12
+9500 shot
+13500 shot
+29500 enc 0 1
+30000 shot
+30500 btn 12
+39500 shot
+43500 shot
+59500 enc 0 1
+60000 shot
+60500 btn 12
+69500 shot
+73500 shot
+89500 enc 0 1
+90000 shot
+90500 btn 12
+99500 shot
+103500 shot
+119500 enc 0 1
+120000 shot
+120500 btn 12
+129500 shot
+133500 shot
+149500 enc 0 1
+150000 shot
+150500 btn 12
+159500 shot
+163500 shot
+179500 enc 0 1
+180000 shot
+180500 end

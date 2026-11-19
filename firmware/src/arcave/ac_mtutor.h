@@ -3,20 +3,23 @@
  * each a little scene of the machine over a line drawing of the FM-1, the hands doing what the step says, and on the
  * FM-1's own screen the same scene, very small. The words are the machine's own help lines, one to a step, so every
  * language has them.
- *   MYSTIC RUN    a key: hop a crystal; the top row: a tall one; a block: the button that lights; KNOB 1: the tempo
+ *   CRYSTAL ROAD  a crystal at the line: a key of its lit group (twice, a line of words each); the far side of the
+ *                 keyboard, the far side of the road (twice); a crystal missed; KNOB 1: the difficulty, ALGO: the song
  *   JUICE WORKS   keys under a tap: a glass; KNOB 1: pour; to the ticket's line; the same keys: serve; hold and press
  *                 under another tap: the glass moves
  *   NIGHT BLOOM   KNOB 1 turns the petal to a spore; each spore on its colour; SELECT and the second ring; ALGORITHM
  *                 and the third (an arrow to each knob as it joins, as in the game)
  * HOME again returns; REC goes back to the Arcave. */
 
-#define MT_MAXS 5
-typedef struct { uint8_t n; uint16_t ms[MT_MAXS]; int16_t text[MT_MAXS]; uint8_t line[MT_MAXS]; } mt_def_t;
+#define MT_MAXS 6
+typedef struct { uint8_t n; uint16_t ms[MT_MAXS]; int16_t text[MT_MAXS]; uint8_t line[MT_MAXS]; } mt_def_t;   /* line 9: all its lines */
 static const mt_def_t MT_DEF[3] = {
-    {4, {3200, 3200, 3600, 3600, 0}, {T_RUN_1, T_RUN_1, T_RUN_2, T_RUN_3, 0}, {0, 1, 0, 0, 0}},
-    {5, {2400, 3600, 3000, 2400, 3800}, {T_TABLE_2, T_TABLE_1, T_TABLE_3, T_TABLE_2, T_TABLE_2}, {0, 0, 0, 1, 2}},
+    {6, {3400, 3400, 3400, 3400, 3400, 4200}, {T_ROAD_1, T_ROAD_1, T_ROAD_2, T_ROAD_2, T_ROAD_3, T_ROAD_4}, {0, 1, 0, 1, 0, 9}},
+    {5, {4800, 7200, 6000, 4800, 7600}, {T_TABLE_2, T_TABLE_1, T_TABLE_3, T_TABLE_2, T_TABLE_2}, {0, 0, 0, 1, 2}},
     {4, {3600, 3600, 3800, 3800, 0}, {T_BLOOM_1, T_BLOOM_2, T_BLOOM_1, T_BLOOM_3, 0}, {0, 0, 1, 0, 0}},
 };
+/* how many times slower than its scene's own timings each machine's loop plays (JUICE WORKS has the most to read) */
+static const uint8_t MT_SLOW[3] = {1, 2, 1};
 static const uint8_t TU_KN[8][2] = {{12, 13}, {27, 13}, {12, 29}, {27, 29}, {85, 14}, {102, 14}, {120, 14}, {137, 14}};
 enum { MK_MASTER, MK_SELECT, MK_PRESETS, MK_ALGO, MK_K1, MK_K2, MK_K3, MK_K4 };   /* the knobs as drawn */
 static int32_t mt_last;                          /* where in the loop the last tick was (for the sounds) */
@@ -135,74 +138,107 @@ static int32_t mt_age[27];                       /* how long ago each key went d
 static int32_t mt_keyage(int a) { return mt_age[a]; }
 static void mt_press(int a, int32_t u, int32_t at) { if (u >= at && u - at < 420) mt_age[a] = u - at; }
 
-static void mt_crystal(int32_t x, int32_t g, int tall, int32_t beat)   /* the game's own crystal (mr_crystal), larger */
+/* CRYSTAL ROAD, small: the road from a horizon at y 6 to the line at y 64, PEBBLE's four lanes (or KNOB 1's choice) */
+#define MT_RY0 6
+#define MT_RY1 64
+static void mt_rproj(int32_t u, int32_t z, int32_t *x, int32_t *y, int32_t *s)
 {
-    int32_t hh = tall ? 40 : 20, k, xy[6];
-    galpha(90 + beat * 70 / 256); gdisc(x, g - hh / 2, hh / 2 + 9, th->caps[0]); galpha(256);
-    for (k = 0; k < (tall ? 3 : 2); k++) {
-        xy[0] = x - 11 + k * 7; xy[1] = g; xy[2] = x - 5 + k * 7 + (k - 1); xy[3] = g - hh + iabs(k - 1) * 6; xy[4] = x + 1 + k * 7; xy[5] = g;
-        gpoly(xy, 3, th->text);
-    }
-    for (k = 0; k < (tall ? 3 : 2); k++) {
-        xy[0] = x - 11 + k * 7; xy[1] = g; xy[2] = x - 5 + k * 7 + (k - 1); xy[3] = g - hh + iabs(k - 1) * 6; xy[4] = x + 1 + k * 7; xy[5] = g;
-        gpolyline(xy, 3, 1, th->caps[0]);
-    }
+    int32_t p;
+    z = iclamp(z, 0, 330);
+    p = (z * z / 256 * 3 + z) / 4;
+    *y = MT_RY0 + (MT_RY1 - MT_RY0) * p / 256;
+    *x = 120 + u * (14 + 96 * p / 256) / 256;
+    *s = 30 + 150 * p / 256;
 }
-static int mt_run(int32_t step, int32_t u, uint32_t tm, mt_act_t *act, uint32_t *lit, int *blit, int *bdown)
+static int mt_bit(int k)                         /* a key of the 27 -> its bit as mt_device draws it */
 {
-    static const int16_t TA[2][2] = {{1000, 2400}, {1700, 0}};   /* when a crystal reaches Rock: steps 0 and 1 */
-    int32_t g = 70, rx = 60, v = 90, s, k, hop = 0, bpm = 110, n = 0, beat;
-    /* how far the ground has gone by: steady, then faster as KNOB 1 turns the tempo up */
-    if (step == 3) { int32_t f = mt_ramp(u, 400, 2800); v = 90 + 60 * f / 256; bpm = 110 + 30 * f / 256; }
-    s = (int32_t)(tm * 9u / 100u) + (step == 3 ? 60 * u / 1000 * mt_ramp(u, 400, 2800) / 256 : 0);
-    beat = 256 - imin(256, (int32_t)((tm * (uint32_t)bpm / 60u) % 1000u) * 256 / 400);
-    galpha(th->dark ? 70 : 90);                 /* mushrooms that swell on the beat: dim, far back */
-    for (k = -1; k < 5; k++) {
-        int32_t wx = (s / 70 + k) * 70, x = wx - s + 20;
-        mush_draw(x, g, 120 + (int32_t)(ihash((uint32_t)(wx / 70)) >> 11) + beat * 16 / 256, th->caps[ihash((uint32_t)(wx / 70 + 3)) * 5u >> 16], th->stem, beat);
+    int i, n = 0;
+    for (i = 0; i < k; i++) if (KEY_IS_SHARP[i] == KEY_IS_SHARP[k]) n++;
+    return KEY_IS_SHARP[k] ? 16 + n : n;
+}
+static uint32_t mt_lane_bits(int lane, int L)
+{
+    uint32_t m = 0; int k;
+    for (k = 0; k < AC_NKEY; k++) if (gh_key_lane(k, L) == lane) m |= 1u << mt_bit(k);
+    return m;
+}
+static int32_t mt_step_ms;                       /* how long the step being drawn lasts */
+static int mt_road(int32_t step, int32_t u, uint32_t tm, mt_act_t *act, uint32_t *lit, int *blit, int *bdown)
+{
+    /* steps 0-2: a crystal down lane 0, then lane 3, then lane 1 (missed); it reaches the line at TA */
+    static const int8_t LANE[3] = {0, 3, 1}, KEY[3] = {4, 23, 9};   /* (the key pressed: a white one of the lane) */
+    const int32_t TA = 2000, T0 = 400;
+    int32_t L = step == 3 ? (u < 1100 ? 4 : u < 2200 ? 8 : 16) : 4, i, x, y, s, x2, y2, s2, n = 0, rx0 = 120, rx1 = 120, f, hop;
+    int32_t beat = 256 - imin(256, (int32_t)(tm % 560u) * 256 / 230);
+    int lane = step < 3 ? LANE[step] : -1;
+    (void)blit; (void)bdown;
+    for (i = 0; i < 6; i++) {                    /* the beats coming down */
+        int32_t z = (int32_t)((tm / 3u + (uint32_t)i * 64u) % 384u) * 256 / 384;
+        mt_rproj(-256, z, &x, &y, &s); mt_rproj(256, z, &x2, &y2, &s2);
+        galpha(30 + z / 3); ghl(x, x2 + 1, y, th->bands[i & 3]);
+    }
+    for (i = 0; i <= L; i++) {                   /* the lanes */
+        int32_t u_ = (i * 512 / L) - 256;
+        mt_rproj(u_, 0, &x, &y, &s); mt_rproj(u_, 256, &x2, &y2, &s2);
+        galpha(i == 0 || i == L ? 230 : !(i % (L / 4)) ? 90 : 40);
+        gline(x, y, x2, y2, i == 0 || i == L ? th->rim : th->bands[1]);
     }
     galpha(256);
-    galpha(140 + beat * 116 / 256); ghl(0, 240, g, th->rim); galpha(256);
-    for (k = 0; k < 240; k += 4) if (((k + s) / 4) % 3) { galpha(110); gp(k, g + 4, th->bands[0]); gp(k + 2, g + 8, th->bands[1]); }
+    for (i = 0; i < 4; i++) {                    /* mushrooms by the road */
+        int32_t z = (int32_t)((tm / 3u + (uint32_t)i * 96u) % 384u) * 256 / 384;
+        mt_rproj((i & 1) ? 330 : -330, z, &x, &y, &s);
+        galpha(70 + z / 2); mush_draw(x, y, s * 200 / 256, th->caps[i % 5], th->stem, beat);
+    }
     galpha(256);
-    if (step <= 1) {                             /* crystals, and a hop over each, the key going down a quarter second before */
-        for (k = 0; k < 2; k++) {
-            int32_t ta = TA[step][k], d, x;
-            if (!ta) continue;
-            x = rx + (ta - u) * v / 1000;
-            if (x > -20 && x < 260) mt_crystal(x, g, step == 1, beat);
-            d = u - (ta - 250);
-            if (d >= 0 && d < 500) hop = (step == 1 ? 50 : 28) * 4 * d / 500 * (500 - d) / 500;
-            mt_press(step ? 16 + 6 : 9, u, ta - 250);
-        }
-        act[n].kind = MTA_THUMB; act[n].a = (uint8_t)(step ? 16 + 6 : 9); act[n].side = 1;
-        act[n].f = tu_press(u - (TA[step][step == 0 && u >= 1450 ? 1 : 0] - 250)); act[n].sl = step == 0 ? mt_in(u) : 0; n++;
-        if (step == 1) act[0].sl = mt_out(u, MT_DEF[0].ms[1]);
-        *lit = step ? 0x7FFu << 16 : 0xFFFFu;
-    } else if (step == 2) {                      /* a block: its button lights; pressed, it bursts before it reaches Rock */
-        int32_t ta = 2600, x = rx + (ta - u) * v / 1000, at = 1500;
-        if (u < at) {
-            grect(x - 24, g - 34, 48, 34, th->panel); gbox(x - 24, g - 34, 48, 34, th->pad); gbox(x - 22, g - 32, 44, 30, th->caps[2]);
-            gfit(x, g - 22, 40, "ENV", th->text, 2);
-            *blit = 2;
-        } else if (u < at + 500) {               /* (bits of it flying) */
-            int32_t q = u - at;
-            galpha(256 - q * 256 / 500);
-            for (k = 0; k < 8; k++) grect(x + ((q * 40 / 500 * icos(k * 8192)) >> 14), g - 13 + ((q * 30 / 500 * isin(k * 8192)) >> 14), 3, 3, th->caps[k % 5]);
-            gfit(x, g - 40 - q / 25, 80, TR(T_GOOD), th->pad, 2);
+    if (lane >= 0) {
+        int32_t lu = ((2 * lane + 1) * 512 / 8) - 256, z = (u - T0) * 256 / (TA - T0);
+        col_t c = GH_ZONE[lane];
+        if (u >= T0 && (u < TA || (step == 2 && u < TA + 500))) {   /* the crystal: on its way, or (step 2) gone dark */
+            mt_rproj(lu, z, &x, &y, &s);
+            if (step == 2 && u >= TA) { galpha(256 - (u - TA) * 256 / 500); gh_crystal(x, y, s, c, 0, 1, 1); }
+            else gh_crystal(x, y, s, c, beat, 1, 0);
             galpha(256);
         }
-        if (u >= at && u - at < 160) *bdown = 2;
-        act[n].kind = MTA_FINGER; act[n].a = 2; act[n].side = 1; act[n].f = tu_press(u - at);
-        act[n].sl = imax(mt_in(u), mt_out(u, MT_DEF[0].ms[2])); n++;
-    } else {                                     /* KNOB 1: the tempo, the number going up */
-        char b[12]; int32_t m = 0;
-        num_str(b, bpm); while (b[m]) m++;
-        b[m++] = ' '; b[m++] = 'B'; b[m++] = 'P'; b[m++] = 'M'; b[m] = 0;
-        gtextc(120, 34, b, mt_ramp(u, 400, 2800) > 0 && u < 2900 ? th->pad : th->mute, 2);
-        act[n].kind = MTA_PINCH; act[n].a = MK_K1; act[n].side = 1; act[n].f = u > 400 && u < 2800; act[n].sl = imax(mt_in(u), mt_out(u, MT_DEF[0].ms[3])); n++;
+        if (step < 2 && u >= TA && u < TA + 400) {   /* caught: shards and a ring */
+            int32_t q = (u - TA) * 34 / 400, k;
+            mt_rproj(lu, 256, &x, &y, &s);
+            galpha(256 - q * 7); gcirc(x, MT_RY1 - 6, 5 + q, c);
+            for (k = 0; k < 7; k++) {
+                int32_t a = -28000 + k * 9300, d0 = 3 + q, d1 = 7 + q * 2;
+                gline2(x + ((d0 * icos(a)) >> 14), MT_RY1 - 8 + ((d0 * isin(a)) >> 14), x + ((d1 * icos(a)) >> 14), MT_RY1 - 8 + ((d1 * isin(a)) >> 14), k & 1 ? th->text : c);
+            }
+            galpha(256);
+            if (u < TA + 350) { galpha(256 - (u - TA) * 256 / 350); gfit(x, MT_RY1 - 30 - (u - TA) / 30, 100, TR(T_PERFECT), th->text, 1); galpha(256); }
+        }
+        if (step == 2 && u >= TA && u < TA + 900) {   /* the hole: a gap where the note was */
+            galpha(200 - (u - TA) * 200 / 900); gfit(120, 30, 200, "\xE2\x99\xAA ?", th->mute, 2); galpha(256);
+        }
+        if (u >= TA - 900 && u < TA + 60) *lit = mt_lane_bits(lane, 4);   /* its keys light */
+        if (step < 2) {                          /* the thumb on a key of the lane, as the crystal arrives */
+            act[n].kind = MTA_THUMB; act[n].a = (uint8_t)mt_bit(KEY[step]); act[n].side = step == 0 ? -1 : 1;
+            act[n].f = tu_press(u - TA); act[n].sl = imax(mt_in(u), mt_out(u, mt_step_ms)); n++;
+            mt_press(mt_bit(KEY[step]), u, TA);
+        }
     }
-    rock_draw(rx, g - 13 - hop, 360, s * 1304, (tm % 3100u) < 150u ? 40 : 256, th->rock, th->rock_rim, th->dark, th->moss, th->eye, th->pupil);
+    galpha(150 + beat * 106 / 256); grect(4, MT_RY1, 232, 2, th->rim); galpha(256);
+    /* Rock on the line: he leaps to the lane of the key, a little before the crystal reaches him */
+    if (step == 0) rx1 = 120 + ((2 * 0 + 1) * 512 / 8 - 256) * 110 / 256;
+    if (step == 1) { rx0 = 120 + (1 * 512 / 8 - 256) * 110 / 256; rx1 = 120 + (7 * 512 / 8 - 256) * 110 / 256; }
+    if (step >= 2) rx0 = rx1 = 120 + (7 * 512 / 8 - 256) * 110 / 256;
+    if (step == 3) rx0 = rx1 = 120;
+    f = step < 2 ? ease8(iclamp((u - TA + 40) * 256 / 120, 0, 256)) : 256;
+    hop = 12 * f * (256 - f) / 16384;
+    rock_draw(rx0 + (rx1 - rx0) * f / 256, MT_RY1 - 6 - hop, 180, (int32_t)tm * 40, (tm % 3100u) < 150u ? 40 : 256, th->rock, th->rock_rim, th->dark, th->moss, th->eye, th->pupil);
+    if (step == 3) {                             /* the modes: KNOB 1 turns from PEBBLE to ROCK to CRYSTAL */
+        int sel = L == 4 ? 0 : L == 8 ? 1 : 2, k;
+        for (k = 0; k < 3; k++) {
+            int32_t mx = 44 + k * 76;
+            if (k == sel) { galpha(220); grect(mx - 32, 4, 64, 15, th->panel); galpha(256); gbox(mx - 32, 4, 64, 15, th->caps[0]); }
+            gfit(mx, 8, 60, GH_MODE[k], k == sel ? th->text : th->mute, 1);
+        }
+        act[n].kind = MTA_PINCH; act[n].a = MK_K1; act[n].side = 1; act[n].f = (u > 700 && u < 1150) || (u > 1800 && u < 2250);
+        act[n].sl = imax(mt_in(u), mt_out(u, mt_step_ms)); n++;
+    }
     return (int)n;
 }
 
@@ -267,16 +303,16 @@ static int mt_juice(int32_t step, int32_t u, uint32_t tm, mt_act_t *act, uint32_
     /* the hands: the left thumb under tap 1 (keys 0-3); the right hand on KNOB 1; at the end the right thumb under tap 2 */
     act[n].kind = MTA_THUMB; act[n].a = 2; act[n].side = -1;
     act[n].f = step == 0 ? tu_press(u - 700) : step == 3 ? tu_press(u - 700) : step == 4 ? (u < 600 ? tu_press(u - 600) : u < 2600 ? 256 : tu_press(u - 2600 + 150)) : 0;
-    act[n].sl = step == 0 ? mt_in(u) : step == 4 ? mt_out(u, MT_DEF[1].ms[4]) : 0; n++;
+    act[n].sl = step == 0 ? mt_in(u) : step == 4 ? mt_out(u, MT_DEF[1].ms[4] / MT_SLOW[1]) : 0; n++;
     if (step == 0) mt_press(2, u, 700);
     if (step == 3) mt_press(2, u, 700);
     if (step == 4 && u >= 600 && u < 2600) mt_age[2] = 100;
     if (step >= 1 && step <= 3) {
         act[n].kind = MTA_PINCH; act[n].a = MK_K1; act[n].side = 1; act[n].f = step == 1 && ((u > 300 && u < 650) || (u > 2700 && u < 3050));
-        act[n].sl = step == 1 ? mt_in(u) : step == 3 ? mt_out(u, MT_DEF[1].ms[3]) : 0; n++;
+        act[n].sl = step == 1 ? mt_in(u) : step == 3 ? mt_out(u, MT_DEF[1].ms[3] / MT_SLOW[1]) : 0; n++;
     }
     if (step == 4) {
-        act[n].kind = MTA_THUMB; act[n].a = 5; act[n].side = 1; act[n].f = tu_press(u - 1500); act[n].sl = imax(mt_in(u - 700), mt_out(u, MT_DEF[1].ms[4])); n++;
+        act[n].kind = MTA_THUMB; act[n].a = 5; act[n].side = 1; act[n].f = tu_press(u - 1500); act[n].sl = imax(mt_in(u - 700), mt_out(u, MT_DEF[1].ms[4] / MT_SLOW[1])); n++;
         mt_press(5, u, 1500);
     }
     *lit = step == 4 && u >= 600 ? 0xFFu : 0x0Fu;
@@ -370,7 +406,7 @@ static void mtutor_tick(int32_t dt)
     int32_t loop = mt_loop(w), lt = sh.t % loop, a = mt_last, step, u, base, k;
     /* the moments that sound: {step, ms, what} - 0 a low key, 1 a high key, 2 a button, 3 a catch, 4 a glass, 5 served */
     static const int16_t EV[3][8][3] = {
-        {{0, 750, 0}, {0, 2150, 0}, {1, 1450, 1}, {2, 1500, 2}, {-1, 0, 0}},
+        {{0, 2000, 0}, {1, 2000, 0}, {2, 2000, 1}, {3, 2000, 1}, {5, 1100, 6}, {5, 2200, 6}, {-1, 0, 0}},
         {{0, 700, 4}, {3, 700, 5}, {4, 200, 4}, {4, 1500, 0}, {-1, 0, 0}},
         {{0, 2600, 3}, {1, 1300, 3}, {1, 3000, 3}, {2, 3000, 3}, {3, 3000, 3}, {-1, 0, 0}},
     };
@@ -379,10 +415,11 @@ static void mtutor_tick(int32_t dt)
     for (k = 0; k < 8 && EV[w][k][0] >= 0; k++) {
         int32_t s, at;
         for (s = 0, base = 0; s < EV[w][k][0]; s++) base += MT_DEF[w].ms[s];
-        at = base + EV[w][k][1];
+        at = base + EV[w][k][1] * MT_SLOW[w];
         if (a < at && lt >= at) switch (EV[w][k][2]) {
-            case 0: sfx(key_note(5), 0, 500, W_TRI, 2800, 5, 180); break;
-            case 1: sfx(key_note(18), 0, 500, W_TRI, 2800, 5, 180); break;
+            case 0: sfx(key_play(4) + 12, 0, 500, W_TRI, 2800, 5, 180); break;
+            case 1: sfx(key_play(23) + 12, 0, 500, W_TRI, 2800, 5, 180); break;
+            case 6: snd_ui(79); break;
             case 2: sfx(67, 0, 300, W_SQUARE, 1800, 2, 140); sfx(96, 0, 120, W_NOISE, 1200, 1, 100); break;
             case 3: sfx(72 + SC_PEN[k % 5], 0, 600, W_SINE, 3000, 4, 170); break;
             case 4: sfx(90, 0, 160, W_SINE, 1800, 1, 160); break;
@@ -406,9 +443,10 @@ static void mtutor_draw(void)
     for (k = 0; k < 27; k++) mt_age[k] = -1;
     grect(0, 0, AC_W, AC_H, th->bg);
     gclip_y1 = TU_SCENE_H;
-    n = w == 0 ? mt_run(step, u, tm, act, &lit, &blit, &bdown) : w == 1 ? mt_juice(step, u, tm, act, &lit, &blit, &bdown) : mt_bloom(step, u, tm, act, &lit, &blit, &bdown);
+    mt_step_ms = MT_DEF[w].ms[step];
+    n = w == 0 ? mt_road(step < 2 ? 0 : step < 4 ? 1 : step - 2, u, tm, act, &lit, &blit, &bdown)   /* (CRYSTAL ROAD: each of the first two scenes twice) */ : w == 1 ? mt_juice(step, u / MT_SLOW[1], tm, act, &lit, &blit, &bdown) : mt_bloom(step, u, tm, act, &lit, &blit, &bdown);
     gclip_y1 = AC_H;
-    mt_mini(w == 0 ? 100 : 120);
+    mt_mini(120);
     if (u < 250) { galpha(256 - u * 256 / 250); grect(0, 0, AC_W, TU_SCENE_H, th->bg); galpha(256); }   /* each step fades in */
     /* under the scene, a mark for each step (the machine is the one just left: the scene is all its own) */
     (void)sc;
@@ -417,8 +455,8 @@ static void mtutor_draw(void)
         char buf[120];
         const char *s = TR(MT_DEF[w].text[step]);
         int32_t m = 0, ln = MT_DEF[w].line[step], h;
-        while (ln > 0 && *s) { if (*s == '\n') ln--; s++; }
-        while (*s && *s != '\n' && m < 118) buf[m++] = *s++;
+        while (ln > 0 && ln != 9 && *s) { if (*s == '\n') ln--; s++; }
+        while (*s && (*s != '\n' || ln == 9) && m < 118) buf[m++] = *s++;
         buf[m] = 0;
         a = ts(1, 2);
         if (gblock_h(232, buf, a) > 3 * TLH(a)) {   /* too long for three lines: its two sentences, one after the other */

@@ -1,0 +1,63 @@
+# the keyboard in the cave with the jukebox on: the lowest, a middle and the highest key on each tune in turn
+# (ALGORITHM steps the tune); each key plays a note of that tune's own key, lowest key lowest. Then LINK 1 in the
+# settings and back to MYCELIUM NIGHTS: in the shared key (A minor), not its own (D minor)
+1000 keys 0x1
+1100 keys 0
+1300 keys 0x2000
+1400 keys 0
+1600 keys 0x4000000
+1700 keys 0
+2000 enc 1 1
+3000 keys 0x1
+3100 keys 0
+3300 keys 0x2000
+3400 keys 0
+3600 keys 0x4000000
+3700 keys 0
+4000 enc 1 1
+5000 keys 0x1
+5100 keys 0
+5300 keys 0x2000
+5400 keys 0
+5600 keys 0x4000000
+5700 keys 0
+6000 enc 1 1
+7000 keys 0x1
+7100 keys 0
+7300 keys 0x2000
+7400 keys 0
+7600 keys 0x4000000
+7700 keys 0
+8000 enc 1 1
+9000 keys 0x1
+9100 keys 0
+9300 keys 0x2000
+9400 keys 0
+9600 keys 0x4000000
+9700 keys 0
+10000 enc 1 1
+11000 keys 0x1
+11100 keys 0
+11300 keys 0x2000
+11400 keys 0
+11600 keys 0x4000000
+11700 keys 0
+11800 shot
+12500 btn 7
+12800 enc 0 1
+13000 enc 0 1
+13200 enc 0 1
+13400 enc 0 1
+13700 enc 6 1
+14000 shot
+14300 btn 7
+15000 enc 1 1
+15400 enc 1 1
+15800 enc 1 1
+16200 enc 1 1
+17000 keys 0x1
+17100 keys 0
+17300 keys 0x2000
+17400 keys 0
+17600 shot
+17800 end

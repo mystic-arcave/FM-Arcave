@@ -1,0 +1,11 @@
+# CRYSTAL ROAD's start card plays the chosen song as a perfect player would, the keys lighting as each note plays:
+# SPORE DRIFT in PEBBLE, then (CATCH=1 opens nothing: a fresh save) the song turned to CRYSTAL STEPS
+300 enc 0 1
+2000 shot
+4000 shot
+6000 shot
+8000 shot
+9000 enc 0 1
+11000 shot
+13000 shot
+15000 end

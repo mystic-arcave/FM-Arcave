@@ -1,0 +1,21 @@
+# CRYSTAL ROAD played by nobody (no CATCH): SPORE DRIFT in PEBBLE, a few keys pressed out of time (each its own note,
+# quietly), every note missed (a sour note each), the song reaching its end all the same: ROCK and CRYSTAL open with no
+# crystals earned; a key touched on the result card: the song plays again to practise with. Then ROCK, no key pressed: the hearts go one a note, GAME OVER
+300 enc 1 1
+800 btn 12
+9000 keys 1
+9100 keys 0
+9500 keys 33554432
+9600 keys 0
+12000 shot
+17000 shot
+18000 keys 4096
+18100 keys 0
+19800 shot
+20500 enc 2 1
+21000 shot
+21500 btn 12
+26000 shot
+30000 shot
+33000 shot
+33500 end

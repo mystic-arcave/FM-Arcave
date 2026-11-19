@@ -1,0 +1,38 @@
+# CRYSTAL ROAD (CATCH=1: every note caught on its tick): the start card, the song turned to SPORE DRIFT, PEBBLE played to
+# its end (ROCK and CRYSTAL open), KNOB 1 to CRYSTAL, a CRYSTAL song begun, HOME: how it is played (six steps), back
+# (a fresh count-in), the song to its end, EDIT: every song
+300 shot
+500 enc 1 1
+900 shot
+1200 enc 2 1
+1500 shot
+1800 btn 12
+4000 shot
+9000 shot
+14000 shot
+18000 shot
+21000 shot
+21500 enc 2 1
+21800 enc 2 1
+22300 shot
+22500 btn 12
+27000 shot
+31000 shot
+33000 btn 8
+33400 shot
+36800 shot
+40200 shot
+43600 shot
+47000 shot
+50400 shot
+53800 shot
+55000 btn 8
+57000 shot
+62000 shot
+68000 shot
+69000 btn 6
+69500 shot
+70000 enc 2 -1
+70500 shot
+71000 btn 6
+71500 end

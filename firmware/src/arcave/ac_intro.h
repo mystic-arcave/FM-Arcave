@@ -250,7 +250,7 @@ static int intro_tick(int32_t dt)
     if (G.phase == IP_TITLE && G.t >= LANG_TIP_AT && !G.oct && !lang_touched) { fm1_breath_sync(); G.oct = 1; }
     if (G.oct == 1 && (fm1_breaths() >= 3u || lang_touched || G.phase > IP_WIDE)) G.oct = 2;
     if (G.oct == 1) led_breathe_want |= 1u << BTN_OCT_DOWN | 1u << BTN_OCT_UP;
-    if (in.kdown && G.phase != IP_TITLE) snd_key(in.hikey);
+    if (in.kdown && G.phase != IP_TITLE) snd_keys(in.kdown, 0);
     if (G.phase == IP_TITLE) {
         G.fade = G.t > 5600 ? imin(256, (G.t - 5600) * 256 / 600) : 0;
         if (G.t > 6200) { G.phase = IP_WIDE; G.t = -800; }

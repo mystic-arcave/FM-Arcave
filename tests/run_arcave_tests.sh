@@ -29,7 +29,7 @@ run "Dutch: into the cave, the Hat, the rings, the dish, the jukebox" play dutch
 run "into the cave, the Hat, the jukebox, the settings" play story 1
 run "the jukebox past the Hat: its name at the screen's edge, Rock settling in its dip, PLAY: the rings" sh -c 'tests/run_arcave.sh juke 2 > build/host/juke.log 2>&1 && grep -q "^sound" build/host/juke.log'
 run "JUICE WORKS: HOME shows how it is played (a glass, the tap, the ticket's line, serving, moving a glass)" play help 4 4
-run "MYSTIC RUN: HOME shows how it is played (a hop, a high hop, a block's button, the tempo)" play helprun 4 3
+run "CRYSTAL ROAD: HOME shows how it is played (a crystal at the line and its keys, twice, the far side, twice, a miss, KNOB 1 and ALGO)" play helprun 4 3
 run "NIGHT BLOOM: HOME shows how it is played (KNOB 1's petal, catching, SELECT's ring, ALGORITHM's ring, an arrow to each)" play helpbloom 4 5
 run "a new song at the mended jukebox: a long slide, effects, their page, kept (and saved)" sh -c 'tests/run_arcave.sh newsong 4 2 > build/host/newsong.log 2>&1 && grep -q "settings 0 saved" build/host/newsong.log'
 run "the rings, stuck: a minute (the note, HOME breathing), the hint page and back, two minutes (HOME held three seconds: the rings glide into line, the light)" play hint 2 1
@@ -39,14 +39,17 @@ run "the settings: skip to the Mystic Arcave, OCT+ confirms (and saved)" sh -c '
 run "the lit cave, a tune changed" play lit 4
 run "the mended jukebox: its name only in front of it, the offer of a new song only after Rock has left it once" env AT=522,380 sh -c 'tests/run_arcave.sh jukeback 4 9 > build/host/jukeback.log 2>&1 && grep -q "^sound" build/host/jukeback.log'
 run "the machines up close, lit: a crystal, a juice press, a flower" env AT=740,330 sh -c 'tests/run_arcave.sh cabinets 4 9 > build/host/cabinets.log 2>&1 && grep -q "^sound" build/host/cabinets.log'
+run "the keyboard in the cave: every key its note, lowest key lowest, in each tune's own key; with LINK on, the shared key" env AT=466,274 sh -c 'tests/run_arcave.sh keys 4 9 > build/host/keys.log 2>&1 && grep -q "key 0 plays 48 (tune 1)" build/host/keys.log && grep -q "key 13 plays 62 (tune 2)" build/host/keys.log && grep -q "key 0 plays 50 (tune 3)" build/host/keys.log && grep -q "key 13 plays 69 (tune 4)" build/host/keys.log && grep -q "key 26 plays 79 (tune 5)" build/host/keys.log && grep -q "1[0-9]* ms  key 0 plays 45 (tune 3)" build/host/keys.log'
 run "the battery: its level in the settings' corner; low, flashing in the corner on any screen" env AT=466,274 sh -c 'tests/run_arcave.sh batt 4 9 > build/host/batt.log 2>&1 && grep -q "^sound" build/host/batt.log'
 run "a booster, a secret high up, then GLO held: the save wiped (and saved)" sh -c 'tests/run_arcave.sh boost 4 > build/host/boost.log 2>&1 && grep -q "settings 0 saved" build/host/boost.log'
 run "the room up on the left, its door, outside: over the start line" play door 4 7
 run "the race back: cheering rock friends where the signs stood" play racecrowd 4 6
 run "the race back, start to finish (and the time saved)" sh -c 'tests/run_arcave.sh race 4 6 > build/host/race.log 2>&1 && grep -q "settings 0 saved" build/host/race.log'
-run "MYSTIC RUN" play run 4 3
+run "CRYSTAL ROAD, every note caught: the start card, SPORE DRIFT in PEBBLE to its end (ROCK and CRYSTAL open), KNOB 1 to CRYSTAL, HOME, EDIT: every song (and saved)" env CATCH=1 sh -c 'tests/run_arcave.sh road 4 3 > build/host/road.log 2>&1 && grep -q "CRYSTAL ROAD tune 1 mode 2: 23 notes" build/host/road.log && grep -q "settings 0 saved (180 B)" build/host/road.log'
+run "CRYSTAL ROAD: all six songs, each its own road, SELECT turning the song" env CATCH=1 sh -c 'tests/run_arcave.sh roadsongs 4 3 > build/host/roadsongs.log 2>&1 && grep -q "CRYSTAL ROAD tune 0 mode 0" build/host/roadsongs.log'
+run "CRYSTAL ROAD's start card plays the song as a perfect player would, its keys lighting as each note plays" sh -c 'tests/run_arcave.sh roaddemo 4 3 > build/host/roaddemo.log 2>&1 && grep -q "demo: keys lit 01FC000 (tune 1, PEBBLE)" build/host/roaddemo.log'
+run "CRYSTAL ROAD, nobody playing: PEBBLE still reaches its end, a key on the result card replays it to practise, then ROCK: the hearts go, GAME OVER" sh -c 'tests/run_arcave.sh road2 4 3 > build/host/road2.log 2>&1 && grep -q "CRYSTAL ROAD tune 1 mode 1" build/host/road2.log && grep -q "PEBBLE) practice" build/host/road2.log'
 run "JUICE WORKS: a drink poured and served, a glass moved, a spill" env CATCH=1 sh -c 'tests/run_arcave.sh table 4 4 > build/host/table.log 2>&1 && grep -q "^sound" build/host/table.log'
-run "MYSTIC RUN a long way in: the start card, the controls, blocks and their buttons, EDIT: the scores" env CATCH=1 sh -c 'tests/run_arcave.sh run2 4 3 > build/host/run2.log 2>&1 && grep -q "^sound" build/host/run2.log'
 run "FX a dozen times; child ear protection (and saved)" sh -c 'tests/run_arcave.sh fx 4 > build/host/fx.log 2>&1 && grep -q "settings 0 saved" build/host/fx.log'
 run "NIGHT BLOOM" play bloom 4 5
 run "NIGHT BLOOM, every spore caught: SELECT, ALGORITHM, then KNOB 2 at fifty, each with its arrow" env CATCH=1 sh -c 'tests/run_arcave.sh bloom4 4 5 > build/host/bloom4.log 2>&1 && grep -q "^sound" build/host/bloom4.log'

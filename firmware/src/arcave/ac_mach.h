@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /* FM-ARCAVE's three machines. All three run on the jukebox's clock, so what you do in them lands in the music.
- *   MYSTIC RUN        Rock runs on the beat; a key hops a crystal, the top row hops higher. KNOB 1 is the tempo.
+ *   CRYSTAL ROAD      a song of the jukebox (or the player's own) comes down a road as crystals; the keys play it.
+ *                     Three modes, a score and crystals for every song.
  *   JUICE WORKS       four taps of mushroom juice (KNOB 1-4), glasses put under them, moved and served with the
  *                     keys, tickets that say what to pour: many things to keep going at once.
  *   NIGHT BLOOM       new here: four knobs turn four petals round a flower, one to a ring, a click a twenty-fourth
@@ -61,169 +62,643 @@ static void mach_over(void)
     sfx(60, 0, 500, W_TRI, 3000, 5, 150); sfx(55, 180, 500, W_TRI, 3000, 5, 150); sfx(48, 360, 1200, W_TRI, 3000, 5, 150);
 }
 
-/* ---------------------------------------------------------------- MYSTIC RUN */
-static struct { uint32_t t0, done_h, blk_h; int32_t hop_t, hop_h, hop_k; uint32_t seed; uint8_t blk_done; } mr;
-/* the buttons a block may ask for (not the ones that mean something everywhere: FX, EDIT, GLO, HOME, PLAY, REC) */
-static const uint8_t MR_BTN[6] = {BTN_SEL, BTN_ENV, BTN_LFO, BTN_SAVE, BTN_ARP, BTN_SEQ};
-static const char *const MR_BTN_NAME[6] = {"SCL", "ENV", "LFO", "SAVE", "ARP", "SEQ"};
-static int mr_blk_btn(uint32_t h, int which)     /* a block's button (its second, for a double) */
+/* ---------------------------------------------------------------- CRYSTAL ROAD */
+/* MYSTIC RUN turned to face the player: the land of the run seen along a road, the song coming down it as crystals,
+ * and Rock on a line of light, leaping to wherever on the keyboard a key is pressed. The keys play the song's melody
+ * (one written for each tune, MELODY in ac_music.h; the player's own song: the notes kept at the dish): the tune's lead
+ * rests, its arpeggio steps back, a note caught rings out in the melody's voice, a note missed is a sour one. A mode cuts the 16 steps of the keyboard's
+ * ladder (key_play) into lanes: PEBBLE 4 (JUICE WORKS' key groups and colours, one note a beat, misses cost nothing),
+ * ROCK 8 (a half beat, five hearts), CRYSTAL 16 (every note). The first song played to its end opens ROCK and CRYSTAL.
+ * Every song keeps a best score and one to three crystals in each mode. */
+#define GH_YH 84                                 /* the horizon */
+#define GH_YS 190                                /* the line of light: where a crystal is played */
+#define GH_LOOK 384                              /* a crystal is seen four beats ahead */
+#define GH_HW 116                                /* half the road's width at the line */
+#define GH_KB 208                                /* the top of the keyboard drawn at the foot */
+#define GH_PERFECT 9                             /* ticks either side: PERFECT (MYSTIC RUN's own figure) */
+enum { GH_PEBBLE, GH_ROCK, GH_CRYSTAL };
+/* how close a key must be to its note (ticks either side, 96 a beat): wide in PEBBLE, kind in ROCK. A note caught early
+ * still sounds on its beat (the game waits for it); only PERFECT is celebrated */
+static const uint8_t GH_LANES[3] = {4, 8, 16}, GH_GROUP[3] = {4, 2, 1}, GH_WIN[3] = {40, 30, 22}, GH_HEART[3] = {0, 8, 16};
+static const char *const GH_MODE[3] = {"PEBBLE", "ROCK", "CRYSTAL"};
+static const col_t GH_ZONE[4] = {AC_RGB(255, 214, 40), AC_RGB(255, 255, 255), AC_RGB(40, 224, 96), AC_RGB(48, 112, 255)};
+static uint16_t gh_best[JUKE_N][3];              /* (kept in the save) the best of each song in each mode */
+static uint8_t gh_gem[JUKE_N];                   /* its crystals, two bits a mode */
+static uint8_t gh_flags, gh_mode;                /* bit 0: ROCK and CRYSTAL are open; the mode last chosen */
+static uint8_t gh_st[MUS_CHART_MAX];             /* each note of the song: 0 to come, 1 PERFECT, 2 GOOD, 3 missed */
+static struct {
+    uint32_t t0, track;                          /* the tick of the song's step 0; the tune */
+    int32_t L, total, hits, done_s, pause_at, rock_x0, rock_x1, rock_t, judge_t, judge_x;
+    uint8_t judge_perf, cleared, unlocked, newbest, gems, playing, played;   /* played: the mode of the song just over */
+    int32_t perf_t, perf_x, pstreak;            /* the last PERFECT: when, where, how many in a row */
+    uint8_t perf_lane, card_track;
+    int32_t swap_t, swap_dir;                    /* the start card: when the song last changed, and which way */
+    uint8_t demo_track, demo_mode;               /* what the start card's demo plays (255: nothing yet) */
+    uint8_t practice;                            /* after a song: a key touched, the song plays again to practise with */
+    struct { int32_t t, x; uint8_t lane; } bur[6];
+    uint8_t nbur;
+    int16_t lane_x[16];
+    uint32_t lane_keys[16];
+} gh;
+
+static void gh_demo_stop(void) { mus_demo = 0; mus_solo = 0; gh.demo_track = 255; }
+static int gh_open(void) { return gh_flags & 1u ? 3 : 1; }   /* how many modes can be chosen */
+static int gh_gems_of(int t, int m) { return gh_gem[t % JUKE_N] >> (m * 2) & 3; }
+static int32_t gh_crystals(void)                 /* crystals earned over every song and mode (of 54) */
 {
-    int b1 = (int)(ihash(h * 17u + mr.seed) % 6u);
-    return which ? (b1 + 1 + (int)(ihash(h * 19u + mr.seed) % 5u)) % 6 : b1;
+    int32_t t, m, n = 0;
+    for (t = 0; t < JUKE_N; t++) for (m = 0; m < 3; m++) n += gh_gems_of(t, m);
+    return n;
 }
-#define MR_HOP 62                                /* ticks in the air */
-/* the way gets harder slowly: crystals few and far apart at first, more of them over two minutes or so; tall ones only
- * after half a minute, and rarely at first; blocks from the twenty-fourth beat, a double block only after eighty */
-static int mr_raw(uint32_t h)                    /* a crystal at (even) half-beat h, before the spacing rule: 0, 1, 2 */
+static int gh_key_lane(int k, int L) { return (k * 15 / 26) * L / 16; }
+/* where key k sits on a strip 240 px wide: the 16 keys of the bottom row 15 px apart, the 11 of the top row between */
+static int32_t gh_key_x(int k)
 {
-    uint32_t r = ihash(h * 7u + mr.seed), dens = 11000u + (uint32_t)imin(37000, ((int32_t)h - 12) * 90);
-    if (h > 56u && r < dens * (uint32_t)imin(256, ((int32_t)h - 56) * 2) / 1024u) return 2;
-    return r < dens ? 1 : 0;
+    int i, w = 0;
+    for (i = 0; i < k; i++) if (!KEY_IS_SHARP[i]) w++;
+    return KEY_IS_SHARP[k] ? w * 15 : w * 15 + 7;
 }
-static int mr_obs(uint32_t h)                    /* what stands at half-beat h: 0 nothing, 1 a crystal, 2 a tall one, 3 a spore,
-                                                    4 a block (its button makes it go), 5 a double block (two buttons) */
+static col_t gh_col(int lane, int L) { return GH_ZONE[lane * 4 / L]; }
+static void gh_lanes(int L)                      /* each lane's keys and the middle of them */
 {
-    uint32_t r;
-    if (h < 12u) return 0;
-    if (h >= 48u && !(h & 7u)) {                 /* every fourth beat may be a block: never two on the screen at once */
-        uint32_t rb = ihash(h * 13u + mr.seed);
-        if (rb < (h < 120u ? 16000u : 30000u)) return (h >= 160u && !(rb & 3u)) ? 5 : 4;
+    int i, k;
+    gh.L = L;
+    for (i = 0; i < L; i++) {
+        int32_t a = 999, b = -1;
+        gh.lane_keys[i] = 0;
+        for (k = 0; k < AC_NKEY; k++)
+            if (gh_key_lane(k, L) == i) { gh.lane_keys[i] |= 1u << k; a = imin(a, gh_key_x(k)); b = imax(b, gh_key_x(k)); }
+        gh.lane_x[i] = (int16_t)((a + b) / 2);
     }
-    if (!(h & 1u)) {
-        int c = mr_raw(h);
-        if (c && h < 200u && h >= 14u && mr_raw(h - 2u)) return 0;   /* (early on, never two crystals a beat apart) */
-        return c;
-    }
-    r = ihash(h * 7u + mr.seed);
-    return (r < 16000u && mr_obs(h + 1u) == 0) ? 3 : 0;
 }
-static int32_t mr_height(uint32_t now)           /* how high Rock is, px */
+static int gh_lane_at(int32_t s) { return (mus_chart[s] - 1) * gh.L / 16; }
+static int32_t gh_now(void) { return (int32_t)((tr_now_q8() >> 8) - gh.t0); }
+static int32_t gh_end_tick(void) { return (int32_t)mus_chart_n * 24 + 32; }
+
+/* the road's perspective. u: across it (-256..256 edge to edge); z: 0 at the horizon .. 256 at the line (more: past) */
+static void gh_proj(int32_t u, int32_t z, int32_t *x, int32_t *y, int32_t *s)
 {
-    int32_t u = (int32_t)(now - (uint32_t)mr.hop_t);
-    if (mr.hop_h == 0 || u < 0 || u >= MR_HOP) return 0;
-    return mr.hop_h * 4 * u * (MR_HOP - u) / (MR_HOP * MR_HOP);
+    int32_t p;
+    z = iclamp(z, 0, 330);
+    p = (z * z / 256 * 3 + z) / 4;               /* far things crawl, near things rush */
+    *y = GH_YH + (GH_YS - GH_YH) * p / 256;
+    *x = 120 + u * (12 + (GH_HW - 12) * p / 256) / 256;
+    *s = 44 + 212 * p / 256;
 }
-static void run_tick(void)
+static int32_t gh_lane_u(int lane) { return (gh.lane_x[lane] - 120) * 256 / GH_HW; }
+/* a crystal standing at (x, y), s its size (Q8); wide: a cluster (a lane of many keys); dead: missed */
+static void gh_crystal(int32_t x, int32_t y, int32_t s, col_t c, int32_t beat, int wide, int dead)
 {
-    uint32_t now = (tr_now_q8() >> 8) - mr.t0, h;
-    if (in.enc[ENC_KNOB1] && !tr_follow) tr_bpm_q8 = (uint32_t)iclamp((int32_t)(tr_bpm_q8 >> 8) + in.enc[ENC_KNOB1] * 2, 70, 180) << 8;
-    if (in.hikey >= 0 && mr_height(now) < 4) {
-        mr.hop_t = (int32_t)now; mr.hop_k = in.hikey; mr.hop_h = 24 + in.hop * 40 / 256;
-        sfx(key_note(in.hikey) + 12, 0, 300, W_TRI, 3000, 3, 120);
+    int32_t hh = 30 * s / 256, hw = (wide ? 15 : 8) * s / 256, k, xy[6];
+    if (hh < 2) { gp(x, y - 1, c); return; }
+    if (!dead) { int32_t a0 = (int32_t)ga * 8; galpha(a0 * (50 + beat * 60 / 256) / 256); gdisc(x, y - hh / 2, hh / 2 + 3 + 4 * s / 256, c); galpha(a0); }
+    for (k = 0; k < (wide ? 3 : 2); k++) {
+        int32_t ox = wide ? (k - 1) * hw * 2 / 3 : k * hw / 2 - hw / 4, h2 = k == (wide ? 1 : 0) ? hh : hh * 6 / 10;
+        xy[0] = x + ox - hw / 2; xy[1] = y; xy[2] = x + ox + (k - 1) * hw / 6; xy[3] = y - h2; xy[4] = x + ox + hw / 2; xy[5] = y;
+        gpoly(xy, 3, dead ? th->panel : c);
+        gpolyline(xy, 3, 1, dead ? th->mute : th->text);
     }
-    for (h = mr.done_h + 1u; h * 48u <= now + 281u; h++) {   /* a block coming into view: its button lights, and pressed, counts */
-        int o = mr_obs(h), need, k;
-        if (o < 4) continue;
-        if (mr.blk_h != h) { mr.blk_h = h; mr.blk_done = 0; }
-        need = o == 5 ? 3 : 1;
-        for (k = 0; k < 2; k++) {
-            int b = MR_BTN[mr_blk_btn(h, k)];
-            if (!(need >> k & 1) || (mr.blk_done >> k & 1)) continue;
-            led_btn_want |= 1u << b;
-            if (BDOWN(b)) {
-                mr.blk_done |= (uint8_t)(1u << k); mc.score += 15;
-                sfx(67 + 5 * k, 0, 300, W_SQUARE, 1800, 2, 140); sfx(96, 0, 120, W_NOISE, 1200, 1, 100);
-                if (mr.blk_done == need) { mc.combo++; mach_msg(T_GOOD); snd_chime(0); }
-            }
+}
+/* the keyboard at the foot of the screen: the FM-1's two rows as they lie under the hands. A lit key is filled in its
+ * lane's colour, a glowing one outlined in it, a held one white */
+static void gh_kb(int32_t y0, uint32_t lit, uint32_t dim, uint32_t down, int L)
+{
+    int k;
+    grect(0, y0 - 4, 240, 240 - y0 + 4, th->bg);
+    for (k = 0; k < AC_NKEY; k++) {
+        int32_t x = gh_key_x(k), sh = KEY_IS_SHARP[k], bx = sh ? x - 4 : x - 6, by = sh ? y0 : y0 + 11, w = sh ? 9 : 13, h = sh ? 9 : 14;
+        col_t c = gh_col(gh_key_lane(k, L), L);
+        if (down >> k & 1u) { grect(bx, by + 1, w, h, th->text); continue; }
+        if (lit >> k & 1u) { grect(bx, by, w, h, c); continue; }
+        if (dim >> k & 1u) { galpha(70); grect(bx, by, w, h, c); galpha(256); gbox(bx, by, w, h, c); continue; }
+        galpha(110); gbox(bx, by, w, h, th->mute); galpha(256);
+    }
+}
+/* a grade crystal (of three): earned, filled; not, an outline */
+static void gh_gem_draw(int32_t x, int32_t y, int32_t s, col_t c, int on)
+{
+    int32_t xy[8];
+    xy[0] = x; xy[1] = y - s; xy[2] = x + s * 2 / 3; xy[3] = y; xy[4] = x; xy[5] = y + s; xy[6] = x - s * 2 / 3; xy[7] = y;
+    if (on) { galpha(70); gdisc(x, y, s + 3, c); galpha(256); gpoly(xy, 4, c); gline(x, y - s, x, y + s, th->text); }
+    else { galpha(120); gpolyline(xy, 4, 1, th->mute); galpha(256); }
+}
+static void gh_gems(int32_t cx, int32_t y, int32_t s, int n, col_t c)
+{
+    int k;
+    for (k = 0; k < 3; k++) gh_gem_draw(cx + (k - 1) * (s * 2 + 4), y, s, c, k < n);
+}
+static void gh_lock(int32_t x, int32_t y, col_t c)   /* a padlock, 7 x 9, its top left at (x, y) */
+{
+    garc(x + 3, y + 3, 2, 3, 32768, 65536, c, 0);
+    grect(x, y + 4, 7, 5, c);
+}
+/* CRYSTAL ROAD's songs go slowest first: OPAL TIDE, SPORE DRIFT, ... ROLL ON (YOUR SONG where its tempo puts it) */
+static uint32_t gh_bpm(uint32_t t) { t %= JUKE_N; return t ? SONGS[t].bpm : take_bpm; }
+static int32_t gh_song_pos(uint32_t t)           /* its place in that order */
+{
+    uint32_t k; int32_t n = 0;
+    t %= JUKE_N;
+    for (k = 0; k < JUKE_N; k++) if (gh_bpm(k) < gh_bpm(t) || (gh_bpm(k) == gh_bpm(t) && k < t)) n++;
+    return n;
+}
+static uint32_t gh_song_step(uint32_t t, int32_t d)   /* the next song that way (d > 0 faster), round */
+{
+    int32_t want = (gh_song_pos(t) + (d > 0 ? 1 : JUKE_N - 1)) % JUKE_N;
+    uint32_t k;
+    for (k = 0; k < JUKE_N; k++) if (gh_song_pos(k) == want) return k;
+    return t;
+}
+static const char *gh_song_name(uint32_t t) { return t % JUKE_N ? SONGS[t % JUKE_N].name : TR(T_YOURSONG); }
+
+/* ---- playing */
+/* a caught note, in the melody's voice, `early` ticks before its beat (it waits for the beat); sour: missed, a note that
+ * does not fit */
+static void gh_note_sound(int32_t s, int sour, int32_t early)
+{
+    int32_t p, part;
+    uint32_t delay = early > 0 ? (uint32_t)early * 60000u / ((tr_bpm_q8 >> 8) * 96u) : 0u;
+    if (mus_note_at(gh.track, (uint32_t)s, &p, &part) == MUS_NONE) return;
+    if (sour) { sfx(p + 1, 0, 260, W_SAW, 2400, 2, 20); sfx(p - 6, 0, 260, W_SQUARE, 1300, 2, 20); return; }
+    if (part == 2) take_voice_at(p, 0, delay); else mus_mel_voice(p, 0, 256, delay);
+}
+static void gh_end(int cleared)
+{
+    int32_t t = (int32_t)(gh.track % JUKE_N), pct = gh.total ? gh.hits * 100 / gh.total : 0, g;
+    mus_solo = 0; gh.playing = 0;
+    mc.state = MS_OVER; mc.t = 0; gh.cleared = (uint8_t)cleared; gh.played = gh_mode; gh.unlocked = 0; gh.newbest = 0;
+    g = cleared ? (pct >= 95 ? 3 : pct >= 80 ? 2 : pct >= 60 ? 1 : 0) : 0;
+    gh.gems = (uint8_t)g;
+    if (mc.score > gh_best[t][gh_mode]) { gh_best[t][gh_mode] = (uint16_t)imin(mc.score, 65535); gh.newbest = 1; save_dirty = 1; }
+    if (g > gh_gems_of(t, gh_mode)) { gh_gem[t] = (uint8_t)((gh_gem[t] & ~(3u << (gh_mode * 2))) | (uint32_t)g << (gh_mode * 2)); save_dirty = 1; }
+    if (cleared && !(gh_flags & 1u)) { gh_flags |= 1u; gh.unlocked = 1; save_dirty = 1; }
+    if (cleared) { snd_chime(1); if (gh.unlocked) snd_whoosh(); }
+    else { sfx(60, 0, 500, W_TRI, 3000, 5, 150); sfx(55, 180, 500, W_TRI, 3000, 5, 150); sfx(48, 360, 1200, W_TRI, 3000, 5, 150); }
+}
+static void gh_rock_to(int32_t x, int32_t now)   /* Rock leaps toward x from wherever he is */
+{
+    int32_t f = ease8(iclamp((now - gh.rock_t) * 256 / 16, 0, 256));
+    gh.rock_x0 = gh.rock_x0 + (gh.rock_x1 - gh.rock_x0) * f / 256;
+    gh.rock_x1 = x; gh.rock_t = now;
+}
+static void gh_catch(int32_t s, int perfect, int32_t now)
+{
+    int lane = gh_lane_at(s);
+    gh_st[s] = (uint8_t)(perfect ? 1 : 2);
+    mc.combo++; gh.hits++;
+    mc.score += (perfect ? 20 : 10) + imin(mc.combo, 20);
+    if (GH_HEART[gh_mode] && !(mc.combo % GH_HEART[gh_mode]) && mc.lives < 5) mc.lives++;   /* a run of hits: a heart back */
+    gh_note_sound(s, 0, s * 24 - now);
+    if (perfect) {                               /* right on the beat: a star bursts over the line, a chime over the note */
+        gh.pstreak++; gh.perf_t = now; gh.perf_x = gh.lane_x[lane]; gh.perf_lane = (uint8_t)lane;
+        sfx(84 + SC_PEN[imin(gh.pstreak, 4)], (uint32_t)imax(0, s * 24 - now) * 60000u / ((tr_bpm_q8 >> 8) * 96u), 180, W_SINE, 900, 1, 40);
+    } else gh.pstreak = 0;
+    gh.bur[gh.nbur % 6u].t = now; gh.bur[gh.nbur % 6u].x = gh.lane_x[lane]; gh.bur[gh.nbur % 6u].lane = (uint8_t)lane; gh.nbur++;
+    gh.judge_t = now; gh.judge_x = gh.lane_x[lane]; gh.judge_perf = (uint8_t)perfect;
+}
+static void gh_miss(int32_t s)
+{
+    gh_st[s] = 3; mc.combo = 0; gh.pstreak = 0;
+    gh_note_sound(s, 1, 0);                         /* a sour note where the melody should have been */
+    if (gh_mode == GH_PEBBLE) return;
+    mc.lives--; mc.flash = 300;
+    sfx_ex(45, 0, 300, W_SAW, 2600, 2, 100, 0, 0, 65100);
+    if (mc.lives <= 0) gh_end(0);
+}
+static void gh_start(void)
+{
+    uint32_t abs_ = tr_now_q8() >> 8, i;
+    gh_demo_stop(); gh.practice = 0;
+    gh.track = mus_track % JUKE_N;
+    mus_set(MUS_JUKE, gh.track);                 /* (the song's own tempo: scores must compare) */
+    gh_mode = (uint8_t)imin(gh_mode, gh_open() - 1);
+    gh_lanes(GH_LANES[gh_mode]);
+    gh.total = mus_chart_build(gh.track, GH_GROUP[gh_mode]);
+    for (i = 0; i < MUS_CHART_MAX; i++) gh_st[i] = 0;
+    gh.t0 = (abs_ / 384u + 2u) * 384u;           /* the rest of this bar and one more: the count-in */
+    mus_step0 = gh.t0 / 24u;
+    gh.hits = 0; gh.done_s = 0; gh.nbur = 0; gh.judge_t = -100000; gh.playing = 1; gh.perf_t = -100000; gh.pstreak = 0;
+    gh.rock_x0 = gh.rock_x1 = 120; gh.rock_t = -100000;
+    mc.lives = gh_mode == GH_PEBBLE ? 0 : 5;
+    mus_solo = GH_GROUP[gh_mode];
+#ifdef AC_TEST_SCENE                             /* (tests) the chart: how many notes, and on which of the 16 steps */
+    {
+        int32_t h[16] = {0}, k;
+        for (i = 0; i < mus_chart_n; i++) if (mus_chart[i]) h[mus_chart[i] - 1]++;
+        printf("%6u ms  CRYSTAL ROAD tune %u mode %u: %d notes of %u steps:", fm1_ms, gh.track, (uint32_t)gh_mode, gh.total, (uint32_t)mus_chart_n);
+        for (k = 0; k < 16; k++) printf(" %d", h[k]);
+        printf("\n");
+    }
+#endif
+}
+#ifdef AC_TEST_SCENE                             /* (tests) every song's chart in every mode: how many notes, where */
+static void gh_test_charts(void)
+{
+    uint32_t t, m, i;
+    for (t = 0; t < JUKE_N; t++)
+        for (m = 0; m < 3u; m++) {
+            int32_t h[16] = {0}, k, tot = mus_chart_build(t, GH_GROUP[m]);
+            for (i = 0; i < mus_chart_n; i++) if (mus_chart[i]) h[mus_chart[i] - 1]++;
+            printf("chart tune %u %-7s %3d notes:", t, GH_MODE[m], tot);
+            for (k = 0; k < 16; k++) printf(" %2d", h[k]);
+            printf("\n");
         }
-        break;
-    }
-    for (h = mr.done_h + 1u; h * 48u <= now; h++) {
-        int o = mr_obs(h), ht = mr_height(h * 48u);
-        mr.done_h = h;
-        if (o >= 4) {                            /* a block reaches Rock: gone, or it hurts */
-            if (!(mr.blk_h == h && mr.blk_done == (o == 5 ? 3 : 1))) {
-                mc.combo = 0; mc.lives--; mc.flash = 300; mach_msg(T_MISS);
-                sfx_ex(41, 0, 400, W_SAW, 4000, 2, 100, 0, 0, 65000);
-                if (mc.lives <= 0) { mach_over(); return; }
-            }
-            continue;
+    mus_chart_n = 0;
+}
+#endif
+static void gh_pause(void) { if (gh.playing) { gh.pause_at = gh_now(); mus_solo = 0; } else if (mus_demo) gh_demo_stop(); }
+/* back from a sheet or the settings: a fresh count-in, then the song again from the start of the bar it stopped in
+ * (the notes already caught in that bar stay caught) */
+static void gh_resume(void)
+{
+    uint32_t abs_ = tr_now_q8() >> 8, bar;
+    if (!gh.playing) return;
+    bar = gh.pause_at > 0 ? (uint32_t)gh.pause_at / 384u : 0u;
+    gh.t0 = (abs_ / 384u + 2u) * 384u - bar * 384u;
+    mus_step0 = gh.t0 / 24u;
+    gh.rock_t = -100000; gh.judge_t = -100000;
+    mus_solo = GH_GROUP[gh_mode];
+}
+static void road_tick(int32_t dt)
+{
+    int32_t now = gh_now(), n = (int32_t)mus_chart_n, win = GH_WIN[gh_mode], s, k;
+    int32_t dtt = dt * (int32_t)(tr_bpm_q8 >> 8) * 96 / 60000, nowj = now - dtt / 2;   /* (a key went down, on average, half a frame ago) */
+#ifdef AC_TEST_CATCH                             /* (tests) every note caught on its tick */
+    for (s = imax(0, gh.done_s); s < n && s * 24 <= now; s++)
+        if (mus_chart[s] && !gh_st[s]) { gh_rock_to(gh.lane_x[gh_lane_at(s)], now); gh_catch(s, 1, now); }
+#endif
+    for (k = 0; k < AC_NKEY; k++) {              /* each key pressed: the nearest note of its lane within reach */
+        int32_t lane, best = -1, bd = win + 1;
+        if (!(in.kdown >> k & 1u)) continue;
+        lane = gh_key_lane(k, gh.L);
+        gh_rock_to(gh.lane_x[lane], now);
+        for (s = imax(0, (nowj - win) / 24); s <= (nowj + win) / 24 + 1 && s < n; s++) {
+            int32_t d = iabs(s * 24 - nowj);
+            if (mus_chart[s] && !gh_st[s] && gh_lane_at(s) == lane && d <= win && d < bd) { bd = d; best = s; }
         }
-        if (o == 1 || o == 2) {
-            if (ht > (o == 1 ? 11 : 30)) {
-                int32_t off = iabs((int32_t)(h * 48u) - (mr.hop_t + MR_HOP / 2));
-                mc.combo++; mc.score += (off < 9 ? 20 : 10) + imin(mc.combo, 20);
-                mach_msg(off < 9 ? T_PERFECT : T_GOOD);
-                sfx(72 + SC_PEN[mc.combo % 5], 0, 400, W_SINE, 2600, 3, 150);
-            } else {
-                mc.combo = 0; mc.lives--; mc.flash = 300; mach_msg(T_MISS);
-                sfx_ex(45, 0, 300, W_SAW, 3600, 2, 100, 0, 0, 65100);
-                if (mc.lives <= 0) { mach_over(); return; }
-            }
-        } else if (o == 3 && ht > 16) { mc.score += 5; sfx(84, 0, 300, W_SINE, 2400, 3, 180); }
+        if (best >= 0) gh_catch(best, bd <= GH_PERFECT, now);
+        else {                                   /* nothing of its lane in reach: its own note, quietly */
+            sfx(key_play(k) + 12, 0, 400, W_TRI, 1500, 6, 120);
+            if (gh_mode != GH_PEBBLE && now >= 0) { mc.combo = 0; gh.pstreak = 0; }
+        }
     }
-    {   /* any key for a crystal, the top row for a tall one: the lights say which is next */
-        uint32_t nh = (now / 96u + 1u) * 2u;
-        int o = mr_obs(nh);
-        if (o == 1) led_key_dim_want = (1u << AC_NKEY) - 1u;
-        if (o == 2) { int k2; for (k2 = 0; k2 < AC_NKEY; k2++) if (KEY_IS_SHARP[k2]) led_key_want |= 1u << k2; }
+    while (gh.done_s < n && gh.done_s * 24 + win < nowj) {   /* gone past the line untouched: missed */
+        s = gh.done_s++;
+        if (mus_chart[s] && !gh_st[s]) { gh_miss(s); if (mc.state != MS_PLAY) return; }
     }
-    if (now % 96u < 12u) led_btn_want |= 1u << BTN_PLAY;   /* (PLAY's green light, on the beat) */
+    if (now >= gh_end_tick()) { gh_end(1); return; }
+    for (s = imax(0, now / 24); s <= (now + 96) / 24 && s < n; s++)   /* the next notes' keys: glowing a beat ahead, lit half a beat */
+        if (mus_chart[s] && !gh_st[s] && s * 24 >= now - 8) {
+            if (s * 24 - now <= 48) led_key_want |= gh.lane_keys[gh_lane_at(s)];
+            else led_key_dim_want |= gh.lane_keys[gh_lane_at(s)];
+        }
+    led_key_dim_want &= ~led_key_want;
+    if (((now % 96) + 96) % 96 < 12) led_btn_want |= 1u << BTN_PLAY;   /* (PLAY's green light, on the beat) */
 }
-/* a crystal to hop: solid in the text's colour, a hot outline and a glow that pulses on the beat, so it stands out from
- * everything behind it (here and in HOME's loop) */
-static void mr_crystal(int32_t x, int32_t g, int tall, int32_t beat)
+
+/* each song its own colour and its own road: so it is clear which tune is playing before a word is read */
+static const uint8_t GH_SCOL[JUKE_N] = {9, 3, 0, 4, 1, 2};   /* (9: the light of the dish, th->pad) */
+static col_t gh_song_col(uint32_t t) { t %= JUKE_N; return GH_SCOL[t] > 4 ? th->pad : th->caps[GH_SCOL[t]]; }
+static int32_t gh_floor_div(int32_t a, int32_t b) { return a >= 0 ? a / b : -((-a + b - 1) / b); }
+/* the road and everything on it, for song t; play: 0 the road alone (behind a card) */
+static void road_scene(int32_t now, int play, uint32_t tm, uint32_t t)
 {
-    int32_t hh = tall ? 30 : 13, k, xy[6];
-    galpha(90 + beat * 70 / 256); gdisc(x, g - hh / 2, hh / 2 + 8, th->caps[0]); galpha(256);
-    for (k = 0; k < (tall ? 3 : 2); k++) {
-        xy[0] = x - 5 + k * 5 - 4; xy[1] = g; xy[2] = x - 5 + k * 5 + (k - 1); xy[3] = g - hh + iabs(k - 1) * 5; xy[4] = x - 5 + k * 5 + 4; xy[5] = g;
-        gpoly(xy, 3, th->text);
-    }
-    for (k = 0; k < (tall ? 3 : 2); k++) {
-        xy[0] = x - 5 + k * 5 - 4; xy[1] = g; xy[2] = x - 5 + k * 5 + (k - 1); xy[3] = g - hh + iabs(k - 1) * 5; xy[4] = x - 5 + k * 5 + 4; xy[5] = g;
-        gpolyline(xy, 3, 1, th->caps[0]);
-    }
-}
-static void run_draw(void)
-{
-    uint32_t now = (tr_now_q8() >> 8) - mr.t0, h, tm = (uint32_t)mc.t;
-    int32_t gy = 178, rx = 64, i, sx, beat = 256 - imin(256, (int32_t)(now % 96u) * 256 / 40);
-#define MRX(tk) (rx + ((int32_t)(tk) - (int32_t)now) * 60 / 96)
+    int32_t beat = 256 - imin(256, (((now % 96) + 96) % 96) * 256 / 40), i, x, y, s, x2, y2, s2, b, st, L = gh.L, n = (int32_t)mus_chart_n, b0 = gh_floor_div(now, 96);
+    uint32_t lit = 0, dim = 0;
+    col_t sc = gh_song_col(t);
+    t %= JUKE_N;
     sky_draw();
-    far_layer((int32_t)now / 6, 0, 256, 120, 0, th->far1, th->fill);
-    far_layer((int32_t)now / 3, 0, 256, 142, 1, th->far2, th->fill);
-    galpha(th->dark ? 70 : 90);                 /* mushrooms that swell on the beat: dim, far back (nothing to jump) */
-    for (i = 0; i < 6; i++) {
-        int32_t wx = ((int32_t)(now * 60u / 96u) / 80 + i) * 80, x = wx - (int32_t)(now * 60u / 96u), s = 90 + (int32_t)(ihash((uint32_t)(wx / 80)) >> 10);
-        mush_draw(x, gy, s + beat * 16 / 256, th->caps[ihash((uint32_t)(wx / 80 + 3)) * 5u >> 16], th->stem, beat);
+    if (t == 0) {                                /* YOUR SONG: the dish it was recorded on, rising over the horizon, and its stars */
+        for (i = 0; i < 3; i++) { galpha(40 + i * 20 + beat / 8); garc(120, GH_YH, 26 + i * 12, 26 + i * 12, 32768, 65536, sc, 0); }
+        for (i = 0; i < 14; i++) {
+            int32_t sx = (int32_t)(ihash((uint32_t)i * 7u + 1u) % 236u) + 2, sy = 8 + (int32_t)(ihash((uint32_t)i * 3u + 5u) % 60u), tw = ipulse(tm + (uint32_t)i * 300u, 1400);
+            galpha(60 + tw * 3 / 4); gline(sx - 2, sy, sx + 2, sy, th->text); gline(sx, sy - 2, sx, sy + 2, th->text);
+        }
+        galpha(256);
+    }
+    far_layer(now / 8, 0, 256, GH_YH - 20, 0, th->far1, th->fill);
+    far_layer(now / 4, 0, 256, GH_YH - 6, 1, th->far2, th->fill);
+    grect(0, GH_YH, 240, 240 - GH_YH, th->ground);
+    galpha(120); ghl(0, 240, GH_YH, sc); galpha(256);
+    if (t == 3)                                  /* MYCELIUM NIGHTS: glowing threads in the dark ground, either side of the road */
+        for (i = 0; i < 6; i++) {
+            int32_t side = (i & 1) ? 1 : -1, k, px = 0, py = 0;
+            for (k = 0; k <= 12; k++) {
+                int32_t z = k * 22, u = side * (300 + (int32_t)(ihash((uint32_t)i) % 120u)) + (isin(k * 9000 + i * 7000 + now * 60) >> 9);
+                gh_proj(u, z, &x, &y, &s);
+                if (k) { galpha(110 + (ipulse(tm + (uint32_t)(i * 500 + k * 90), 2200) >> 1)); gline(px, py, x, y, sc); gline(px, py + 1, x, y + 1, sc); }
+                px = x; py = y;
+            }
+        }
+    galpha(256);
+    for (b = b0 + 1; b * 96 < now + GH_LOOK; b++) {   /* the beats, coming down the road: a bar's brighter */
+        int32_t z = 256 - (b * 96 - now) * 256 / GH_LOOK, bb = b & 3;
+        gh_proj(-256, z, &x, &y, &s); gh_proj(256, z, &x2, &y2, &s2);
+        galpha(bb ? 30 + z / 4 : 70 + z / 2);
+        if (t == 4) {                            /* OPAL TIDE: the beats come in as waves */
+            int32_t xx, amp = 2 + z / 40;
+            for (xx = x; xx < x2; xx += 3) gline(xx, y + ((amp * isin(xx * 700 + now * 180)) >> 14), xx + 3, y + ((amp * isin((xx + 3) * 700 + now * 180)) >> 14), bb ? th->bands[bb] : sc);
+        } else ghl(x, x2 + 1, y, bb ? (t == 2 ? sc : th->bands[bb]) : (t ? sc : th->rim));
+    }
+    for (i = 0; i <= L; i++) {                   /* the lanes: the four key groups' edges stand out; the road's edges in the song's colour */
+        int32_t u = i == 0 ? -256 : i == L ? 256 : (gh_lane_u(i - 1) + gh_lane_u(i)) / 2, edge = i == 0 || i == L, grp = !(i % (L / 4));
+        gh_proj(u, 0, &x, &y, &s); gh_proj(u, 256, &x2, &y2, &s2);
+        galpha(edge ? 230 : grp ? 90 : 36);
+        gline(x, y, x2, y2, edge ? sc : th->bands[1]);
     }
     galpha(256);
-    grect(0, gy, 240, 62, th->ground);
-    for (i = 0; i < 4; i++) {
-        static const uint8_t BD[4] = {4, 9, 15, 23};
-        int32_t on = 8 + i * 5, per = on + 5 + i * 4, sh = (int32_t)(now * 60u / 96u);
-        galpha(200 - i * 44);
-        for (sx = 0; sx < 240; sx++) if ((sx + sh) % per < on) gp(sx, gy + BD[i], th->bands[i]);
+    for (b = b0 + 4; b >= b0 - 1; b--) {         /* by the road, on the beat: mushrooms, or the song's own things */
+        int32_t z = 256 - (b * 96 + 48 - now) * 256 / GH_LOOK, side = (b & 1) ? 330 : -330;
+        if (z < 8) continue;
+        gh_proj(side, z, &x, &y, &s);
+        galpha(70 + imin(z, 300) / 2);
+        if (t == 2) gh_crystal(x, y, s * 7 / 8, th->caps[(uint32_t)b % 5u], beat, 0, 0);   /* CRYSTAL STEPS: crystals */
+        else if (t == 5 && (b & 1)) {           /* ROLL ON: rock friends rolling along, a bounce on the beat */
+            int32_t hop = beat * s / 1600;
+            rock_draw(x, y - 6 * s / 256 - hop, s, now * 500 * (side > 0 ? -1 : 1), 256, th->rock, th->rock_rim, th->dark, th->moss, th->eye, th->pupil);
+        }
+        else mush_draw(x, y, s * 230 / 256 + beat * s / 1800, th->caps[(uint32_t)b % 5u], th->stem, beat);
     }
-    galpha(140 + beat * 116 / 256); ghl(0, 240, gy, th->rim); galpha(256);
-    for (h = now / 48u; h < now / 48u + 8u; h++) {
-        int o = mr_obs(h), x = MRX(h * 48u);
-        if (h <= mr.done_h || !o) continue;
-        if (o == 3) { galpha(70); gdisc(x, gy - 34, 5, th->caps[h % 5u]); galpha(256); grect(x - 1, gy - 35, 2, 2, th->caps[h % 5u]); }
-        else if (o >= 4) {                       /* a block (or two, stacked), each with its button's name on it */
-            int32_t k, need = o == 5 ? 3 : 1, done = mr.blk_h == h ? mr.blk_done : 0, row = 0;
-            for (k = 0; k < 2; k++) {
-                const char *nm = MR_BTN_NAME[mr_blk_btn(h, k)];
-                int32_t by;
-                if (!(need >> k & 1) || (done >> k & 1)) continue;
-                by = gy - 30 - row * 30; row++;
-                grect(x - 26, by, 52, 30, th->panel); gbox(x - 26, by, 52, 30, th->pad); gbox(x - 24, by + 2, 48, 26, th->caps[(h + (uint32_t)k) % 5u]);
-                gfit(x, by + 10, 46, nm, th->text, 2);
+    galpha(256);
+    if (t == 1)                                  /* SPORE DRIFT: spores drifting up through it all */
+        for (i = 0; i < 16; i++) {
+            int32_t sy = 236 - (int32_t)(((uint32_t)now * 2u / 3u + (uint32_t)i * 61u) % 236u), sx = (int32_t)(ihash((uint32_t)i * 11u) % 240u) + (isin(sy * 300 + i * 4000) >> 11);
+            galpha(60 + (i & 3) * 30); gdisc(sx, sy, 3, sc); galpha(256); gp(sx, sy, th->text);
+        }
+    if (t == 3)                                  /* MYCELIUM NIGHTS: fireflies */
+        for (i = 0; i < 9; i++) {
+            int32_t fx = (int32_t)(ihash((uint32_t)i * 5u + 2u) % 240u) + (isin((int32_t)tm * 3 + i * 9000) >> 10), fy = 96 + (int32_t)(ihash((uint32_t)i * 9u) % 90u) + (icos((int32_t)tm * 2 + i * 5000) >> 11);
+            galpha(ipulse(tm + (uint32_t)i * 377u, 1700)); gdisc(fx, fy, 2, th->caps[2]); galpha(256);
+        }
+    if (play) {
+        for (st = imin(n - 1, (now + GH_LOOK) / 24); st >= 0 && st >= now / 24 - 4; st--) {   /* the crystals, far to near */
+            int32_t lane, dt = st * 24 - now, z;
+            col_t c;
+            if (!mus_chart[st] || gh_st[st] == 1 || gh_st[st] == 2) continue;
+            lane = gh_lane_at(st); c = gh_col(lane, L);
+            z = 256 - dt * 256 / GH_LOOK;
+            gh_proj(gh_lane_u(lane), z, &x, &y, &s);
+            if (gh_st[st] == 3) { if (-dt < 60) { galpha(imax(0, 256 + dt * 4)); gh_crystal(x, y, s, c, 0, L == 4, 1); galpha(256); } }
+            else if (dt > -30) { galpha(imin(256, z * 3 + 40)); gh_crystal(x, y, s, c, beat, L == 4, 0); galpha(256); }
+        }
+        for (i = 0; i < 6 && i < gh.nbur; i++) { /* caught: a burst of shards and a ring of light */
+            int32_t q = now - gh.bur[i].t, k;
+            col_t c;
+            if (q < 0 || q >= 34) continue;
+            c = gh_col(gh.bur[i].lane, L); x = gh.bur[i].x;
+            galpha(256 - q * 7);
+            gcirc(x, GH_YS - 8, 6 + q, c);
+            for (k = 0; k < 7; k++) {
+                int32_t a = -28000 + k * 9300 + gh.bur[i].t * 300, d0 = 4 + q, d1 = 9 + q * 2;
+                gline2(x + ((d0 * icos(a)) >> 14), GH_YS - 10 + ((d0 * isin(a)) >> 14), x + ((d1 * icos(a)) >> 14), GH_YS - 10 + ((d1 * isin(a)) >> 14), k & 1 ? th->text : c);
+            }
+            galpha(256);
+        }
+        if (now - gh.perf_t >= 0 && now - gh.perf_t < 44) {   /* PERFECT: a pillar of light up the lane, a star, two rings */
+            int32_t q = now - gh.perf_t, k, px = gh.perf_x, a = 256 - q * 256 / 44;
+            col_t c = gh_col(gh.perf_lane, L);
+            galpha(a * 90 / 256); grect(px - 7 + q / 8, GH_YS - 110 + q, 14 - q / 4, 110 - q, c);
+            galpha(a); grect(px - 1, GH_YS - 100 + q * 2, 3, 100 - q * 2, th->text);
+            gcirc(px, GH_YS - 8, 10 + q * 2, th->text); gcirc(px, GH_YS - 8, 6 + q, c);
+            for (k = 0; k < 8; k++) {
+                int32_t ang = k * 8192 + q * 300, r0 = 6 + q / 2, r1 = 16 + q;
+                gline2(px + ((r0 * icos(ang)) >> 14), GH_YS - 8 + ((r0 * isin(ang)) >> 14), px + ((r1 * icos(ang)) >> 14), GH_YS - 8 + ((r1 * isin(ang)) >> 14), k & 1 ? c : th->text);
+            }
+            galpha(256);
+        }
+    }
+    galpha(150 + beat * 106 / 256); grect(4, GH_YS, 232, 2, now - gh.perf_t >= 0 && now - gh.perf_t < 20 ? th->text : th->rim); galpha(256);
+    for (i = 0; i < L; i++) {                    /* each lane's keys, bracketed under the line */
+        uint32_t m = gh.lane_keys[i]; int k; int32_t a = 999, bb = -1;
+        for (k = 0; k < AC_NKEY; k++) if (m >> k & 1u) { a = imin(a, gh_key_x(k)); bb = imax(bb, gh_key_x(k)); }
+        galpha(L == 16 ? 110 : 200);
+        grect(a - 5, 201, bb - a + 11, 2, gh_col(i, L));
+    }
+    galpha(256);
+    {   /* Rock, on the line: he leaps to the lane of the key pressed */
+        int32_t f = ease8(iclamp((now - gh.rock_t) * 256 / 16, 0, 256)), hop = (L == 4 ? 16 : 9) * f * (256 - f) / 16384;
+        int32_t spin = play && now - gh.perf_t >= 0 && now - gh.perf_t < 30 ? (now - gh.perf_t) * 65536 / 30 : 0;   /* (a PERFECT: a spin) */
+        if (!play) f = 256;
+        rock_draw(gh.rock_x0 + (gh.rock_x1 - gh.rock_x0) * f / 256, GH_YS - 8 - hop - (spin ? 6 : 0), 256, now * 300 + spin, (tm % 3100u) < 150u ? 40 : 256, th->rock, th->rock_rim, th->dark, th->moss, th->eye, th->pupil);
+    }
+    if (play) {
+        for (st = imax(0, now / 24); st <= (now + 96) / 24 && st < n; st++)
+            if (mus_chart[st] && !gh_st[st] && st * 24 >= now - 8) {
+                if (st * 24 - now <= 48) lit |= gh.lane_keys[gh_lane_at(st)]; else dim |= gh.lane_keys[gh_lane_at(st)];
+            }
+    }
+    gh_kb(GH_KB, lit, dim & ~lit, play ? in.keys : 0, L);
+}
+static void gh_hud(int32_t now)
+{
+    char b[16]; int32_t i, n = (int32_t)mus_chart_n, beat = 256 - imin(256, (((now % 96) + 96) % 96) * 256 / 40);
+    grect(0, 0, 240, 2, th->panel); grect(0, 0, 240 * iclamp(now, 0, n * 24) / imax(1, n * 24), 2, gh_song_col(gh.track));
+    galpha(150 + beat * 106 / 256); gtext(4, 7 - beat / 200, gh_song_name(gh.track), gh_song_col(gh.track), 1); galpha(256);   /* (on the song's beat) */
+    gtext(4, 16, GH_MODE[gh_mode], gh_mode ? th->caps[0] : GH_ZONE[0], 1);
+    for (i = 0; i < imin(mc.lives, 5); i++) gtext(4 + i * 9, 26, "\xE2\x99\xA5", th->caps[0], 1);
+    num_str(b, mc.score); gtextr(236, 7, b, th->text, 2);
+    if (mc.combo >= 2) { b[0] = 'X'; num_str(b + 1, mc.combo); gtextr(236, 21, b, th->pad, 1); }
+    if (now - gh.judge_t >= 0 && now - gh.judge_t < 70) {   /* PERFECT / GOOD rising from where the note was caught */
+        int32_t age = now - gh.judge_t;
+        galpha(256 - age * 256 / 70);
+        if (gh.judge_perf) {                     /* PERFECT: large, and how many in a row */
+            gfit(iclamp(gh.judge_x, 60, 180), GH_YS - 46 - age / 5, 120, TR(T_PERFECT), th->text, 2);
+            if (gh.pstreak >= 2) { b[0] = 'X'; num_str(b + 1, gh.pstreak); gtextc(iclamp(gh.judge_x, 60, 180), GH_YS - 30 - age / 5, b, gh_col(gh.perf_lane, gh.L), 1); }
+        } else gfit(iclamp(gh.judge_x, 40, 200), GH_YS - 34 - age / 6, 120, TR(T_GOOD), th->pad, 1);
+        galpha(256);
+    }
+    if (now < 0) {                               /* the count-in: the song's name, then its last bar's beats */
+        int32_t left = (-now + 95) / 96;
+        if (left <= 4) { char c2[2] = {(char)('0' + left), 0}; galpha(140 + ((-now) % 96) * 116 / 96); gtextc(120, 104, c2, th->text, 5); galpha(256); }
+        else gfit(120, 108, 220, gh_song_name(gh.track), th->text, 2);
+    }
+}
+static void road_draw(void)
+{
+    int32_t now = gh.playing || mc.state == MS_PLAY ? gh_now() : (int32_t)(tr_now_q8() >> 8);
+    if (!gh.L) gh_lanes(GH_LANES[gh_mode]);
+    road_scene(now, mc.state == MS_PLAY, (uint32_t)mc.t, mc.state == MS_PLAY ? gh.track : mc.state == MS_OVER ? gh.track : mus_track);
+    if (mc.flash > 0) { galpha(mc.flash * 110 / 300); grect(0, 0, 240, 240, th->caps[0]); galpha(256); }
+    if (mc.state == MS_PLAY) gh_hud(now);
+}
+
+/* ---- the cards. Before a song: the machine's name, the song (the ALGORITHM knob turns through the jukebox), the
+ * three modes (KNOB 1; two locked until a song is finished), PLAY. After: how it went, and what it opened */
+static void gh_card(void)
+{
+    char b[40];
+    int32_t a = ts(1, 2), k, t = (int32_t)(mus_track % JUKE_N), y;
+    col_t nc = th->caps[0];
+    uint32_t tm = (uint32_t)mc.t;
+    int32_t yf;
+    gveil(th->bg, 25);
+    yf = gfoot(238, TR(T_REC_BACK), th->mute, th->bg, ts(1, 2));   /* at the foot: HOME, and under it REC; the rest above */
+    yf = gfoot(yf - 2, TR(T_HOME_CONTROLS), th->text, th->bg, a);
+    yf -= 5 * a + 6;                             /* (the PLAY line's top) */
+    if (mc.state == MS_OVER) {
+        int32_t n;
+        t = (int32_t)gh.track;
+        gfit(120, 12, 232, gh_song_name((uint32_t)t), th->mute, 2);
+        gfit(120, 30, 232, GH_MODE[gh.played], nc, 1);
+        if (gh.cleared) gh_gems(120, 58, 11, tm > 300 ? (tm > 600 ? (tm > 900 ? gh.gems : imin(gh.gems, 2)) : imin(gh.gems, 1)) : 0, nc);
+        else gfit(120, 52, 232, TR(T_GAMEOVER), th->caps[0], 2);
+        num_str(b, mc.score); gtextc(120, 80, b, th->text, 4);
+        num_str(b, gh.hits); for (n = 0; b[n]; n++) ;
+        b[n++] = ' '; b[n++] = '/'; b[n++] = ' '; num_str(b + n, gh.total);
+        gtextc(120, 110, b, th->mute, 1);
+        if (gh.unlocked && tm < 3200) {         /* (for three seconds: what opened; then the modes to choose from) */
+            int32_t al = iclamp(((int32_t)tm - 700) * 256 / 300, 0, 256);
+            galpha(al);
+            grect(18, 124, 204, imin(46, yf - 128), th->panel); gbox(18, 124, 204, imin(46, yf - 128), nc);
+            gfit(120, 130, 196, TR(T_GH_NEWMODES), th->pad, 2);
+            gtextc(120, 150, "ROCK   CRYSTAL", th->text, 2);
+            galpha(256);
+        } else if (gh.newbest) gfit(120, 136, 232, TR(T_NEWBEST), th->pad, 2);
+        for (k = 0; k < gh_open() && gh_open() > 1 && !(gh.unlocked && tm < 3200); k++) {   /* the mode for the next go: KNOB 1 */
+            int32_t x = 44 + k * 76;
+            if (k == gh_mode) gbox(x - 32, yf - 18, 64, 13, nc);
+            gfit(x, yf - 14, 60, GH_MODE[k], k == gh_mode ? th->text : th->mute, 1);
+        }
+        galpha(140 + ipulse(tm, 1600) * 116 / 256);
+        gfit(120, yf, 232, TR(T_PLAY_AGAIN), th->pad, a);
+        galpha(256);
+    } else {
+        /* everything that names the song moves on its beat; the song's colour; a new song slides in from the side its knob
+         * turned, and its best score with it */
+        int32_t bt = 256 - imin(256, (int32_t)((tr_now_q8() >> 8) % 96u) * 256 / 40), bob = bt > 170 ? 2 : bt > 60 ? 1 : 0;
+        int32_t sw = iclamp(((int32_t)tm - gh.swap_t) * 256 / 220, 0, 256), off = (256 - ease8(sw)) * 36 / 256 * gh.swap_dir, bs;
+        col_t scol = gh_song_col((uint32_t)t);
+        gfit(120, 10 - bob, 232, MACH_NAME[0], nc, 3);
+        /* the song's box: its name between the arrows; under it its tempo, four lights going round its bar on its beat
+         * and the BPM; under that every song's tempo on one line, slow to fast, this one lit */
+        grect(14, 32, 212, 56, th->panel); gbox(14, 32, 212, 56, scol);
+        if (bt > 128) gbox(13, 31, 214, 58, scol);
+        gfit(120, 36, 200, TR(T_GH_SONG), th->mute, 1);
+        galpha(150 + bt * 106 / 256);
+        gtext(20 - bt / 100, 48, "\xE2\x86\x90", scol, 2); gtextr(220 + bt / 100, 48, "\xE2\x86\x92", scol, 2);
+        galpha(imin(256, 60 + sw));
+        gfit(120 + off, 48 - bob, 170, gh_song_name((uint32_t)t), sw < 256 ? th->text : scol, 2);
+        galpha(256);
+        {
+            uint32_t bi = (tr_now_q8() >> 8) / 96u % 4u, bpm = gh_bpm((uint32_t)t), j;
+            int32_t m, w = 0, x0;
+            char bb[12];
+            num_str(bb, (int32_t)bpm); while (bb[w]) w++;
+            bb[w++] = ' '; bb[w++] = 'B'; bb[w++] = 'P'; bb[w++] = 'M'; bb[w] = 0;
+            w = gtextw(bb, 2);
+            x0 = 120 - (46 + w) / 2;             /* (the lights and the number, centred together) */
+            for (m = 0; m < 4; m++) {
+                int on = (uint32_t)m == bi;
+                galpha(on ? 110 + bt * 146 / 256 : 70);
+                gdisc(x0 + 4 + m * 11, 68, on ? 4 : 3, m == 0 ? scol : on ? th->text : th->mute);
+            }
+            galpha(256);
+            gtext(x0 + 46, 64, bb, scol, 2);
+            ghl(30, 211, 81, th->mute);          /* the tempo line: 60 BPM at its left end, 130 at its right */
+            for (j = 0; j < JUKE_N; j++) {
+                int32_t tx = 30 + iclamp((int32_t)gh_bpm(j) - 60, 0, 70) * 180 / 70, me = j == (uint32_t)t;
+                if (me) { galpha(120 + bt * 136 / 256); gdisc(tx, 81, 3, scol); galpha(256); }
+                else grect(tx, 79, 1, 5, gh_song_col(j));
             }
         }
-        else mr_crystal(x, gy, o == 2, beat);   /* crystals: the danger, bright and outlined, always */
+        for (k = 0; k < 3; k++) {                /* the difficulties: the chosen one boxed, its crystals; a locked one, a padlock */
+            int32_t x = 44 + k * 76, on = k < gh_open();
+            col_t c = on ? (k == gh_mode ? th->text : th->pad) : th->mute;
+            if (k == gh_mode) { grect(x - 35, 93, 70, 36, th->panel); gbox(x - 35, 93, 70, 36, nc); }
+            gfit(x, 98, 64, GH_MODE[k], c, 1);
+            if (on) gh_gems(x, 116, 5, gh_gems_of(t, k), nc);
+            else gh_lock(x - 3, 110, th->mute);
+        }
+        bs = gh_best[t][gh_mode];                /* the best of this song at this difficulty, large */
+        { const char *p = TR(T_BEST); int32_t m = 0; while (*p && m < 24) b[m++] = *p++; b[m++] = ' ';
+          if (bs) num_str(b + m, bs); else { b[m++] = '-'; b[m] = 0; } }
+        galpha(imin(256, 40 + sw));
+        gfit(120, 134 - (sw < 256 ? (256 - sw) / 40 : 0), 232, b, bs ? scol : th->mute, 2);
+        galpha(256);
+        gfit(120, 150, 232, TR(T_GH_MODE), th->mute, 1);
+        galpha(140 + ipulse(tm, 1600) * 116 / 256);
+        y = imin(164, yf);
+        if (t == 0 && !take_n) gfit(120, y, 232, TR(T_GH_RECFIRST), th->caps[0], a);
+        else gfit(120, y, 232, TR(T_PLAY_START), th->pad, a);
+        galpha(256);
     }
-    rock_draw(rx, gy - 8 - mr_height(now), 256, (int32_t)(now * 400u), (tm % 3100u) < 150u ? 40 : 256, th->rock, th->rock_rim, th->dark, th->moss, th->eye, th->pupil);
-    if (mc.flash > 0) { galpha(mc.flash * 120 / 300); grect(0, 0, 240, 240, th->caps[0]); galpha(256); }
-    {
-        char b[16]; int32_t n, a = ts(1, 2);
-        num_str(b, (int32_t)(tr_bpm_q8 >> 8));
-        for (n = 0; b[n]; n++) ;
-        b[n++] = ' '; b[n++] = 'B'; b[n++] = 'P'; b[n++] = 'M'; b[n] = 0;
-        gtext(8, 236 - 5 * a, b, th->mute, a);
+}
+/* the start card plays the song as a perfect player would at the chosen difficulty, round and round, from the next bar
+ * line: the melody's notes in its own voice, the ones the difficulty leaves out softly, and the keys light as each is
+ * played (glowing a beat before it) */
+static void gh_demo_tick(void)
+{
+    uint32_t t = mus_track % JUKE_N, ab = tr_now_q8() >> 8, len;
+    int32_t pos, s, n;
+    if (mus_mode != MUS_JUKE || (t == 0u && !take_n)) { if (mus_demo) gh_demo_stop(); return; }
+    if (!mus_demo || gh.demo_track != t || gh.demo_mode != gh_mode) {
+        mus_demo = 0;
+        gh_lanes(GH_LANES[gh_mode]);
+        mus_chart_build(t, GH_GROUP[gh_mode]);   /* (mus_solo is off while it is built) */
+        mus_step0 = (ab / 24u / 16u + 1u) * 16u;
+        gh.demo_track = (uint8_t)t; gh.demo_mode = gh_mode;
+        mus_demo = 1; mus_solo = GH_GROUP[gh_mode];
     }
-#undef MRX
+    n = (int32_t)mus_chart_n; len = (uint32_t)(n + 16) * 24u;   /* (the song and the bar between) */
+    if (!len) return;
+    pos = (int32_t)(ab - mus_step0 * 24u) % (int32_t)len;   /* where in the loop (before its first bar: its last) */
+    if (pos < 0) pos += (int32_t)len;
+    for (s = 0; s < n; s++) {
+        int32_t d;
+        if (!mus_chart[s]) continue;
+        d = s * 24 - pos;
+        if (d < -(int32_t)len / 2) d += (int32_t)len; else if (d > (int32_t)len / 2) d -= (int32_t)len;
+        if (d <= 0 && d > -(int32_t)GH_GROUP[gh_mode] * 16) led_key_want |= gh.lane_keys[gh_lane_at(s)];   /* being played (2/3 of its share of time) */
+        else if (d > 0 && d <= 96) led_key_dim_want |= gh.lane_keys[gh_lane_at(s)];   /* next */
+    }
+    led_key_dim_want &= ~led_key_want;
+#ifdef AC_TEST_SCENE                             /* (tests) each change of the demo's lit keys */
+    { static uint32_t was; if (led_key_want != was) { printf("%6u ms  demo: keys lit %07X (tune %u, %s)%s\n", fm1_ms, led_key_want, t, GH_MODE[gh_mode], gh.practice ? " practice" : ""); was = led_key_want; } }
+#endif
+}
+/* the cards' own controls (SELECT, PRESETS and ALGORITHM turn the song: arcave.c): KNOB 1-4 the difficulty. Returns 1
+ * if PLAY may start */
+static int gh_card_tick(void)
+{
+    int32_t d = in.enc[ENC_KNOB1] + in.enc[ENC_KNOB2] + in.enc[ENC_KNOB3] + in.enc[ENC_KNOB4], k;
+    uint32_t t = mus_track % JUKE_N;
+    if (t != gh.card_track) {                    /* the song changed: it slides in from the way the knob turned */
+        gh.swap_dir = (gh_song_pos(t) - gh_song_pos(gh.card_track) + JUKE_N) % JUKE_N <= JUKE_N / 2 ? 1 : -1;
+        gh.card_track = (uint8_t)t; gh.swap_t = mc.t;
+        if (mc.state == MS_OVER) { mc.state = MS_TITLE; gh.swap_t = mc.t = 0; }   /* (after a song: the new song's card) */
+    }
+    if (mc.state != MS_OVER) gh.practice = 0;
+    else if (in.kdown && !gh.practice) gh.practice = 1;   /* (after a song: a key touched, the song again, to practise) */
+    for (k = 0; k < AC_NKEY; k++)                /* the keys play along, in the melody's voice */
+        if (in.kdown >> k & 1u) mus_mel_voice(key_play(k) + 12, 0, 200, 0);
+    if (d && mc.state == MS_OVER && mc.t < 3200) mc.t = 3200;   /* (the difficulties show at once) */
+    if (d) {
+        int m = iclamp(gh_mode + (d > 0 ? 1 : -1), 0, gh_open() - 1);
+        if (m != gh_mode) { gh_mode = (uint8_t)m; gh_lanes(GH_LANES[m]); snd_ui(76 + m * 3); save_dirty = 1; gh.swap_t = mc.t - 120; }
+        else snd_ui(60);
+    }
+    if (mc.state == MS_TITLE || gh.practice) gh_demo_tick(); else if (mus_demo) gh_demo_stop();
+    if (t == 0u && !take_n) return 0;            /* (no song recorded yet) */
+    return 1;
+}
+/* EDIT: CRYSTAL ROAD's page of the scores: every song, its crystals in each mode and its best (of any mode) */
+static void gh_scores_draw(int32_t y0)
+{
+    int k, m;
+    col_t nc = th->caps[0];
+    gfit(120, y0, 232, MACH_NAME[0], nc, 2);
+    for (m = 0; m < 3; m++) gfit(132 + m * 28, y0 + 18, 26, m == 0 ? "PEB" : m == 1 ? "ROCK" : "CRY", th->mute, 1);
+    for (k = 0; k < JUKE_N; k++) {
+        int32_t y = y0 + 32 + k * 25, bs = 0;
+        char b[8];
+        gfit(64, y + 2, 116, gh_song_name((uint32_t)k), k == 0 ? th->pad : th->text, 1);
+        for (m = 0; m < 3; m++) {
+            int g;
+            for (g = 0; g < 3; g++) gh_gem_draw(124 + m * 28 + g * 8, y + 5, 4, nc, g < gh_gems_of(k, m));
+            bs = imax(bs, gh_best[k][m]);
+        }
+        if (bs) { num_str(b, bs); gtextr(236, y + 2, b, th->pad, 1); } else gtextr(236, y + 2, "-", th->mute, 1);
+        galpha(100); ghl(6, 234, y + 16, th->mute); galpha(256);
+    }
 }
 
 /* ---------------------------------------------------------------- JUICE WORKS */
@@ -529,6 +1004,7 @@ static void bloom_tick(int32_t dt)
 {
     uint32_t now = (tr_now_q8() >> 8) - nb.t0, i, beat2;
     int32_t k, hard = nb.caught >= 90;
+    if (in.kdown) snd_keys(in.kdown, 1);         /* the keys play along (in the tune's key); the knobs do the catching */
     for (k = 0; k < 4; k++) {
         if (k < nb.rings && in.enc[NB_ENC[k]]) nb.ang[k] += in.enc[NB_ENC[k]] * 2731;   /* a click of the knob: a twenty-fourth of a turn */
         if (nb.hit[k] > 0) nb.hit[k] -= dt;
@@ -580,6 +1056,7 @@ static void bloom_tick(int32_t dt)
         }
     }
     led_btn_want |= (now % 96u < 14u) ? 1u << BTN_PLAY : 0u;
+    led_key_want |= in.keys;
 }
 static void bloom_draw(void)
 {
@@ -632,11 +1109,8 @@ static void mach_start(void)
 {
     uint32_t i, now = tr_now_q8() >> 8;
     mc.state = MS_PLAY; mc.score = 0; mc.combo = 0; mc.t = 0; mc.msg_t = 0; mc.flash = 0;
-    if (mc.which == 0) {
-        mc.lives = 3; mr.t0 = (now / 96u + 1u) * 96u - 96u; mr.done_h = (now - mr.t0) / 48u; mr.hop_h = 0; mr.seed = now * 31u;
-        /* nothing for the first beats: mr_obs keeps the first eight half-beats clear from where the clock stands */
-        mr.t0 = (now / 96u) * 96u; mr.done_h = 0; mr.blk_h = 0; mr.blk_done = 0;
-    } else if (mc.which == 1) {
+    if (mc.which == 0) gh_start();
+    else if (mc.which == 1) {
         for (i = 0; i < sizeof jw; i++) ((uint8_t *)&jw)[i] = 0;
         mc.lives = 5; jw.seed = now * 31u + 7u; jw.spawn_t = 700; jw.prev_keys = in.keys;
 #ifdef AC_TEST_CATCH
@@ -648,7 +1122,7 @@ static void mach_start(void)
         for (i = 0; i < 4u; i++) nb.ang[i] = (int32_t)i * 16384 - 16384;
     }
 #ifdef AC_TEST_CATCH                             /* (tests) lives enough to see a long way in */
-    mc.lives = 99;
+    if (mc.which) mc.lives = 99;
 #endif
     snd_chime(0);
 }
@@ -656,7 +1130,11 @@ static void mach_enter(int which)
 {
     uint32_t i;
     mc.which = (uint8_t)which; mc.state = MS_TITLE; mc.t = 0; mc.msg_t = 0; mc.flash = 0; mc.score = 0; mc.lives = 0;
+    gh.card_track = (uint8_t)(mus_track % JUKE_N); gh.swap_t = -10000; gh.demo_track = 255;
     (void)i;
+#ifdef AC_TEST_SCENE
+    if (which == 0) gh_test_charts();
+#endif
 }
 /* -1: REC at its start or end, back to the Arcave; 1: HOME, how it is played (arcave.c opens the sheet) */
 static int mach_tick(int32_t dt)
@@ -667,16 +1145,23 @@ static int mach_tick(int32_t dt)
     if (BDOWN(BTN_HOME)) return 1;
     if (mc.state != MS_PLAY) {
         if (BDOWN(BTN_REC)) return -1;
+        if (mc.which == 0) {                     /* (CRYSTAL ROAD: KNOB 1 the mode; no song recorded, no start) */
+            int ok = gh_card_tick();
+            if (BDOWN(BTN_PLAY)) { if (ok) mach_start(); else snd_ui(55); }
+            else { led_play_breathe = (uint8_t)ok; led_breathe_want |= 1u << BTN_HOME | 1u << BTN_REC; }
+            return 0;
+        }
         if (BDOWN(BTN_PLAY)) mach_start();
         else { led_play_breathe = 1; led_breathe_want |= 1u << BTN_HOME | 1u << BTN_REC; }
         return 0;
     }
-    if (mc.which == 0) run_tick(); else if (mc.which == 1) juice_tick(dt); else bloom_tick(dt);
+    if (mc.which == 0) road_tick(dt); else if (mc.which == 1) juice_tick(dt); else bloom_tick(dt);
     return 0;
 }
 static void mach_draw(void)
 {
-    if (mc.which == 0) run_draw(); else if (mc.which == 1) juice_draw(); else bloom_draw();
+    if (mc.which == 0) { road_draw(); if (mc.state != MS_PLAY) gh_card(); return; }
+    if (mc.which == 1) juice_draw(); else bloom_draw();
     if (mc.state == MS_PLAY) mach_hud();
     else mach_card(MACH_NAME[mc.which], th->caps[mc.which * 2 % 5]);
 }

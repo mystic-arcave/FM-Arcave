@@ -4,7 +4,8 @@
  *              machine is played, the same way (ac_mtutor.h; REC from there goes back to the Arcave).
  *              HOME at the dish, once it has a tempo: what the song's four effects do. HOME again returns.
  *   scores     EDIT anywhere, or the board in the Arcave: the best score of each machine, the time played, the
- *              secrets found. EDIT, PLAY or HOME closes.
+ *              secrets found; any knob turns to CRYSTAL ROAD's page, every song's crystals and best (EDIT in that
+ *              machine opens there). EDIT, PLAY or HOME closes.
  *   FX         one of a dozen pairs of picture and sound, a second long, over whatever is on the screen. */
 
 enum { SH_NONE, SH_INTRO, SH_MACH, SH_SCORES, SH_FX };
@@ -20,6 +21,10 @@ static int sheet_tick(int32_t dt)
     sh.t += dt;
     if (sh.on == SH_SCORES) {
         if (BDOWN(BTN_EDIT) || BDOWN(BTN_PLAY) || BDOWN(BTN_HOME)) { sh.on = SH_NONE; snd_ui(67); return SA_CLOSED; }
+        if (in.any_knob) {                       /* any knob: CRYSTAL ROAD's page, every song (and back) */
+            int32_t p = iclamp(sh.scroll + (in.any_knob > 0 ? 1 : -1), 0, 1);
+            if (p != sh.scroll) { sh.scroll = p; sh.t = 0; snd_ui(p ? 79 : 72); }
+        }
         led_btn_want |= 1u << BTN_EDIT;
         return SA_NONE;
     }
@@ -115,13 +120,20 @@ static void sheet_draw(void)
     }
     if (sh.on == SH_INTRO) { tutor_draw(); return; }
     gveil(0, 30);                                /* nearly black: the words are all there is to read */
+    if (sh.scroll == 1) {
+        gh_scores_draw(10);
+        gfit(120, 238 - TLH(ts(1, 2)) + 2 * ts(1, 2), 232, TR((sh.t / 3000) & 1 ? T_SCROLL : T_SCORES_CLOSE), (sh.t / 3000) & 1 ? th->caps[3] : th->mute, ts(1, 2));
+        return;
+    }
     {
         char b[5][16];
         int32_t st = ts(2, 4), rh = TLH(ts(1, 3)) + 4, y, used, t = (int32_t)play_s, n;
         used = gfit(120, 6 + 2 * st, 232, TR(T_SCORES), th->caps[3], st);
         y = 6 + 2 * st + 5 * used + 10;
         rh = imin(rh, (238 - TLH(ts(1, 2)) - 6 - y) / 6);   /* six rows above the foot */
-        num_str(b[0], (int32_t)best[0]); num_str(b[1], (int32_t)best[2]);
+        num_str(b[0], gh_crystals()); for (n = 0; b[0][n]; n++) ;
+        b[0][n++] = '/'; b[0][n++] = '5'; b[0][n++] = '4'; b[0][n] = 0;
+        num_str(b[1], (int32_t)best[2]);
         sheet_row(y, MACH_NAME[0], b[0], th->caps[0]); y += rh;
         sheet_row(y, MACH_NAME[2], b[1], th->caps[4]); y += rh;
         num_str(b[3], (int32_t)best[1]);
@@ -134,7 +146,7 @@ static void sheet_draw(void)
         sheet_row(y, TR(T_PLAYTIME), b[2], th->pad); y += rh;
         b[3][0] = (char)('0' + (cv.secrets & 1u) + (cv.secrets >> 1 & 1u) + (cv.secrets >> 2 & 1u)); b[3][1] = '/'; b[3][2] = '3'; b[3][3] = 0;
         sheet_row(y, TR(T_SECRETS), b[3], th->pad);
-        gfit(120, 238 - TLH(ts(1, 2)) + 2 * ts(1, 2), 232, TR(T_SCORES_CLOSE), th->mute, ts(1, 2));
+        gfit(120, 238 - TLH(ts(1, 2)) + 2 * ts(1, 2), 232, TR((sh.t / 3000) & 1 ? T_SCROLL : T_SCORES_CLOSE), (sh.t / 3000) & 1 ? th->caps[3] : th->mute, ts(1, 2));
     }
 }
 

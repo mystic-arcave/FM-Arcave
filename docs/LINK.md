@@ -6,7 +6,9 @@ Each FM-1 keeps its own scene and its own tune. LINK keeps tempo, beat and bar t
 
 One clock (`firmware/src/arcave/ac_synth.h`): ticks, 96 to a quarter note, counted in the audio interrupt from
 power-on and never stopped. Every tune and every machine reads bar and step from it, so two FM-1s whose clocks agree
-are in time whatever each is playing. All tunes stay in C major pentatonic, so they also agree in pitch.
+are in time whatever each is playing. On its own each jukebox tune has its own key; with LINK on, every tune plays in
+the one shared key (C major pentatonic, A minor pentatonic for the minor ones), so they also agree in pitch, and the
+keyboard follows.
 
 ## The messages
 
