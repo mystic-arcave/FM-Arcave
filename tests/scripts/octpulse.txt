@@ -1,9 +1,9 @@
-# power on, nothing pressed: after the title fades OCT- and OCT+ breathe three times (2.25 s a breath, from the wide
-# shot's start), then go dark, and PLAY breathes with "press PLAY to wake up Rock"
-5000 shot
+# power on, nothing pressed: OCT- and OCT+ start breathing as "change language" comes up under the title, three breaths
+# (2.25 s each); the wide shot, its words and PLAY's breath come at their usual time, beside the third; then OCT goes dark
+3000 shot
+4000 shot
 7000 shot
 9500 shot
+10600 shot
 12000 shot
-13600 shot
-14800 shot
-15000 end
+12200 end

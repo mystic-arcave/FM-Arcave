@@ -26,7 +26,8 @@ static const course_t *co = &CO_SHORT;
 
 enum { IP_TITLE, IP_WIDE, IP_WAKE, IP_PLAY, IP_OUT, IP_DONE };
 static uint8_t lang_touched;                     /* OCT- or OCT+ pressed since power-on (the title's tip, OCT's breaths) */
-#define KEEP_AT 90000                            /* on the course this long and not at its end: "keep going" */
+#define KEEP_AT 90000
+#define LANG_TIP_AT 3200                         /* the title's "change language" comes up (arcave.c fades it in from here) */                            /* on the course this long and not at its end: "keep going" */
 
 typedef struct {
     int32_t x, y, vx, vy;                        /* Q8 px, px/s */
@@ -50,8 +51,7 @@ static struct {
     int32_t veil;                                /* the rock face that hides the hollow behind the start: 256 solid .. 0 gone */
     uint8_t race;                                /* the race back: 0 not, 1 out of the door (before the line), 2 on the clock */
     int32_t race_ms, race_show, step_cd;
-    uint8_t oct;                                 /* the wide shot: OCT- and OCT+ breathing three times (1 to start, 2 on) */
-    int32_t wake_at;                             /* the wide shot: when "press PLAY" comes (after OCT's three breaths) */
+    uint8_t oct;                                 /* OCT- and OCT+ breathing three times from "change language": 1 on, 2 done */
 } G;
 /* the race back: out of the Arcave's upper door, over the start line, to where the game began. The pads and the
  * sky things are the mirrored set (CO_RPAD, CO_RSKY), a booster throws Rock up each of the four big steps, and
@@ -230,7 +230,7 @@ static void intro_sky_hits(int32_t dt)
 }
 
 #define CTRL_X 96                                /* the controls box: its middle, in the course's pixels */
-static int intro_want_play(void) { return (G.phase == IP_WIDE && G.t > G.wake_at) || (G.phase == IP_PLAY && G.cave_a > 128); }
+static int intro_want_play(void) { return (G.phase == IP_WIDE && G.t > 1000) || (G.phase == IP_PLAY && G.cave_a > 128); }
 
 static void intro_press_play(void)
 {
@@ -245,20 +245,18 @@ static int intro_tick(int32_t dt)
     rock_t *r = &G.r;
     G.t += dt; in_time += (uint32_t)dt;
     if (BDOWN(BTN_PLAY)) intro_press_play();
+    /* OCT- and OCT+ breathe three times from when "change language" comes up under the title (a breath from dark,
+     * then), on into the wide shot beside PLAY's own; a language chosen stops them, and they never hold anything up */
+    if (G.phase == IP_TITLE && G.t >= LANG_TIP_AT && !G.oct && !lang_touched) { fm1_breath_sync(); G.oct = 1; }
+    if (G.oct == 1 && (fm1_breaths() >= 3u || lang_touched || G.phase > IP_WIDE)) G.oct = 2;
+    if (G.oct == 1) led_breathe_want |= 1u << BTN_OCT_DOWN | 1u << BTN_OCT_UP;
     if (in.kdown && G.phase != IP_TITLE) snd_key(in.hikey);
     if (G.phase == IP_TITLE) {
         G.fade = G.t > 5600 ? imin(256, (G.t - 5600) * 256 / 600) : 0;
-        if (G.t > 6200) {                        /* the title has faded: OCT- and OCT+ breathe three times, then PLAY */
-            G.phase = IP_WIDE; G.t = -800;
-            G.oct = !lang_touched;               /* (not if a language was already chosen over the title) */
-            G.wake_at = G.oct ? 0x3FFFFFFF : 1000;
-        }
+        if (G.t > 6200) { G.phase = IP_WIDE; G.t = -800; }
     } else if (G.phase == IP_WIDE) {
         G.fade = G.t < 0 ? -G.t * 256 / 800 : 0;
         intro_setcam(128, 26, 78);
-        if (G.oct == 1) { fm1_breath_sync(); G.oct = 2; }   /* (a breath from dark, now) */
-        if (G.oct && (fm1_breaths() >= 3u || lang_touched)) { G.oct = 0; G.wake_at = G.t + 300; }
-        if (G.oct) led_breathe_want |= 1u << BTN_OCT_DOWN | 1u << BTN_OCT_UP;
     } else if (G.phase == IP_WAKE) {
         int32_t t = G.t;
         if (t < 500) intro_mixcam(CAM_WIDE, CAM_ZOOM, t * 256 / 500);
@@ -856,8 +854,8 @@ static void intro_draw(void)
     rock_draw(WX(r->x), WY(r->y), z, r->th, G.eyes, th->rock, th->rock_rim, th->dark, th->moss, th->eye, th->pupil);
     {   /* words in the sky */
         int32_t pulse = 97 + 159 * ipulse(tm, 2600) / 256;
-        if (G.phase == IP_WIDE && G.t > G.wake_at) {
-            int32_t a = imin(256, (G.t - G.wake_at) * 256 / 800) * pulse / 256;
+        if (G.phase == IP_WIDE && G.t > 1000) {
+            int32_t a = imin(256, (G.t - 1000) * 256 / 800) * pulse / 256;
             /* the first time the PLAY button is shown: nice and large, the words making room for it */
             {
                 const char *q = TR(T_WAKE1);

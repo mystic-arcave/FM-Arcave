@@ -15,7 +15,7 @@ run() { echo "== $1"; shift; "$@" || { echo "   FAILED"; fail=1; }; }
 play() { tests/run_arcave.sh "$@" > "$OUT/$1.log" 2>&1 && grep -q '^sound' "$OUT/$1.log"; }
 
 run "the intro: title, wake, roll, pads, the last stretch" play intro
-run "power on: after the title OCT- and OCT+ breathe three times, then go dark, and PLAY breathes with its words" sh -c 'tests/run_arcave.sh octpulse > build/host/octpulse.log 2>&1 && grep -q " 9500 ms  lights: breathing 0003, PLAY 0" build/host/octpulse.log && grep -q " 13600 ms  lights: breathing 0000, PLAY 2" build/host/octpulse.log'
+run "power on: OCT- and OCT+ breathe three times from \"change language\", the words and PLAY on time beside them, then OCT dark" sh -c 'tests/run_arcave.sh octpulse > build/host/octpulse.log 2>&1 && grep -q "  3000 ms  lights: breathing 0000, PLAY 0" build/host/octpulse.log && grep -q "  4000 ms  lights: breathing 0003, PLAY 0" build/host/octpulse.log && grep -q "  9500 ms  lights: breathing 0003, PLAY 2" build/host/octpulse.log && grep -q " 10600 ms  lights: breathing 0000, PLAY 2" build/host/octpulse.log'
 run "a language chosen over the title: no OCT breaths after it, PLAY as before" sh -c 'tests/run_arcave.sh octpulse2 > build/host/octpulse2.log 2>&1 && grep -q " 7000 ms  lights: breathing 0000, PLAY 0" build/host/octpulse2.log && grep -q " 8600 ms  lights: breathing 0000, PLAY 2" build/host/octpulse2.log'
 run "the course, standing still: at a minute and a half \"keep going\" at the right edge, gone after five seconds" play keepgoing
 run "the title in each language" play lang

@@ -143,7 +143,7 @@ static void arcave_init(void)
 #endif
 }
 
-static int lang_tip_up(void) { return scene == SC_INTRO && G.phase == IP_WIDE && G.t < G.wake_at + 800; }   /* (over OCT's breaths) */
+static int lang_tip_up(void) { return scene == SC_INTRO && G.phase == IP_WIDE && G.t < 1800; }
 static void juke_change(int32_t d)
 {
     if (story < 4) {
@@ -278,8 +278,8 @@ static void arcave_frame(void)
     case SC_MACH: mach_draw(); break;
     }
     /* the language tip: in with the title's last second, and out exactly as "press PLAY to wake up Rock" comes in */
-    if (scene == SC_INTRO && G.phase == IP_TITLE) lang_tip_draw(smooth8(3200, 3900, G.t));
-    else if (lang_tip_up() && !mn.on) lang_tip_draw(G.t < G.wake_at ? 256 : 256 - imin(256, (G.t - G.wake_at) * 256 / 800));   /* (whole over OCT's breaths) */
+    if (scene == SC_INTRO && G.phase == IP_TITLE) lang_tip_draw(smooth8(LANG_TIP_AT, LANG_TIP_AT + 700, G.t));
+    else if (lang_tip_up() && !mn.on) lang_tip_draw(256 - iclamp((G.t - 1000) * 256 / 800, 0, 256));
     fx_apply(dt);
     if (sh.on && !mn.on) sheet_draw();
     if (mn.on) menu_draw();
