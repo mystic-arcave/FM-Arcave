@@ -3,7 +3,7 @@
 """FM-ARCAVE's tables: firmware/gen/arcave_tab.h (a sine, the notes' phase steps, the pixel font).
 
 The font is the game's own: capitals five pixels tall in the manner of the title's lettering, with the
-accented letters German, Danish, French, Spanish and Turkish need (two rows above the capitals, one below).
+accented letters German, Danish, French, Spanish, Turkish and Dutch need (two rows above the capitals, one below).
 
     python3 tools/gen_tables.py
 """

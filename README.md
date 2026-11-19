@@ -27,7 +27,7 @@ machines, free play, and a jukebox on the ALGORITHM knob.
 | **Free play** | ALGORITHM changes the tune; a banner slides in from the top with its name. The machines, each built like its game (a crystal, a juice press, a flower in a pot): **MYSTIC RUN** (hop crystals on the beat: they are bright white with a pulsing glow, the mushrooms behind are dim; few and far apart at first, more over a couple of minutes; a block goes only when you press the button that lights up), **JUICE WORKS** (four taps of mushroom juice on KNOB 1-4, glasses put down, moved and served with the keys, tickets that show the layered drink to pour in a glass the same size and shape as the ones under the taps; the first two drinks of more than one juice wait twice as long), **NIGHT BLOOM** (new: KNOB 1, then SELECT, then ALGORITHM each turn a petal, a click a twenty-fourth of a turn, and KNOB 2 joins once fifty spores are caught; an arrow points off the screen to each knob as it joins; the spores drift in slowly from beyond the screen; catch each on its own colour). In a machine PLAY starts, HOME shows how it is played (a loop of little animated steps, as the course's controls are: the scene, the FM-1 with the hands doing it, the scene again on the FM-1's own screen), REC goes back to the Arcave. A NIGHT BLOOM spore slows as it reaches its ring and can be caught all the while it is there (from half a beat before it arrives). A board on the small ledge high on the right wall lists the best scores and the time played. |
 
 Everywhere: **GLO** opens the settings over the paused game, the FM-1's battery level in their corner (language, text size, child ear protection, look, LINK, about, replay the
-intro, skip to the Mystic Arcave, start over; in there PLAY or OCT+ confirms); held for a second it warns, and held three seconds more it wipes the whole save. A low battery flashes in that corner on any screen. **OCT-** and **OCT+** step through English, German, Danish, French, Spanish and Turkish. **HOME** shows the controls (on the course and in a machine). **EDIT** shows the scores and the time played. **FX** plays one
+intro, skip to the Mystic Arcave, start over; in there PLAY or OCT+ confirms); held for a second it warns, and held three seconds more it wipes the whole save. A low battery flashes in that corner on any screen. **OCT-** and **OCT+** step through English, German, Danish, French, Spanish, Turkish and Dutch. **HOME** shows the controls (on the course and in a machine). **EDIT** shows the scores and the time played. **FX** plays one
 of a dozen effects, picture and sound.
 
 ## Build it
@@ -46,7 +46,7 @@ The chip has no floating point and no 64-bit division, so the game is whole numb
 
 ```
 firmware/src/arcave/     the game: ac_base.h (drawing, font, input), ac_synth.h (voices, echo, the clock),
-                         ac_music.h (tunes), ac_text.h (six languages), ac_intro.h, ac_tutor.h (the controls shown), ac_mtutor.h (each machine's), ac_cave.h, ac_juke.h (rings, dish),
+                         ac_music.h (tunes), ac_text.h (seven languages), ac_intro.h, ac_tutor.h (the controls shown), ac_mtutor.h (each machine's), ac_cave.h, ac_juke.h (rings, dish),
                          ac_mach.h (three machines), ac_sync.h (LINK), ac_menu.h, arcave.c
 firmware/src/fm_arcave.c the FM-1 app: Dinghy's platform under the game
 firmware/src/, hal/      Dinghy's platform (updates, USB rescue, MIDI, audio, keys, screen, storage); dinghy.c is its sample app

@@ -1,0 +1,28 @@
+# Dutch: OCT- once on the title (from English, the last language), the tip, "press PLAY to wake up Rock", the controls
+# sheet, then the settings line by line and the ABOUT pages
+3000 btn 0
+4600 shot
+7800 shot
+8600 shot
+9000 btn 12
+13200 btn 8
+13800 shot
+14200 btn 8
+15200 shot
+16000 btn 7
+16500 shot
+16800 enc 0 3
+17200 shot
+17500 enc 0 3
+17900 shot
+18200 enc 0 2
+18600 shot
+19000 btn 12
+19400 shot
+19800 btn 12
+20200 shot
+20600 btn 12
+21000 shot
+21400 btn 12
+21800 shot
+22000 end

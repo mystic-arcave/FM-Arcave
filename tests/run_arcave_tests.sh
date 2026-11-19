@@ -24,6 +24,8 @@ run "the PLAY button drawn as the green button in the wake line" play playbtn
 run "Turkish: the title, the tip fading as the wake text comes in, the controls sheet" play turkish
 run "the hollow behind the start: hidden by a rock face until Rock is on the ledge and rolls in" play hollow 0 8
 run "the settings, line by line" play menu
+run "Dutch: the title, the wake text, the controls sheet, the settings, ABOUT" play dutch
+run "Dutch: into the cave, the Hat, the rings, the dish, the jukebox" play dutchstory 1
 run "into the cave, the Hat, the jukebox, the settings" play story 1
 run "the jukebox past the Hat: its name at the screen's edge, Rock settling in its dip, PLAY: the rings" sh -c 'tests/run_arcave.sh juke 2 > build/host/juke.log 2>&1 && grep -q "^sound" build/host/juke.log'
 run "JUICE WORKS: HOME shows how it is played (a glass, the tap, the ticket's line, serving, moving a glass)" play help 4 4
