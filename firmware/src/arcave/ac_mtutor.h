@@ -193,14 +193,15 @@ static int32_t mt_rx = 120;                      /* where Rock stands on the lin
 static int32_t mt_lane_x(int lane) { return 120 + ((2 * lane + 1) * 512 / 8 - 256) * 110 / 256; }
 static int mt_road_scene(int32_t step) { return (int)step; }   /* (A, B, C, the modes) */
 static int32_t les_now(void) { return (int32_t)((tr_now_q8() >> 8) - les_step0 * 24u); }
-static int32_t les_tick(int32_t k) { return k / les.n * LES_LOOP + les.nt[k % les.n]; }
-static int les_lane(int32_t k) { return (int)(les.nd[k % les.n] * 4 / 16); }
+static int32_t les_tick(int32_t k) { int32_t n = imax(1, les.n); return k / n * LES_LOOP + les.nt[k % n]; }
+static int les_lane(int32_t k) { return (int)(les.nd[k % imax(1, les.n)] * 4 / 16); }
 static int32_t les_ms(int32_t ticks) { return ticks * 60000 / ((int32_t)(tr_bpm_q8 >> 8) * 96); }
+static void les_begin(int sc, int auto_);
 static void les_open(void)                       /* HOME in CRYSTAL ROAD: the lesson's song in place of the tune */
 {
     les.prev_mode = mus_mode; les.prev_track = mus_track; les.on = 1; les.ph = -1; les.step = -1; mt_rx = 120;
-    les_mask = 0; les_auto = 0; les_step0 = ((tr_now_q8() >> 8) / 96u + 1u) * 4u + 16u;   /* (from the next beat: four beats of count-in) */
     mus_set(MUS_LESSON, 0);
+    les_begin(0, 1);                             /* (the first step's song at once: the page is drawn before its first tick) */
 }
 static void les_close(void)
 {
@@ -233,7 +234,7 @@ static void les_rock(int lane, int32_t now)      /* Rock leaps to a lane */
     int32_t f = ease8(iclamp((now - les.rt) * 256 / 16, 0, 256));
     les.rx0 = les.rx0 + (les.rx1 - les.rx0) * f / 256; les.rx1 = mt_lane_x(lane); les.rt = now; mt_rx = les.rx1;
 }
-static void les_sour(int32_t k) { int32_t p = les_pitch(les.nd[k % les.n]); sfx(p + 1, 0, 260, W_SAW, 2400, 2, 20); sfx(p - 6, 0, 260, W_SQUARE, 1300, 2, 20); }
+static void les_sour(int32_t k) { int32_t p = les_pitch(les.nd[k % imax(1, les.n)]); sfx(p + 1, 0, 260, W_SAW, 2400, 2, 20); sfx(p - 6, 0, 260, W_SQUARE, 1300, 2, 20); }
 /* a frame of the song's notes: the demo's own catches and misses, or (your turn) the player's keys */
 static void les_judge(int32_t dt, int yours)
 {
