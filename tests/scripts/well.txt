@@ -1,11 +1,20 @@
-# the well in the Arcave's floor (the cave lit, Rock beside it): UNDERSONG's name and START over it; PLAY: down the
-# well, waiting for a friend (CC 110 goes out); a key played alone; REC: back up, by the well (the friend is told: op 9)
+# the well in the Arcave's floor (the cave lit, Rock beside it): UNDERSONG's name and START over it; PLAY: Rock hops
+# into the well and the camera goes in after it; then the waiting screen, Rock falling (CC 110 goes out), its lines
+# one after another; a key played alone; REC: dark, and back up by the well (the friend is told: op 9)
 1500 shot
 2000 btn 12
-3500 shot
-4000 keys 4096
-4200 keys 0
-4400 shot
-5000 btn 13
-6000 shot
-6500 end
+2350 shot
+2800 shot
+3250 shot
+3700 shot
+5200 shot
+6000 keys 4096
+6200 keys 0
+9300 shot
+13300 shot
+17300 shot
+21300 shot
+24000 btn 13
+24200 shot
+25500 shot
+26000 end

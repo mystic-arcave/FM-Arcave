@@ -32,6 +32,8 @@ enum { DO_HELLO = 1, DO_EPOCH, DO_PICK, DO_OPEN, DO_READY, DO_GO, DO_HIT, DO_MIS
 #define DU_PERF 10
 #define DU_NOTES 160
 #define DU_PIPE_N 12                             /* places on a pipe */
+#define DU_PAGE_MS 4000                          /* the waiting screen: how long each of its lines stays */
+#define DU_OUT_MS 320                            /* and how long it takes to go dark when REC is pressed there */
 static const col_t DU_COL[2] = {AC_RGB(240, 96, 200), AC_RGB(110, 232, 210)};   /* seat 0, seat 1 */
 
 static uint16_t duo_best[DM_N];                  /* (kept in the save) the best of each game; ROCK-OFF: your own */
@@ -45,6 +47,7 @@ static struct {
     uint8_t ra, rb, rc, dial[2], lcol[4], msg;
     uint32_t pkeys, pk_down, last_rx, last_tx, t0;
     int32_t t, end_tick, beat, score, max, sc[2], msg_t, hop[2], rx[2], tx[2], lflash[4], jud_t[2];
+    int32_t out;                                 /* > 0: REC at the door, the picture going dark (ms) before the Arcave again */
     uint8_t jud_ok[2];
     uint16_t stray[2];                           /* ROCK-OFF: keys pressed where no note was (30 points each: no winning by hammering) */
     int16_t lx[4];
@@ -405,6 +408,7 @@ static int duo_tick(int32_t dt)
 #endif
     me = du.seat; ot = !me; peer = du_peer();
     du.t += dt;
+    if (du.out) { du.out += dt; return du.out > DU_OUT_MS ? -1 : 0; }   /* back up: dark first, the Arcave fades in by itself */
     if (du.msg_t > 0) du.msg_t -= dt;
     for (k = 0; k < 2; k++) {
         if (du.hop[k] > 0) du.hop[k] -= dt;
@@ -436,7 +440,7 @@ static int duo_tick(int32_t dt)
     switch (du.state) {
     case DUS_LOBBY:
         if (peer) { du.state = DUS_MENU; du.t = 0; du.cur = 0; snd_chime(1); }
-        else { led_breathe_want |= 1u << BTN_REC; if (BDOWN(BTN_REC)) return -1; }
+        else { led_breathe_want |= 1u << BTN_REC; if (BDOWN(BTN_REC)) { du.out = 1; snd_ui(67); } }
         break;
     case DUS_MENU:
         n = du_items(it);
@@ -651,6 +655,91 @@ static void du_stars(int32_t cx, int32_t y, int n)
     int k;
     for (k = 0; k < 3; k++) gh_gem_draw(cx + (k - 1) * 22, y, 8, th->pad, k < n);
 }
+/* the waiting screen: Rock falling down the well, which never ends: rings of its stones come up out of the dark
+ * and past, turning against each other, the well bending slowly; a friend's place beside Rock, still empty. Over it,
+ * one after another and round again: what this is, how two FM-1s are joined, how to go back */
+static void du_fall(uint32_t tm)
+{
+    static const char ADDR[] = "GITHUB.COM/MYSTIC-ARCAVE/FM-ARCAVE";   /* (the font has capitals only: this address takes them) */
+    static const uint16_t PAGE[5] = {T_DU_ABOUT, T_DU_CONNECT, T_DU_PAGE, T_DU_JOIN, T_DU_WAIT};
+    int32_t t = du.t, in8 = smooth8(0, 700, t), me = du.seat, k, j, xy[24];
+    int32_t vx = 120 + ((tsin(tm, 7, 0) * 20) >> 14), vy = 106 + ((tsin(tm, 5, 16384) * 13) >> 14);   /* the far end */
+    int32_t nx = 120 - (vx - 120) / 2, ny = 106 - (vy - 106) / 2;                                 /* and the near one */
+    uint32_t u = (uint32_t)((uint64_t)tm * 9u * 1024u / 3400u), id0 = u >> 10;
+    gclear(th->bg);
+    for (k = 0; k < 9; k++) {                    /* the rings, the far ones first */
+        int32_t p = (int32_t)((u & 1023u) + (uint32_t)k * 1024u) / 9, pp = (p * p) >> 10, r = 5 + ((pp * 215) >> 10);
+        int32_t cx = vx + (((nx - vx) * pp) >> 10), cy = vy + (((ny - vy) * pp) >> 10), pass;
+        uint32_t id = id0 - (uint32_t)k;
+        int32_t tw = (int32_t)(id * 1800u & 65535u) + (int32_t)((tm * 5u) & 65535u) * ((id & 1u) ? 1 : -1);
+        galpha((26 + ((pp * 210) >> 10)) * in8 / 256);
+        for (pass = 0; pass < (p > 760 ? 2 : 1); pass++) {
+            for (j = 0; j < 12; j++) {
+                int32_t rr = (r + pass) * (236 + (int32_t)(ihash(id * 16u + (uint32_t)j) % 40u)) / 256, a = j * 5461 + tw;
+                xy[2 * j] = cx + ((icos(a) * rr) >> 14); xy[2 * j + 1] = cy + ((isin(a) * rr) >> 14);
+            }
+            gpolyline(xy, 12, 1, th->caps[id % 5u]);
+        }
+    }
+    for (k = 0; k < 26; k++) {                   /* dust going by, faster the nearer it is */
+        uint32_t per = 1400u + ihash((uint32_t)k + 50u) % 2200u;
+        int32_t p = (int32_t)(((tm + ihash((uint32_t)k + 99u) * 7u) % per) * 1024u / per), pp = (p * p) >> 10;
+        int32_t a = (int32_t)ihash((uint32_t)k * 7u + 1u), r0 = 6 + ((pp * 190) >> 10), r1 = r0 - 1 - ((pp * 12) >> 10);
+        int32_t cx = vx + (((nx - vx) * pp) >> 10), cy = vy + (((ny - vy) * pp) >> 10);
+        galpha(((pp * 200) >> 10) * in8 / 256);
+        gline(cx + ((icos(a) * r0) >> 14), cy + ((isin(a) * r0) >> 14), cx + ((icos(a) * r1) >> 14), cy + ((isin(a) * r1) >> 14), k % 3 ? th->mute : th->text);
+    }
+    for (k = 0; k < 5; k++) {                    /* and notes, out of the song below */
+        int32_t p = (int32_t)(((tm + (uint32_t)k * 900u) % 4500u) * 1024u / 4500u), pp = (p * p) >> 10;
+        int32_t a = (int32_t)ihash((uint32_t)k * 31u + (tm + (uint32_t)k * 900u) / 4500u * 7u), r = 10 + ((pp * 150) >> 10);
+        galpha(imin(256, pp / 2 + 30) * in8 / 256);
+        gtext(vx + (((nx - vx) * pp) >> 10) + ((icos(a) * r) >> 14) - 3, vy + (((ny - vy) * pp) >> 10) + ((isin(a) * r) >> 14) - 4,
+              "\xE2\x99\xAA", k & 1 ? DU_COL[k >> 1 & 1] : th->caps[k % 5], p > 640 ? 2 : 1);
+    }
+    {   /* Rock, turning as it falls (it came in from above, large), and the place a friend will fall in */
+        int32_t rx = 120 + ((tsin(tm, 11, 0) * 7) >> 14), ry = 106 + ((tsin(tm, 9, 9000) * 5) >> 14);
+        int32_t z = 430 + (256 - in8) * 700 / 256, h = du.hop[me], up = h > 0 ? (isin((240 - h) * 32768 / 240) * 20) >> 14 : 0;
+        int32_t g = (int32_t)((tm * 13u) & 65535u), gx = rx + ((icos(g) * 58) >> 14), gy = ry + ((isin(g) * 36) >> 14);
+        if (isin(g) < 0) {                       /* (round behind Rock) */
+            galpha((60 + ipulse(tm, 1400) * 90 / 256) * in8 / 256);
+            gcirc(gx, gy, 8, DU_COL[!me]); gtextc(gx, gy - 3, "?", DU_COL[!me], 1);
+        }
+        galpha(34 * in8 / 256); gdisc(rx, ry, 36, DU_COL[me]); galpha(256);
+        rock_draw(rx, ry + 6 - up, z, (int32_t)(tm * 9u), (tm % 3700u) < 160u ? iabs((int32_t)(tm % 3700u) - 80) * 256 / 80 : 256,
+                  th->rock, DU_COL[me], 1, DU_COL[me], th->eye, th->pupil);
+        if (isin(g) >= 0) {                      /* (and round in front) */
+            galpha((110 + ipulse(tm, 1400) * 120 / 256) * in8 / 256);
+            gcirc(gx, gy, 11, DU_COL[!me]); gtextc(gx, gy - 5, "?", DU_COL[!me], 2);
+        }
+    }
+    galpha(in8);
+    gfit(120, 12, 232, "UNDERSONG", th->caps[(tm / 500u) % 5u], 3);
+    if (t > 600) {                               /* the words: each comes up into a band of dark, stays, and goes on up and out */
+        int32_t q = (t - 600) % DU_PAGE_MS, pg = (t - 600) / DU_PAGE_MS % 5;
+        int32_t ai = smooth8(0, 420, q), ao = smooth8(DU_PAGE_MS - 380, DU_PAGE_MS, q), al = imin(ai, 256 - ao);
+        int32_t dy = (256 - ai) * 10 / 256 - ao * 8 / 256, a = ts(1, 2), a2 = 1, hh, h2 = 0, top = 0, y, w;
+        const char *s = TR(PAGE[pg]);
+        char num[4] = "1/3";
+        while (a > 1 && gblock_h(224, s, a) > 42) a--;
+        hh = gblock_h(224, s, a);
+        if (pg >= 1 && pg <= 3) top = 12;        /* how to join: three steps, numbered */
+        if (pg == 2) h2 = 12;
+        if (pg == 4) { a2 = imin(a, ts(1, 2)); while (a2 > 1 && gblock_h(224, TR(T_REC_BACK), a2) > 20) a2--; h2 = gblock_h(224, TR(T_REC_BACK), a2) + 4; }
+        y = 220 - hh - h2 - top;
+        galpha(al * 232 / 256); grect(0, y - 8, 240, 228 - (y - 8), th->bg);
+        galpha(al * 220 / 256); w = 20 + al * 90 / 256;
+        ghl(120 - w, 120 + w, y - 8, DU_COL[me]); ghl(120 - w, 120 + w, 227, DU_COL[!me]);
+        galpha(al);
+        if (top) { num[0] = (char)('0' + pg); gtextc(120, y + dy, num, DU_COL[me], 1); }
+        gblock(8, y + top + dy, 224, s, pg == 4 ? th->pad : th->text, a, 1);
+        if (pg == 2) gfit(120, y + top + hh + 4 + dy, 232, ADDR, th->pad, 1);
+        if (pg == 4) gblock(8, y + hh + 4 + dy, 224, TR(T_REC_BACK), th->mute, a2, 1);
+        galpha(in8);
+        for (k = 0; k < 5; k++) gdisc(100 + k * 10, 234, k == pg ? 2 : 1, k == pg ? th->pad : th->mute);
+    }
+    galpha(256);
+    if (t < 500) gveil(th->bg, (uint32_t)(32 - smooth8(0, 500, t) / 8));   /* out of the dark the dive ended in */
+}
 static void duo_draw(void)
 {
     uint32_t tm = fm1_ms;
@@ -660,15 +749,8 @@ static void duo_draw(void)
     du_bg(tm);
     switch (du.state) {
     case DUS_LOBBY:
-        gfit(120, 22, 232, "UNDERSONG", th->caps[(tm / 500u) % 5u], 4);
-        du_pair(92, 0);
-        galpha(150 + ipulse(tm, 1500) * 106 / 256);
-        y = 126; y += 5 * gfit(120, y + 4, 232, TR(T_DU_WAIT), th->pad, ts(2, 3)) + 16;
-        galpha(256);
-        a = ts(1, 3);
-        while (a > 1 && y + gblock_h(232, TR(T_DU_CONNECT), a) > 238 - gblock_h(232, TR(T_REC_BACK), 1) - 6) a--;
-        gblock(4, y, 232, TR(T_DU_CONNECT), th->text, a, 1);
-        gfoot(238, TR(T_REC_BACK), th->mute, th->bg, 1);
+        du_fall(tm);
+        if (du.out) gfade(du.out * 256 / DU_OUT_MS);
         break;
     case DUS_MENU:
         gfit(120, 12, 232, "UNDERSONG", th->caps[(tm / 500u) % 5u], 3);

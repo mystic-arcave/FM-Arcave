@@ -211,6 +211,26 @@ static void gveil(col_t c, uint32_t a32)
     uint32_t i;
     for (i = 0; i < AC_W * AC_H; i++) fb_px[i] = mix565(fb_px[i], c, a32);
 }
+/* the picture as it stands, enlarged z times (Q8, 256 and up) about (cx, cy): the camera going in. Done in place:
+ * every pixel is read from one nearer the middle, so the rows and columns are gone through from the edges inward */
+static void gzoom_row(int32_t y, int32_t sy, int32_t cx, int32_t inv)
+{
+    const col_t *s = &fb_px[sy * AC_W];
+    col_t *d = &fb_px[y * AC_W];
+    int32_t x;
+    for (x = 0; x < cx; x++) d[x] = s[cx - (((cx - x) * inv) >> 16)];
+    for (x = AC_W - 1; x > cx; x--) d[x] = s[cx + (((x - cx) * inv) >> 16)];
+}
+static void gzoom(int32_t cx, int32_t cy, int32_t z)
+{
+    int32_t y, inv;
+    if (z <= 256) return;
+    inv = (1 << 24) / z;
+    cx = iclamp(cx, 0, AC_W - 1); cy = iclamp(cy, 0, AC_H - 1);
+    for (y = 0; y < cy; y++) gzoom_row(y, cy - (((cy - y) * inv) >> 16), cx, inv);
+    for (y = AC_H - 1; y > cy; y--) gzoom_row(y, cy + (((y - cy) * inv) >> 16), cx, inv);
+    gzoom_row(cy, cy, cx, inv);
+}
 
 /* ---------------------------------------------------------------- the font */
 static uint32_t utf8_next(const char **s)

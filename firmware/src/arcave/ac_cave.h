@@ -153,10 +153,14 @@ static const char *const MACH_NAME[3] = {"CRYSTAL ROAD", "JUICE WORKS", "NIGHT B
 
 enum { CVA_NONE, CVA_LAMP, CVA_M1, CVA_M2, CVA_M3, CVA_SCORES, CVA_EXIT, CVA_DISH, CVA_DUO };
 #define CV_WELL_X 296                            /* the well down to UNDERSONG, the game for two (ac_duo.h), in the floor before the Hat */
+#define CV_DIVE_HOP 520                          /* down the well: Rock hops over its rim, */
+#define CV_DIVE_IN 1000                          /* drops into it, */
+#define CV_DIVE_MS 1500                          /* and the camera goes in after it */
 #define CV_BOARD_X 824                           /* the scores board, on the small ledge high on the right wall */
 #define CV_BOARD_Y 176
 static struct {
     int32_t x, y, vx, vy, th, coy, drag, acc, camx, camy, t, fade, roll_px, sq[5], psst, power_t, boost_t, chime_t[CV_NCHIME], ring_t;
+    int32_t dive, dive_x, dive_y;                /* dive: ms since PLAY at the well (0: not diving); from where */
     uint8_t secrets, chimes, friend_awake;       /* secrets: bit 0 the sleeper, 1 the chimes, 2 the ring */
     uint8_t g, inited, met, near;                /* near: 0 nothing, 1 the Hat, 2 the jukebox, 3..5 a machine */
     uint8_t at_juke, juke_ready;                 /* in front of the jukebox; it offers a new song (not until Rock has
@@ -167,7 +171,7 @@ static uint8_t story;                            /* 0 the intro, 1 in the cave, 
 static void cave_enter(int fresh)
 {
     if (!cv.inited || fresh) { cv.x = Q8(134); cv.y = cave_floor_q8(Q8(134)) - Q8(9); cv.vx = 0; cv.vy = 0; cv.th = 0; cv.inited = 1; cv.camx = 0; cv.camy = Q8(CV_GROUND - 250); cv.psst = 0; }
-    cv.fade = 256; cv.drag = 0; cv.t = 0;
+    cv.fade = 256; cv.drag = 0; cv.t = 0; cv.dive = 0;
     if (story >= 2) cv.met = 1;                  /* the Hat has said its piece: no calling from off the screen */
     sy_drone_want = story >= 4 ? 0 : 150;
     sy_music_want = 256;
@@ -209,6 +213,28 @@ static int cave_tick(int32_t dt)
     cv.fade = imax(0, cv.fade - dt * 256 / 1200);
     if (cv.power_t > 0) cv.power_t = imax(0, cv.power_t - dt);
     if (dlg_tick(dt)) { sy_rumble_want = 0; return CVA_NONE; }
+    if (cv.dive) {                               /* down the well: a hop over the rim, the drop, the camera after it */
+        int32_t fy = cave_floor_q8(Q8(CV_WELL_X)) - rock_rad(cv.th), tx, ty, ox = cv.x;
+        cv.dive += dt;
+        if (cv.dive < CV_DIVE_HOP) {
+            int32_t e = ease8(cv.dive * 256 / CV_DIVE_HOP);
+            cv.x = cv.dive_x + (Q8(CV_WELL_X) - cv.dive_x) * e / 256;
+            cv.y = cv.dive_y + (fy - cv.dive_y) * e / 256 - ((isin(cv.dive * 32768 / CV_DIVE_HOP) * 26) >> 6);
+        } else {
+            int32_t q = imin(256, (cv.dive - CV_DIVE_HOP) * 256 / (CV_DIVE_IN - CV_DIVE_HOP));
+            cv.x = Q8(CV_WELL_X); cv.y = fy + q * q * 30 / 256;
+        }
+        cv.th += (cv.x - ox) * 1372 / 256 + dt * 90;
+        tx = iclamp(Q8(CV_WELL_X - 120), 0, Q8(CV_W - 240)); ty = Q8(CV_GROUND - 132);   /* the camera: the well's mouth to the middle */
+        cv.camx += (tx - cv.camx) * imin(160, dt) / 160;
+        cv.camy += (ty - cv.camy) * imin(300, dt) / 300;
+        sy_rumble_want = 0;
+        if (cv.dive >= CV_DIVE_MS) {             /* (Rock stands by the well again when it comes back up) */
+            cv.dive = 0; cv.x = Q8(CV_WELL_X); cv.y = fy; cv.vx = cv.vy = 0; cv.drag = 0; cv.g = 1;
+            return CVA_DUO;
+        }
+        return CVA_NONE;
+    }
     /* every knob but ALGORITHM rolls: that one is the jukebox's */
     i = in.any_knob - in.enc[ENC_ALGORITHM];
     if (i) cv.drag = iclamp(cv.drag + i * 115, -384, 384);
@@ -333,7 +359,11 @@ static int cave_tick(int32_t dt)
         else if (cv.near == 2) act = story < 4 ? CVA_LAMP : CVA_DISH;   /* mended: the dish again, for a new song */
         else if (cv.near == 6) act = CVA_SCORES;
         else if (cv.near == 7) act = CVA_EXIT;
-        else if (cv.near == 8 && story >= 4) act = CVA_DUO;
+        else if (cv.near == 8 && story >= 4) {   /* the well: Rock dives in, and the game begins when the dive is over */
+            cv.dive = 1; cv.dive_x = cv.x; cv.dive_y = cv.y; cv.near = 0;
+            sfx_ex(84, 0, 1300, W_SINE, 2600, 30, 230, 0, 0, 65250); sfx_ex(72, 420, 1100, W_TRI, 2000, 60, 230, 0, 0, 65200);
+            sfx(96, 0, 70, W_NOISE, 500, 1, 160);
+        }
         else if (story >= 4 && cv.near <= 5) act = CVA_M1 + cv.near - 3;
         else { banner_show("", TR(T_NOPOWER), 0); sfx_ex(43, 0, 260, W_SAW, 2400, 2, 120, 0, 0, 65300); }
     }
@@ -653,6 +683,12 @@ static void cave_draw(void)
         galpha(34); gdisc(x, y - 6, 30, th->pad); galpha(256);
         hat_draw(x, y, 120, th->dark ? HEXC(0x0c1216) : th->hat, th->hat_eye, th->hat_pupil, bl, iclamp(((cv.x >> 8) - CV_HAT_X) * 256 / 70, -256, 256), th->dark, th->hat_rim, 256);
     }
+    if (cv.dive >= CV_DIVE_HOP) {                /* into the well: smaller as it drops, and gone behind the near rim */
+        int32_t q = imin(256, (cv.dive - CV_DIVE_HOP) * 256 / (CV_DIVE_IN - CV_DIVE_HOP));
+        gclip_y1 = iclamp(SY(CV_GROUND) - 1, 0, AC_H);
+        rock_draw(SX(cv.x >> 8), SY(cv.y >> 8), 256 - q * 120 / 256, cv.th, 256, th->rock, th->rock_rim, th->dark, th->moss, th->eye, th->pupil);
+        gclip_y1 = AC_H;
+    } else
     rock_draw(SX(cv.x >> 8), SY(cv.y >> 8), 256, cv.th, (tm % 3700u) < 160u ? iabs((int32_t)(tm % 3700u) - 80) * 256 / 80 : 256,
               th->rock, th->rock_rim, th->dark, th->moss, th->eye, th->pupil);
     /* words */
@@ -690,6 +726,14 @@ static void cave_draw(void)
     }
     if (cv.power_t > 0) { galpha(cv.power_t * 256 / 1600); grect(0, 0, 240, 240, th->pad); galpha(256); }
     dlg_draw();
+    if (cv.dive) {                               /* the camera goes in on the well's mouth, and then down it into the dark */
+        int32_t d = cv.dive, z;
+        if (d < CV_DIVE_HOP) z = 256 + ease8(d * 256 / CV_DIVE_HOP) * 160 / 256;
+        else if (d < CV_DIVE_IN) z = 416 + ease8((d - CV_DIVE_HOP) * 256 / (CV_DIVE_IN - CV_DIVE_HOP)) * 420 / 256;
+        else { int32_t q = imin(256, (d - CV_DIVE_IN) * 256 / (CV_DIVE_MS - CV_DIVE_IN)); z = 836 + q * q / 256 * q / 256 * 7000 / 256; }
+        gzoom(SX(CV_WELL_X), SY(CV_GROUND) - 3, z);
+        if (d > CV_DIVE_IN) gveil(th->bg, (uint32_t)imin(32, (d - CV_DIVE_IN) * 32 / (CV_DIVE_MS - CV_DIVE_IN - 60)));
+    }
     gfade(cv.fade);
 #undef SX
 #undef SY
