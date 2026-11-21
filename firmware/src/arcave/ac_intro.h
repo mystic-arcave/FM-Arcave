@@ -52,6 +52,7 @@ static struct {
     uint8_t race;                                /* the race back: 0 not, 1 out of the door (before the line), 2 on the clock */
     int32_t race_ms, race_show, step_cd;
     uint8_t oct;                                 /* OCT- and OCT+ breathing three times from "change language": 1 on, 2 done */
+    uint8_t tutored;                             /* back from the controls' lesson: the box by the start is a ROLL sign now */
 } G;
 /* the race back: out of the Arcave's upper door, over the start line, to where the game began. The pads and the
  * sky things are the mirrored set (CO_RPAD, CO_RSKY), a booster throws Rock up each of the four big steps, and
@@ -396,7 +397,7 @@ static int intro_tick(int32_t dt)
     /* the lights: PLAY breathes when it is wanted; near a pad every key calls */
     if (intro_want_play()) led_play_breathe = 1;
     /* the controls box stands by the start: while it is on the screen HOME breathes (arcave.c opens the sheet) */
-    if (G.phase == IP_PLAY && !G.race && G.race_show <= 0 && (G.camx >> 8) < CTRL_X + 118 && (G.camx >> 8) + AC_W > CTRL_X - 118) led_breathe_want |= 1u << BTN_HOME;
+    if (G.phase == IP_PLAY && !G.race && !G.tutored && G.race_show <= 0 && (G.camx >> 8) < CTRL_X + 118 && (G.camx >> 8) + AC_W > CTRL_X - 118) led_breathe_want |= 1u << BTN_HOME;
     if (G.phase == IP_PLAY && G.near > 0) {
         if (G.on_pad || tsin(in_time, 120, 0) > 0) led_key_want = (1u << AC_NKEY) - 1u;
         else led_key_dim_want = (1u << AC_NKEY) - 1u;
@@ -730,6 +731,15 @@ static void intro_draw(void)
             galpha(256);
         }
     if ((G.phase == IP_PLAY || G.phase == IP_OUT) && !G.race && G.race_show <= 0 && z == 256 && x0 < CTRL_X + 118 && x1 > CTRL_X - 118) {
+      if (G.tutored) {                           /* the lesson seen: a signpost, an arrow pointing on with ROLL on it */
+        int32_t a = ts(2, 3), tw = gtextw(TR(T_SIGN_ROLL), a), h = 5 * a + 10, w = tw + 14, px = WX(Q8(CTRL_X)), py = WY(land_y(Q8(CTRL_X)));
+        int32_t bx = px - (w + h / 2) / 2, by = py - 58 - h, nudge = ipulse(tm, 1200) * 4 / 256, xy[10];
+        grect(px - 2, by + h, 4, py - by - h + 2, th->rim);
+        xy[0] = bx; xy[1] = by; xy[2] = bx + w; xy[3] = by; xy[4] = bx + w + h / 2 + nudge; xy[5] = by + h / 2;
+        xy[6] = bx + w; xy[7] = by + h; xy[8] = bx; xy[9] = by + h;
+        gpoly(xy, 5, th->panel); gpolyline(xy, 5, 1, th->pad);
+        gtext(bx + 7, by + 5 + a, TR(T_SIGN_ROLL), th->pad, a);
+      } else {
         /* "for controls press the HOME button", HOME drawn as the button is; it stands in the land, so rolling on leaves it behind */
         /* its words wrap at the size the settings ask for, in every language: only a word too wide for the screen
            makes the whole box smaller */
@@ -773,6 +783,7 @@ static void intro_draw(void)
             }
             lx += ww[k] + sp;
         }
+      }
     }
     for (i = 0; i < I_NPAD; i++) {               /* launch pads: five white piano keys set into the slope. Nothing floats
                                                     over them (a floating key read as something to collect); the key under

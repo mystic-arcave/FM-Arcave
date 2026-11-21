@@ -1,0 +1,16 @@
+# the ring secret, out in the air past the high right ledge: rolling left at full speed, a big hop off the ledge's end reaches it
+200 shot
+300 enc 2 -4
+400 enc 2 -4
+500 enc 2 -4
+600 enc 2 -4
+700 enc 2 -4
+800 enc 2 -4
+900 enc 2 -4
+950 keys 2
+1000 shot
+1100 keys 0
+1250 shot
+1440 shot
+1700 shot
+2600 end

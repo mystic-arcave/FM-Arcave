@@ -926,7 +926,7 @@ static const uint8_t NB_R[4] = {26, 42, 58, 74};   /* drawn in from the frame: t
  * below), and KNOB 2 only for whoever has caught fifty */
 static const uint8_t NB_ENC[4] = {ENC_KNOB1, ENC_SELECT, ENC_ALGORITHM, ENC_KNOB2};
 static const char *const NB_KNOB[4] = {"KNOB 1", "SELECT\nKNOB", "ALGORITHM\nKNOB", "KNOB 2"};
-static const uint8_t NB_JOIN[4] = {0, 5, 15, 50};   /* spores caught before each ring joins */
+static const uint8_t NB_JOIN[4] = {0, 6, 28, 58};   /* spores caught before each ring joins (room to learn each knob) */
 static const col_t NB_COL[4] = {AC_RGB(255, 214, 40), AC_RGB(255, 255, 255), AC_RGB(40, 224, 96), AC_RGB(48, 112, 255)};
 /* where each knob's arrow points from (the FM-1's knobs are off the screen that way): its tip, its direction (angle
  * units), the middle of its words */
@@ -1010,15 +1010,20 @@ static void bloom_tick(int32_t dt)
         if (nb.hit[k] > 0) nb.hit[k] -= dt;
     }
     if (nb.ring_t > 0) nb.ring_t -= dt;
-    /* the pace: one ring, a spore every other beat; two or three, now and then one between; all four, most beats; and
-     * past ninety caught, every beat and then half beats too */
+    /* the pace: one ring, a spore every other beat. A new ring starts at that pace too, and only as more are caught
+     * does one come now and then between (more with three rings, most beats with four); past ninety caught, every
+     * beat and then half beats too */
     beat2 = now / (hard ? 48u : 96u);
     if (beat2 != nb.last_beat) {
         uint32_t r = ihash(beat2 * 5u + nb.t0);
         int go;
         nb.last_beat = beat2;
         if (hard) go = !(beat2 & 1u) || r < (uint32_t)imin(36000, 4000 + (nb.caught - 90) * 600);
-        else go = nb.rings == 1 ? !(beat2 & 1u) : !(beat2 & 1u) || r < (nb.rings < 4 ? 18000u : 34000u);
+        else {
+            static const uint16_t CAP[5] = {0, 0, 12000, 18000, 34000};
+            int32_t into = nb.caught - NB_JOIN[nb.rings - 1];   /* caught since this ring joined */
+            go = !(beat2 & 1u) || r < (uint32_t)imin(CAP[nb.rings], imax(0, into - 4) * 1500);
+        }
         if (go && (nb.rings == 1 || nb.ring_t < NB_TAG_MS - 2400)) bloom_spawn(beat2 * (hard ? 48u : 96u), beat2 * 11u + nb.t0);   /* (a breather while a new ring arrives) */
     }
     for (i = 0; i < NB_MAX; i++) {

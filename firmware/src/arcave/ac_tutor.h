@@ -567,7 +567,13 @@ static void tp_foot(int n, uint32_t tm)
 {
     static const int ID[3] = {T_HELP_RETURN, T_TU_SKIP, T_REC_BACK};
     uint32_t f = (tm / 3000u) % (uint32_t)n;
-    if (tp.phase == TP_END) f = 0;
+    if (tp.phase == TP_END) {                    /* all done: only the way back, large, under the ticks */
+        int32_t a = ts(2, 3);
+        galpha(170 + ipulse(tm, 1400) * 86 / 256);
+        gfit(120, 232 - 5 * a, 232, TR(T_HELP_RETURN), th->pad, a);
+        galpha(256);
+        return;
+    }
     galpha(150 + ipulse(tm, 1400) * 106 / 256);
     gfit(120, 231, 232, TR(ID[f]), f == 0u ? th->pad : f == 1u ? th->caps[3] : th->mute, 1);
     galpha(256);

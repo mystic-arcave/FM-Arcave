@@ -133,8 +133,11 @@ static int32_t cave_floor_q8(int32_t x)          /* the ground's height under x 
 #define CHIME_X(i) (176 + (i) * 34)
 #define CHIME_Y(i) (116 + (i) * (i) * 2)          /* an arch: the far ones hang lower */
 #define CV_FRIEND_X 44
-#define CV_RING_X 746
-#define CV_RING_Y 116
+#ifndef CV_RING_X                               /* the ring: out in the air beyond the high right ledge, too high for any hop
+                                                   from below; only a big hop at full roll off the ledge's end reaches it */
+#define CV_RING_X 670
+#define CV_RING_Y 60
+#endif
 #define CV_NPLAT (sizeof CV_PLAT / sizeof CV_PLAT[0])
 typedef struct { int16_t x, y; uint8_t s, c; } cv_shroom_t;
 static const cv_shroom_t CV_SHROOM[] = {
@@ -175,6 +178,9 @@ static void cave_secret(int bit)
     static char n[4] = "0/3";
     if (cv.secrets >> bit & 1u) return;
     cv.secrets |= (uint8_t)(1u << bit);
+#ifdef DINGHY_HOST
+    printf("%6u ms  cave secret %d found\n", fm1_ms, bit);
+#endif
     n[0] = (char)('0' + (cv.secrets & 1u) + (cv.secrets >> 1 & 1u) + (cv.secrets >> 2 & 1u));
     banner_show(TR(T_SECRET), n, 0);
     snd_chime(1);

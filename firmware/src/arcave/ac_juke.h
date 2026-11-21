@@ -507,18 +507,24 @@ static void dish_draw(void)
         int32_t st = ts(2, 4), a = ts(1, 3), top = 6 + 2 * st, used, hint = imax(1, ts(1, 2) - 1), fy;
         if (ds.stage == DS_STIR) {
             used = gfit(120, top, 232, TR(T_DISH1), th->text, st);
-            if (ds.steady == 0 && ds.msg_t <= 0) gblock(4, top + 5 * used + 4, 232, TR(T_DISH2), th->mute, a, 1);
-            if (ds.steady > 0) {
-                char num[2] = {(char)('0' + ds.steady), 0};
-                gtextc(120, cy - 12, num, th->text, 5);
-            }
-            if (ds.bpm > 20) {
-                char b[12]; int32_t v = ds.bpm, n = 0;
+            if (ds.bpm <= 20) {
+                if (ds.msg_t <= 0) gblock(4, top + 5 * used + 4, 232, TR(T_DISH2), th->mute, a, 1);
+                fy = 238;
+            } else {                             /* spinning: its BPM large on the dish, eight pips for the steady beats, and
+                                                    at the foot: let go and it keeps that speed */
+                char b[4]; int32_t v = imin(ds.bpm, 999), n = 0, ok = ds.bpm > 55 && ds.bpm < 165;
                 if (v >= 100) b[n++] = (char)('0' + v / 100);
-                b[n++] = (char)('0' + v / 10 % 10); b[n++] = (char)('0' + v % 10); b[n++] = ' '; b[n++] = 'B'; b[n++] = 'P'; b[n++] = 'M'; b[n] = 0;
-                gfit(120, 238 - TLH(a) + 2 * a, 232, b, (ds.bpm > 55 && ds.bpm < 165) ? th->pad : th->mute, a);
+                b[n++] = (char)('0' + v / 10 % 10); b[n++] = (char)('0' + v % 10); b[n] = 0;
+                galpha(200); gellf(cx, cy + 4, 64, 40, th->bg, 0); galpha(256);
+                gtextc(120, cy - 22, b, ok ? th->text : th->mute, 6);
+                gtextc(120, cy + 13, "BPM", ok ? th->pad : th->mute, 2);
+                for (k = 0; k < 8; k++) {
+                    int32_t x = 120 - 49 + k * 14, on = k < ds.steady;
+                    if (on) gdisc(x, cy + 32, 4, th->pad); else gcirc(x, cy + 32, 4, th->mute);
+                }
+                fy = gfoot(238, TR(T_DISH_LET), th->pad, th->bg, a);
             }
-            if (ds.msg_t > 0) gfoot(238 - TLH(a) - 2, TR(ds.msg), th->caps[0], th->bg, ts(2, 4));
+            if (ds.msg_t > 0) gfoot(fy - 2, TR(ds.msg), th->caps[0], th->bg, ts(2, 4));
         } else if (ds.stage == DS_LOCKED) {
             gblock(4, 6, 232, TR(T_DISH_LOCK), th->text, st, 1);
         } else if (ds.stage == DS_WAIT) {

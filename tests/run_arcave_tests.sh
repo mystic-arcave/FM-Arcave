@@ -40,6 +40,7 @@ run "the settings: skip to the Mystic Arcave, OCT+ confirms (and saved)" sh -c '
 run "the lit cave, a tune changed" play lit 4
 run "the mended jukebox: its name only in front of it, the offer of a new song only after Rock has left it once" env AT=522,380 sh -c 'tests/run_arcave.sh jukeback 4 9 > build/host/jukeback.log 2>&1 && grep -q "^sound" build/host/jukeback.log'
 run "the machines up close, lit: a crystal, a juice press, a flower" env AT=740,330 sh -c 'tests/run_arcave.sh cabinets 4 9 > build/host/cabinets.log 2>&1 && grep -q "^sound" build/host/cabinets.log'
+run "the ring secret: only a big hop at full roll off the high right ledge reaches it" env AT=850,167 sh -c 'tests/run_arcave.sh ringjump 4 9 > build/host/ringjump.log 2>&1 && grep -q "cave secret 2 found" build/host/ringjump.log'
 run "the keyboard in the cave: every key its note, lowest key lowest, in each tune's own key; with LINK on, the shared key" env AT=466,274 sh -c 'tests/run_arcave.sh keys 4 9 > build/host/keys.log 2>&1 && grep -q "key 0 plays 48 (tune 1)" build/host/keys.log && grep -q "key 13 plays 62 (tune 2)" build/host/keys.log && grep -q "key 0 plays 50 (tune 3)" build/host/keys.log && grep -q "key 13 plays 69 (tune 4)" build/host/keys.log && grep -q "key 26 plays 79 (tune 5)" build/host/keys.log && grep -q "1[0-9]* ms  key 0 plays 45 (tune 3)" build/host/keys.log'
 run "the battery: its level in the settings' corner; low, flashing in the corner on any screen" env AT=466,274 sh -c 'tests/run_arcave.sh batt 4 9 > build/host/batt.log 2>&1 && grep -q "^sound" build/host/batt.log'
 run "a booster, a secret high up, then GLO held: the save wiped (and saved)" sh -c 'tests/run_arcave.sh boost 4 > build/host/boost.log 2>&1 && grep -q "settings 0 saved" build/host/boost.log'
@@ -53,7 +54,7 @@ run "CRYSTAL ROAD, nobody playing: PEBBLE still reaches its end, a key on the re
 run "JUICE WORKS: a drink poured and served, a glass moved, a spill" env CATCH=1 sh -c 'tests/run_arcave.sh table 4 4 > build/host/table.log 2>&1 && grep -q "^sound" build/host/table.log'
 run "FX a dozen times; child ear protection (and saved)" sh -c 'tests/run_arcave.sh fx 4 > build/host/fx.log 2>&1 && grep -q "settings 0 saved" build/host/fx.log'
 run "NIGHT BLOOM" play bloom 4 5
-run "NIGHT BLOOM, every spore caught: SELECT, ALGORITHM, then KNOB 2 at fifty, each with its arrow" env CATCH=1 sh -c 'tests/run_arcave.sh bloom4 4 5 > build/host/bloom4.log 2>&1 && grep -q "^sound" build/host/bloom4.log'
+run "NIGHT BLOOM, every spore caught: SELECT, ALGORITHM, then KNOB 2 at fifty-eight, each with its arrow" env CATCH=1 sh -c 'tests/run_arcave.sh bloom4 4 5 > build/host/bloom4.log 2>&1 && grep -q "^sound" build/host/bloom4.log'
 run "the small text size" env TSIZE=0 sh -c 'tests/run_arcave.sh story 1 > build/host/story0.log 2>&1 && grep -q "^sound" build/host/story0.log'
 run "the large text size" env TSIZE=2 sh -c 'tests/run_arcave.sh story 1 > build/host/story2.log 2>&1 && grep -q "^sound" build/host/story2.log'
 if [ -f build/emu/fm-arcave.wasm ]; then run "the browser build in Node" node tests/emu_test.mjs; else echo "-- no build/emu: web/emu/build.sh first for the browser test"; fi

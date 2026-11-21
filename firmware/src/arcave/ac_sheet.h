@@ -29,7 +29,7 @@ static int sheet_tick(int32_t dt)
         led_btn_want |= 1u << BTN_EDIT;
         return SA_NONE;
     }
-    if (BDOWN(BTN_HOME)) { if (sh.on == SH_MACH) mtutor_close(); sh.on = SH_NONE; snd_ui(67); return SA_CLOSED; }
+    if (BDOWN(BTN_HOME)) { if (sh.on == SH_MACH) mtutor_close(); if (sh.on == SH_INTRO) G.tutored = 1; sh.on = SH_NONE; snd_ui(67); return SA_CLOSED; }
     if (sh.on == SH_MACH || sh.on == SH_FX) {    /* REC goes back to the Arcave; the effects' page may be longer than the
                                                     screen: any knob moves it, a line a click */
         if (BDOWN(BTN_REC)) { if (sh.on == SH_MACH) mtutor_close(); sh.on = SH_NONE; return SA_LEAVE; }
