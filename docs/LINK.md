@@ -59,3 +59,46 @@ numbers in `fm1_irq.h`, and a path from the stack's receive callback into `midi_
 6 KB of RAM; both are there. It has to be tried on a device, with the boot guard JIANT uses for a radio that fails to
 start. A connectionless variant (the leader advertises its clock, followers only scan) would need no hub at all and
 is worth a look after that.
+
+## UNDERSONG: the game for two
+
+Down the well in the Arcave's floor (`firmware/src/arcave/ac_duo.h`) two FM-1s play one game: a story of four
+chapters (ECHO STEPS, TWIN ROAD, PIPE WHISPER, TWIN DRUM), the same four again for the best score once the story is
+told, and ROCK-OFF against each other. Each player sees the other's rock, keys and dial. LINK does not have to be on.
+
+An FM-1 only sends MIDI over USB, so the two need something between them that passes each one's messages to the
+other. Nothing else: the relay knows nothing of the game.
+
+- **Two FM-1s:** both by USB on one computer, the Link page open and its hub started.
+- **No FM-1:** the emulator page open in two windows of one browser. They find each other by themselves.
+- An emulator with MIDI on and an FM-1 on the same computer meet through the Link page too (a virtual MIDI port).
+
+The messages, control changes on channel 16 like LINK's own:
+
+| CC | Value | |
+| --- | --- | --- |
+| 110 | n, 1-126 | "I am here", every 300 ms. n is drawn at the door; the lower number is seat 0 and leads. The same number twice: draw again |
+| 112, 113 | key 0-26 | a key pressed, a key let go (113 with 127: all) |
+| 114 | 0-11 | the pipe's dial (PIPE WHISPER) |
+| 118, 115, 116 | c, a, b | the three numbers of a message |
+| 117 | op | ends a message and names it |
+
+| op | a, b, c | |
+| --- | --- | --- |
+| 1 hello | chapters cleared, state | with every 110 |
+| 2 epoch | the leader's clock / 32, 21 bits (c high, a, b low) | LINK's clock is sent modulo 2^19 ticks; this puts the two in the same bar |
+| 3 pick | the line of the list | the list is shared: either player turns it |
+| 4 open | game, + 8 as the story's chapter; 127: closed | |
+| 5 ready | 1 | |
+| 6 go | game (+ 8), the beat it starts on (14 bits: b low, c high) | from seat 0, once both are ready |
+| 7 hit, 8 miss | the note (a low, c high), 1 PERFECT or 2 GOOD | each FM-1 judges its own player and tells the other |
+| 9 quit | 0: out of this game; 1: back up to the Arcave | |
+| 10 stray | | ROCK-OFF: a key where no note was |
+
+Seat 0 also says where its clock is four times a second: CC 102-106 as above, then CC 107 with value 13 (sender 5,
+"follow"). Seat 1 follows it; the relay passes it on unchanged, with no delay taken off, so seat 1 runs behind by
+the relay's delay. Each FM-1 judges its own player against its own clock, so that delay never costs a note; it only
+shows as the friend's notes sounding that much late.
+
+`tests/duo_test.mjs` plays the whole of it between two browser builds wired to each other. What has not been tried:
+two real FM-1s on the Link page (its relay pairs each input with the output of the same name, in order).

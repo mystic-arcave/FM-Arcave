@@ -1,0 +1,9 @@
+# UNDERSONG beside a friend who never misses (DUO=0), no key touched: PLAY three times (the story page, how it is
+# played, ready), ECHO STEPS runs: the friend's calls are heard, every echo of yours missed, your own calls never made
+900 btn 12
+1700 btn 12
+2500 btn 12
+12000 shot
+30000 shot
+51000 shot
+52000 end

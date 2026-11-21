@@ -151,7 +151,8 @@ static const cv_shroom_t CV_SHROOM[] = {
 static const int16_t CV_MACH[3][2] = {{740, 344}, {466, 288}, {706, 232}};
 static const char *const MACH_NAME[3] = {"CRYSTAL ROAD", "JUICE WORKS", "NIGHT BLOOM"};
 
-enum { CVA_NONE, CVA_LAMP, CVA_M1, CVA_M2, CVA_M3, CVA_SCORES, CVA_EXIT, CVA_DISH };
+enum { CVA_NONE, CVA_LAMP, CVA_M1, CVA_M2, CVA_M3, CVA_SCORES, CVA_EXIT, CVA_DISH, CVA_DUO };
+#define CV_WELL_X 296                            /* the well down to UNDERSONG, the game for two (ac_duo.h), in the floor before the Hat */
 #define CV_BOARD_X 824                           /* the scores board, on the small ledge high on the right wall */
 #define CV_BOARD_Y 176
 static struct {
@@ -324,6 +325,7 @@ static int cave_tick(int32_t dt)
     if (cv.at_juke && (story < 4 || cv.juke_ready)) cv.near = 2;
     if (iabs(hx - CV_BOARD_X) < 22 && iabs(hy - (CV_BOARD_Y - 8)) < 22) cv.near = 6;
     if (hx < CV_DOOR_X + 26 && hy > 190 - 40 && hy < 190) cv.near = 7;
+    if (iabs(hx - CV_WELL_X) < 20 && hy > CV_GROUND - 40) cv.near = 8;
     for (i = 0; i < 3; i++) if (iabs(hx - CV_MACH[i][0]) < 26 && iabs(hy - (CV_MACH[i][1] - 8)) < 22) cv.near = (uint8_t)(3 + i);
     if (cv.near) led_play_breathe = 1;
     if (BDOWN(BTN_PLAY) && cv.near) {
@@ -331,7 +333,8 @@ static int cave_tick(int32_t dt)
         else if (cv.near == 2) act = story < 4 ? CVA_LAMP : CVA_DISH;   /* mended: the dish again, for a new song */
         else if (cv.near == 6) act = CVA_SCORES;
         else if (cv.near == 7) act = CVA_EXIT;
-        else if (story >= 4) act = CVA_M1 + cv.near - 3;
+        else if (cv.near == 8 && story >= 4) act = CVA_DUO;
+        else if (story >= 4 && cv.near <= 5) act = CVA_M1 + cv.near - 3;
         else { banner_show("", TR(T_NOPOWER), 0); sfx_ex(43, 0, 260, W_SAW, 2400, 2, 120, 0, 0, 65300); }
     }
     led_key_want |= in.keys;
@@ -615,6 +618,24 @@ static void cave_draw(void)
             galpha(256);
         } else if (cv.power_t == 0 && (tm % 3100u) < 90u) { galpha(200); gline(x - 3, y - 26, x + 2, y - 22, th->pad); gline(x + 2, y - 22, x - 1, y - 20, th->pad); galpha(256); }   /* a spark */
     }
+    {   /* the well: a ring of stones in the floor, two lights in it once the power is back, notes rising */
+        int32_t x = SX(CV_WELL_X), y = SY(CV_GROUND);
+        galpha(imax(90, cave_light(CV_WELL_X, CV_GROUND - 20)));
+        gellf(x, y - 3, 17, 6, th->panel, 0); garc(x, y - 3, 17, 6, 0, 65536, th->rim, 0);
+        gellf(x, y - 3, 11, 3, th->bg, 0);
+        grect(x - 18, y - 12, 3, 10, th->stem); grect(x + 16, y - 12, 3, 10, th->stem);
+        galpha(256);
+        if (on) {
+            static const col_t WC[2] = {AC_RGB(240, 96, 200), AC_RGB(110, 232, 210)};
+            for (k = 0; k < 2; k++) {
+                int32_t q = (int32_t)((tm / 3u + (uint32_t)k * 500u) % 1000u);
+                gdisc(x + (k ? 17 : -17), y - 14, 2, WC[k]);
+                galpha(256 - q * 256 / 1000);
+                gtext(x + (k ? 4 : -9) + (tsin(tm, 20, k * 20000) >> 12), y - 12 - q * 26 / 1000, "\xE2\x99\xAA", WC[k], 1);
+                galpha(256);
+            }
+        }
+    }
     {   /* the scores board: a little sign with a cup on it, readable in any light */
         int32_t x = SX(CV_BOARD_X), y = SY(CV_BOARD_Y);
         galpha(imax(110, cave_light(CV_BOARD_X, CV_BOARD_Y - 20)));
@@ -653,6 +674,12 @@ static void cave_draw(void)
             gfit(SX(CV_MACH[cv.near - 3][0]), ty, 232, MACH_NAME[cv.near - 3], on ? th->caps[(cv.near - 3) * 2 % 5] : th->mute, ts(1, 3));
             if (!on) s = TR(T_NOPOWER);
             px = SX(CV_MACH[cv.near - 3][0]); py = ty - TLH(ts(1, 3)) - 4 - 6 + 6 * ts(1, 3);
+        }
+        if (cv.near == 8) {                      /* the well: its name, and what PLAY does over that */
+            int32_t ty = SY(CV_GROUND) - 46 - 5 * ts(1, 3);
+            gfit(SX(CV_WELL_X), ty, 232, "UNDERSONG", on ? th->caps[(tm / 500u) % 5u] : th->mute, ts(1, 3));
+            if (!on) s = TR(T_NOPOWER);
+            px = SX(CV_WELL_X); py = ty - TLH(ts(1, 3)) - 4 - 6 + 6 * ts(1, 3);
         }
         if (cv.near == 2 && on) {                /* the mended jukebox: the same, over its name */
             px = SX(CV_JUKE_X); py = SY(CV_GROUND + CV_DIP_D) - 60 - 5 * ts(1, 3) - TLH(ts(1, 3)) - 4 - 6 + 6 * ts(1, 3);

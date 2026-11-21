@@ -140,6 +140,7 @@ static int32_t mus_lead_dd(const song_t *g, uint32_t track, uint32_t step)
 #define MUS_CHART_MAX 512
 static volatile uint32_t mus_step0;
 static volatile uint8_t mus_solo;
+static volatile uint8_t mus_duo;                 /* UNDERSONG (ac_duo.h): the melody is the two players', the tune's lead rests */
 static volatile uint8_t mus_demo;                /* the start card: the chart played by the tune itself, perfectly, round and round */
 static uint8_t mus_chart[MUS_CHART_MAX];
 static volatile uint16_t mus_chart_n;
@@ -239,7 +240,7 @@ static void mus_juke(uint32_t step)
     bar = step / 16u; s = step % 16u; phrase = bar % 16u; ch = g->prog[bar % 4u];
     quiet = phrase >= 12u && mus_track != 0u;    /* every fourth four bars: the drums rest */
     solo = mus_charted(ss);
-    insong = mus_in_song(ss);                    /* (the melody is the player's: the tune's own lead rests, the arpeggio steps back) */
+    insong = mus_in_song(ss) || mus_duo;                    /* (the melody is the player's: the tune's own lead rests, the arpeggio steps back) */
     if (s == 0u && g->pad)
         for (k = 0; k < 3u; k++) {
             uint32_t beat_ms = 60000u / (tr_bpm_q8 >> 8);
@@ -265,11 +266,11 @@ static void mus_juke(uint32_t step)
         int32_t p, part;
         if (mus_note_at(mus_track, mus_cs(ss), &p, &part) != MUS_NONE) mus_mel_voice(p, 1, 256, 0);   /* (solo: inside the song) */
     }
-    if (insong && !solo && mus_track != 0u && mus_cs(ss) < mus_chart_n) {   /* a note of the melody this mode leaves out: the tune plays it, softly */
+    if (insong && !solo && !mus_duo && mus_track != 0u && mus_cs(ss) < mus_chart_n) {   /* a note of the melody this mode leaves out: the tune plays it, softly */
         int32_t p, part;
         if (mus_note_at(mus_track, mus_cs(ss), &p, &part) != MUS_NONE) mus_mel_voice(p, 1, 80, 0);
     }
-    if (mus_track == 0u && !(mus_demo && mus_cs(ss) >= mus_chart_n)) {   /* the player's own notes: two bars, round and round (not in the demo's bar between) */
+    if (mus_track == 0u && !mus_duo && !(mus_demo && mus_cs(ss) >= mus_chart_n)) {   /* the player's own notes: two bars, round and round (not in the demo's bar between) */
         uint32_t s32 = step % 32u;
         int32_t first = solo && !mus_demo ? mus_take_first(s32) : -1;   /* (the one the player plays is left out) */
         for (k = 0; k < take_n; k++)

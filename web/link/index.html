@@ -62,10 +62,11 @@ input[type=number]{width:84px}
     <div><h3>HOW TO CONNECT</h3><p>By USB: plug each FM-1 into this computer (a USB hub is fine). A browser tab running the emulator with MIDI on counts as an FM-1 too, through a virtual MIDI port. Bluetooth is not in this version of the firmware yet: the messages are made to pass over Bluetooth MIDI, but the FM-1's radio code is still to be brought over.</p></div>
     <div><h3>WHAT STAYS IN TIME</h3><p>Tempo, beat and bar. A follower slides into place over a beat or two, never jumps mid-note. Change the tune on the leader (ALGORITHM) and every FM-1 takes its tempo. With LINK on, all of FM-ARCAVE's tunes play in one shared key, so different tunes on different machines still agree.</p></div>
     <div><h3>HOW CLOSE</h3><p>The page measures each FM-1's delay with a ping and sends each one the clock moved ahead by that much. "OFF BY" shows how far each FM-1 is from the leader. These numbers come from the emulator so far, not from four FM-1s on a table.</p></div>
+    <div><h3>UNDERSONG, FOR TWO</h3><p>The game for two FM-1s, down the well in the Arcave's floor. Plug both into this computer, start the hub, and roll each Rock to the well: this page passes what each player does to the other, and the clock of the one that leads. LINK does not have to be on for it.</p></div>
     <div><h3>WITHOUT THIS PAGE</h3><p>An FM-1 with LINK on also follows a plain MIDI clock (USB or the TRS jack) from a DAW or a drum machine, and START sets it to bar one.</p></div>
   </div>
 </main>
-<footer class="foot"><p>The messages are control changes 102 to 109 on MIDI channel 16; <a href="https://github.com/mystic-arcave/FM-Arcave/blob/main/docs/LINK.md">docs/LINK.md</a> has the whole protocol. Nothing leaves this computer.</p></footer>
+<footer class="foot"><p>The messages are control changes 102 to 118 on MIDI channel 16; <a href="https://github.com/mystic-arcave/FM-Arcave/blob/main/docs/LINK.md">docs/LINK.md</a> has the whole protocol. Nothing leaves this computer.</p></footer>
 </div>
 <script type="module">
 // The hub. Time is performance.now() milliseconds; the clock is in quarter ticks (384 to a beat), modulo 2^21, as on the wire.
@@ -92,22 +93,44 @@ function leaderPos(t) {
 }
 function out(d, cc, v) { try { d.out.send([0xBF, cc, v & 127]); } catch (e) {} }
 
+// the output that belongs to an input. Two FM-1s carry the same port name: the n-th input of a name goes with the n-th
+// output of that name
+function outFor(input) {
+  const ins = [...midi.inputs.values()].filter((x) => x.name === input.name), outs = [...midi.outputs.values()].filter((x) => x.name === input.name);
+  return outs[Math.max(0, ins.indexOf(input))] || outs[0] || null;
+}
+// UNDERSONG, the game for two: its messages (control changes 110 to 118, and the clock of the FM-1 that leads the game,
+// 102 to 107 with sender 5) are passed from each FM-1 in the game to the other, as they come
+const duo = new Map();                                      // input id -> { out, seen }
+function relay(input, bytes) {
+  for (const [id, d] of duo) if (id !== input.id && performance.now() - d.seen < 3000) { try { d.out.send(bytes); } catch (e) {} }
+}
 function onMidi(input, e) {
   const [st, d1, d2] = e.data, t = e.timeStamp || performance.now();
-  if (st !== 0xBF) return;
+  if (st !== 0xBF || !running) return;
   const p = (input.acc ||= { tempo: 0, pos: 0 });
+  if (d1 >= 110 && d1 <= 118) {
+    if (d1 === 110) { const o = duo.get(input.id)?.out || outFor(input); if (o) duo.set(input.id, { out: o, seen: performance.now() }); }
+    relay(input, [0xBF, d1, d2]);
+    return;
+  }
+  if (d1 === 107 && d2 === 13) {                             // the game's leader says where its clock is: on to its friend
+    const tq = p.tempo, pq = p.pos;
+    for (const m of [[102, tq >> 7 & 127], [103, tq & 127], [104, pq >> 14 & 127], [105, pq >> 7 & 127], [106, pq & 127], [107, 13]]) relay(input, [0xBF, m[0], m[1]]);
+    return;
+  }
   if (d1 === 102) p.tempo = d2 << 7;
   else if (d1 === 103) p.tempo |= d2;
   else if (d1 === 104) p.pos = d2 << 14;
   else if (d1 === 105) p.pos |= d2 << 7;
   else if (d1 === 106) p.pos |= d2;
   else if (d1 === 107 && (d2 & 7) && !(d2 & 8)) {           // an FM-1 saying where it is
-    const key = input.name + "|" + (d2 & 7);
+    const key = input.id + "|" + (d2 & 7);
     let d = devs.get(key);
     if (!d) {
-      const o = [...midi.outputs.values()].find((x) => x.name === input.name);
+      const o = outFor(input);
       if (!o) return;
-      d = { key, num: d2 & 7, port: input.name, out: o, delay: 2, rtts: [], samples: [], ref: null, bpm: 100, off: null, seen: 0 };
+      d = { key, num: d2 & 7, port: input.name, inId: input.id, out: o, delay: 2, rtts: [], samples: [], ref: null, bpm: 100, off: null, seen: 0 };
       devs.set(key, d); rebuild();
     }
     d.bpm = p.tempo / 32; d.seen = t;
@@ -118,7 +141,7 @@ function onMidi(input, e) {
     for (const s of d.samples) { const v = wrap(s.pos - d.samples[0].pos) - (s.t - d.samples[0].t) * rate(d.bpm); if (v > bv) { bv = v; best = s; } }
     d.ref = best;
   } else if (d1 === 109) {                                   // the answer to a ping
-    for (const d of devs.values()) if (d.port === input.name && d.ping && d.ping.n === d2) {
+    for (const d of devs.values()) if (d.inId === input.id && d.ping && d.ping.n === d2) {
       d.rtts.push(t - d.ping.t); if (d.rtts.length > 8) d.rtts.shift();
       d.delay = Math.min(...d.rtts) / 2; d.ping = null;
     }
@@ -166,7 +189,9 @@ function paint() {
     r.querySelector(".off").textContent = !live || d.off == null ? "" : isLead ? "0" : (d.off >= 0 ? "+" : "") + d.off.toFixed(1) + " MS";
   }
   const n = [...devs.values()].filter((d) => now - d.seen <= 3000).length;
-  if (running) $("status").textContent = n + (n === 1 ? " FM-1" : " FM-1s") + " in the link, " + Math.round(leaderPos(now).bpm) + " BPM.";
+  const g = [...duo.values()].filter((d) => now - d.seen < 3000).length;
+  if (running) $("status").textContent = n + (n === 1 ? " FM-1" : " FM-1s") + " in the link, " + Math.round(leaderPos(now).bpm) + " BPM."
+    + (g ? " UNDERSONG: " + (g > 1 ? g + " players linked." : "one player waiting for a friend.") : "");
 }
 $("bpm").addEventListener("change", () => {
   const now = performance.now(); page.pos0 = pagePos(now); page.t0 = now;
@@ -183,7 +208,7 @@ $("go").addEventListener("click", async () => {
   running = true; timer = setInterval(tick, 250); $("go").textContent = "STOP THE HUB";
   $("status").textContent = "Listening on " + midi.inputs.size + " MIDI ports...";
 });
-window.__link = { devs, page };
+window.__link = { devs, page, duo };
 </script>
 </body>
 </html>

@@ -6,6 +6,7 @@
  *   the cave     a platforming hub: the Hat, the dark jukebox, three machines       ac_cave.h
  *   the mending  three rings of glass, then the dish and your first song            ac_juke.h
  *   the machines CRYSTAL ROAD, JUICE WORKS, NIGHT BLOOM                         ac_mach.h
+ *   the well     UNDERSONG: a story for two FM-1s, linked; and a game against each other    ac_duo.h
  *   everywhere   GLO: settings (the game pauses); OCT- OCT+: the language; ALGORITHM: the jukebox;
  *                LINK: several FM-1s on one clock                                   ac_menu.h, ac_sync.h
  *                HOME: how to play; EDIT: the scores and the time played; FX: an effect     ac_sheet.h */
@@ -18,11 +19,12 @@
 #include "ac_cave.h"
 #include "ac_juke.h"
 #include "ac_mach.h"
+#include "ac_duo.h"
 #include "ac_sheet.h"
 #include "ac_sync.h"
 #include "ac_menu.h"
 
-enum { SC_INTRO, SC_CAVE, SC_LAMP, SC_DISH, SC_MACH };
+enum { SC_INTRO, SC_CAVE, SC_LAMP, SC_DISH, SC_MACH, SC_DUO };
 static uint8_t scene, replay, thanks_due;
 static uint32_t ac_last_ms, save_at;
 static uint8_t ac_started, juke_track;
@@ -43,7 +45,13 @@ typedef struct {                                 /* the save of 0.3 to 0.14: sti
     uint32_t race_cs;
     uint8_t fx1[4];
 } save2_t;
-typedef struct {                                 /* (the same as save2_t as far as it goes, then CRYSTAL ROAD's) */
+typedef struct {                                 /* the save of 0.15 to 0.18: still read */
+    save2_t v2;
+    uint16_t gh_best[JUKE_N][3];
+    uint8_t gh_gem[JUKE_N];
+    uint8_t gh_flags, gh_mode;
+} save3_t;
+typedef struct {                                 /* (the same as save3_t as far as it goes, then UNDERSONG's) */
     save1_t v1;
     uint32_t play_s;                             /* the time played, seconds */
     uint8_t ear, secrets, rsv[2];
@@ -52,6 +60,8 @@ typedef struct {                                 /* (the same as save2_t as far 
     uint16_t gh_best[JUKE_N][3];                 /* CRYSTAL ROAD: the best of each song in each mode */
     uint8_t gh_gem[JUKE_N];                      /* its crystals, two bits a mode */
     uint8_t gh_flags, gh_mode;                   /* bit 0: ROCK and CRYSTAL open; the mode last chosen */
+    uint16_t duo_best[DM_N];                     /* UNDERSONG: the best of each of its games */
+    uint8_t duo_prog, duo_rsv;                   /* its chapters cleared, 0..4 */
 } save_t;
 #define SAVE_MAGIC 0x41434156u                   /* "ACAV" */
 static save_t sv;
@@ -69,6 +79,8 @@ static void save_now(void)
     for (i = 0; i < JUKE_N * 3u; i++) sv.gh_best[i / 3u][i % 3u] = gh_best[i / 3u][i % 3u];
     for (i = 0; i < JUKE_N; i++) sv.gh_gem[i] = gh_gem[i];
     sv.gh_flags = gh_flags; sv.gh_mode = gh_mode;
+    for (i = 0; i < DM_N; i++) sv.duo_best[i] = duo_best[i];
+    sv.duo_prog = duo_prog; sv.duo_rsv = 0;
     play_saved_s = play_s;
     settings_save(&sv, sizeof sv);
 }
@@ -77,6 +89,7 @@ static void save_soon(void) { save_dirty = 1; save_at = fm1_ms + 1500u; }
 static void to_cave(int fresh)
 {
     scene = SC_CAVE;
+    duo_leave();                                 /* (out of the well, if that is where Rock was: the friend is told) */
     cave_enter(fresh);
     mus_solo = 0; mus_demo = 0; gh.playing = 0;  /* (CRYSTAL ROAD's song or its demo, if one was under way, is over) */
     if (story >= 4) mus_set(MUS_JUKE, juke_track); else mus_set(MUS_OFF, 0);
@@ -102,6 +115,8 @@ static void save_wipe(void)
     for (i = 0; i < JUKE_N * 3u; i++) gh_best[i / 3u][i % 3u] = 0;
     for (i = 0; i < JUKE_N; i++) gh_gem[i] = 0;
     gh_flags = 0; gh_mode = 0;
+    for (i = 0; i < DM_N; i++) duo_best[i] = 0;
+    duo_prog = 0;
     link_id = 0; set_look(0); mn.on = 0; tsize = 1; sy_ear = 0; play_s = 0; play_ms = 0; sh.on = SH_NONE;
     story_reset();
     banner_show("", TR(T_WIPED), 0);
@@ -119,6 +134,10 @@ static void arcave_init(void)
     uint32_t i;
     hat_init();
     int have = settings_load(&sv, sizeof sv) == 0;
+    if (!have) {                                 /* a save from before UNDERSONG (shorter): all of it, the well untouched */
+        for (i = 0; i < sizeof sv; i++) ((uint8_t *)&sv)[i] = 0;
+        have = settings_load(&sv, sizeof(save3_t)) == 0;
+    }
     if (!have) {                                 /* a save from before CRYSTAL ROAD (shorter): all of it, its scores at nothing */
         for (i = 0; i < sizeof sv; i++) ((uint8_t *)&sv)[i] = 0;
         have = settings_load(&sv, sizeof(save2_t)) == 0;
@@ -141,6 +160,8 @@ static void arcave_init(void)
         for (i = 0; i < JUKE_N; i++) gh_gem[i] = sv.gh_gem[i] & 63u;
         gh_flags = sv.gh_flags & 1u; gh_mode = (uint8_t)(sv.gh_mode % 3u);
         if (!(gh_flags & 1u)) gh_mode = 0;
+        for (i = 0; i < DM_N; i++) duo_best[i] = sv.duo_best[i];
+        duo_prog = sv.duo_prog > 4u ? 0u : sv.duo_prog;
         if (story == 3u) story = 2u;             /* the light was back but no song yet: the rings again (they are quick) */
     }
 #ifdef AC_TEST_TSIZE                             /* (tests) the text size: 0 small, 1 medium, 2 large */
@@ -171,6 +192,7 @@ static void arcave_init(void)
         cv.camx = cv.x - Q8(120); cv.camy = cv.y - Q8(176);
     }
     else if (AC_TEST_SCENE == 7) { scene = SC_CAVE; cave_enter(1); cv.x = Q8(-20); cv.y = Q8(181); }   /* (7: in the room by the door) */
+    else if (AC_TEST_SCENE == 10) { scene = SC_DUO; mus_set(MUS_JUKE, 1); duo_enter(); }   /* (10: down the well, UNDERSONG) */
     else { scene = SC_MACH; mus_set(MUS_JUKE, 2); mach_go(AC_TEST_SCENE - 3); }
 #endif
 }
@@ -191,7 +213,7 @@ static void juke_change(int32_t d)
 }
 
 /* every pass of the main loop (and while the screen is being sent): the link wants its messages read promptly */
-static void arcave_poll(void) { if (ac_started) link_poll(); }
+static void arcave_poll(void) { if (ac_started) { link_poll(); duo_poll(); } }
 
 static void arcave_frame(void)
 {
@@ -261,10 +283,10 @@ static void arcave_frame(void)
                 juke_track = (uint8_t)gh_song_step(juke_track, d);
                 mus_set(MUS_JUKE, juke_track); snd_ui(84); save_soon();
             }
-        } else if (in.enc[ENC_ALGORITHM] && scene != SC_INTRO && scene != SC_LAMP && scene != SC_DISH
+        } else if (in.enc[ENC_ALGORITHM] && scene != SC_INTRO && scene != SC_LAMP && scene != SC_DISH && scene != SC_DUO
             && !(scene == SC_MACH && mc.which == 2 && mc.state == MS_PLAY)) juke_change(in.enc[ENC_ALGORITHM]);
         if (BDOWN(BTN_FX)) fx_trigger();
-        if (BDOWN(BTN_EDIT) && !(scene == SC_INTRO && G.phase == IP_TITLE)) {
+        if (BDOWN(BTN_EDIT) && !(scene == SC_INTRO && G.phase == IP_TITLE) && scene != SC_DUO) {
             sheet_open(SH_SCORES); in.bdown &= ~(1u << BTN_EDIT);
             if (scene == SC_MACH && mc.which == 0) sh.scroll = 1;   /* (in CRYSTAL ROAD: its own page first) */
         }
@@ -285,6 +307,7 @@ static void arcave_frame(void)
                 scene = SC_INTRO; replay = 1; intro_race_start(); mus_set(MUS_INTRO, 0); sy_drone_want = 0; sy_music_want = 256; sy_rumble_want = 0;
                 snd_ui(79);
             }
+            else if (r == CVA_DUO) { scene = SC_DUO; duo_enter(); sy_rumble_want = 0; }
             else if (r >= CVA_M1) { scene = SC_MACH; mach_go(r - CVA_M1); sy_rumble_want = 0; }
             break;
         case SC_LAMP:
@@ -312,14 +335,19 @@ static void arcave_frame(void)
             r = mach_tick(dt);
             if (r < 0) to_cave(0); else if (r > 0) sheet_open(SH_MACH);
             break;
+        case SC_DUO:
+            if (duo_tick(dt) < 0) to_cave(0);
+            break;
         }
     }
+    if (scene != SC_DUO && du.on) duo_leave();   /* (out of the well some other way: the settings, a wipe) */
     switch (scene) {
     case SC_INTRO: intro_draw(); break;
     case SC_CAVE: cave_draw(); break;
     case SC_LAMP: lamp_draw(); break;
     case SC_DISH: dish_draw(); break;
     case SC_MACH: mach_draw(); break;
+    case SC_DUO: duo_draw(); break;
     }
     /* the language tip: in with the title's last second, and out exactly as "press PLAY to wake up Rock" comes in */
     if (scene == SC_INTRO && G.phase == IP_TITLE) lang_tip_draw(smooth8(LANG_TIP_AT, LANG_TIP_AT + 700, G.t));

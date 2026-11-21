@@ -52,6 +52,7 @@ main{padding:28px 0 0;display:grid;gap:22px}
     <div><b>FX SCL ENV LFO EDIT</b><span><kbd>5</kbd> <kbd>6</kbd> <kbd>7</kbd> <kbd>8</kbd> <kbd>9</kbd></span></div>
     <div><b>SAVE ARP SEQ</b><span><kbd>0</kbd> <kbd>-</kbd> <kbd>=</kbd></span></div>
     <div><b>SELECT, PRESETS</b><span><kbd>↑</kbd> <kbd>↓</kbd>, with <kbd>Shift</kbd></span></div>
+    <div><b>UNDERSONG, for two</b><span>open this page in a second window: the two are linked</span></div>
   </div>
 </main>
 <footer class="foot"><p>FM-ARCAVE is free software, GPL-3.0-only. The picture and the sound here come from the firmware's own code, built for the browser. Your progress is kept in this browser.</p></footer>
@@ -73,6 +74,16 @@ addEventListener("keyup", (e) => { if (fm.key(e, false)) e.preventDefault(); });
 addEventListener("blur", () => fm.releaseAll());
 document.addEventListener("visibilitychange", () => send({ type: "hidden", on: document.hidden }));
 
+// MIDI out: to the MIDI ports when MIDI is on, and (channel 16's control changes: ARCAVE LINK and UNDERSONG) to every
+// other emulator open in this browser, so two windows side by side are two linked FM-1s
+const friends = "BroadcastChannel" in window ? new BroadcastChannel("fm-arcave-link") : null;
+if (friends) friends.onmessage = (e) => { for (const v of e.data) send({ type: "midi", st: v & 255, d1: v >> 8 & 127, d2: v >> 16 & 127 }); };
+function midiOut(list) {
+  if (!list.length) return;
+  if (midiOn && midi) for (const v of list) for (const o of midi.outputs.values()) o.send([v & 255, v >> 8 & 127, v >> 16 & 127]);
+  const cc = list.filter((v) => (v & 255) === 0xBF);
+  if (friends && cc.length) friends.postMessage(cc);
+}
 async function start() {
   if (node) return;
   $("status").textContent = "Starting...";
@@ -93,8 +104,9 @@ async function start() {
         fm.leds(m.leds[0], m.leds[1], m.leds[2], m.leds[3]);
         if (window.__fm) window.__fm.last = { state: m.state, clock: m.clock, bpm: m.bpm };
         if (m.store) { try { localStorage.setItem(SAVE, btoa(String.fromCharCode(...m.store))); } catch (e) {} }
-        if (midiOn && midi) for (const v of m.midi) for (const o of midi.outputs.values()) o.send([v & 255, v >> 8 & 127, v >> 16 & 127]);
+        midiOut(m.midi);
       }
+      else if (m.type === "midi") midiOut(m.midi);
     };
     n.port.postMessage({ type: "load", wasm, store }, [wasm]);
     if (ac.state !== "running") await ac.resume();
