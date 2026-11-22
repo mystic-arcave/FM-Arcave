@@ -62,7 +62,11 @@ typedef struct {                                 /* (the same as save3_t as far 
     uint8_t gh_flags, gh_mode;                   /* bit 0: ROCK and CRYSTAL open; the mode last chosen */
     uint16_t duo_best[DM_N];                     /* UNDERSONG: the best of each of its games */
     uint8_t duo_prog, duo_rsv;                   /* its chapters cleared, 0..4 */
+    uint16_t duo_road[4];                        /* (0.20) TWIN ROAD's best on its four other songs */
+    uint16_t trio_best[DM_N], trio_road[4];      /* (0.20) the same, played by three */
 } save_t;
+#define SAVE4_SIZE 192                           /* (the save of 0.19: up to duo_road) */
+#define SAVE5_SIZE 200                           /* (a save of an early 0.20: up to trio_best) */
 #define SAVE_MAGIC 0x41434156u                   /* "ACAV" */
 static save_t sv;
 
@@ -81,6 +85,9 @@ static void save_now(void)
     sv.gh_flags = gh_flags; sv.gh_mode = gh_mode;
     for (i = 0; i < DM_N; i++) sv.duo_best[i] = duo_best[i];
     sv.duo_prog = duo_prog; sv.duo_rsv = 0;
+    for (i = 0; i < 4u; i++) sv.duo_road[i] = duo_road[i];
+    for (i = 0; i < DM_N; i++) sv.trio_best[i] = trio_best[i];
+    for (i = 0; i < 4u; i++) sv.trio_road[i] = trio_road[i];
     play_saved_s = play_s;
     settings_save(&sv, sizeof sv);
 }
@@ -116,6 +123,8 @@ static void save_wipe(void)
     for (i = 0; i < JUKE_N; i++) gh_gem[i] = 0;
     gh_flags = 0; gh_mode = 0;
     for (i = 0; i < DM_N; i++) duo_best[i] = 0;
+    for (i = 0; i < 4u; i++) duo_road[i] = trio_road[i] = 0;
+    for (i = 0; i < DM_N; i++) trio_best[i] = 0;
     duo_prog = 0;
     link_id = 0; set_look(0); mn.on = 0; tsize = 1; sy_ear = 0; play_s = 0; play_ms = 0; sh.on = SH_NONE;
     story_reset();
@@ -134,6 +143,14 @@ static void arcave_init(void)
     uint32_t i;
     hat_init();
     int have = settings_load(&sv, sizeof sv) == 0;
+    if (!have) {                                 /* a save of an early 0.20 (shorter): all of it, nothing played by three */
+        for (i = 0; i < sizeof sv; i++) ((uint8_t *)&sv)[i] = 0;
+        have = settings_load(&sv, SAVE5_SIZE) == 0;
+    }
+    if (!have) {                                 /* a save of 0.19 (shorter): all of it, TWIN ROAD's other songs unplayed */
+        for (i = 0; i < sizeof sv; i++) ((uint8_t *)&sv)[i] = 0;
+        have = settings_load(&sv, SAVE4_SIZE) == 0;
+    }
     if (!have) {                                 /* a save from before UNDERSONG (shorter): all of it, the well untouched */
         for (i = 0; i < sizeof sv; i++) ((uint8_t *)&sv)[i] = 0;
         have = settings_load(&sv, sizeof(save3_t)) == 0;
@@ -161,6 +178,9 @@ static void arcave_init(void)
         gh_flags = sv.gh_flags & 1u; gh_mode = (uint8_t)(sv.gh_mode % 3u);
         if (!(gh_flags & 1u)) gh_mode = 0;
         for (i = 0; i < DM_N; i++) duo_best[i] = sv.duo_best[i];
+        for (i = 0; i < 4u; i++) duo_road[i] = sv.duo_road[i];
+        for (i = 0; i < DM_N; i++) trio_best[i] = sv.trio_best[i];
+        for (i = 0; i < 4u; i++) trio_road[i] = sv.trio_road[i];
         duo_prog = sv.duo_prog > 4u ? 0u : sv.duo_prog;
         if (story == 3u) story = 2u;             /* the light was back but no song yet: the rings again (they are quick) */
     }
@@ -256,8 +276,11 @@ static void arcave_frame(void)
     if (play_ms >= 1000u) { play_ms -= 1000u; play_s++; }
     if (scene == SC_CAVE && play_s - play_saved_s >= 900u && !save_dirty) save_soon();
     /* a machine on the clock (the run, the bloom) holds still while a sheet or the settings are up: its start moves on */
-    if ((mn.on || sh.on) && !was_paused) { was_paused = 1; pause_tick = tr_now_q8() >> 8; gh_pause(); }
-    if (!(mn.on || sh.on) && was_paused) { uint32_t d = (tr_now_q8() >> 8) - pause_tick; was_paused = 0; nb.t0 += d; gh_resume(); }
+    {
+    int held = mn.on || sh.on || (scene == SC_MACH && mc.state == MS_PLAY && mc.ask);   /* (and REC's box over a game) */
+    if (held && !was_paused) { was_paused = 1; pause_tick = tr_now_q8() >> 8; gh_pause(); }
+    if (!held && was_paused) { uint32_t d = (tr_now_q8() >> 8) - pause_tick; was_paused = 0; nb.t0 += d; gh_resume(); }
+    }
     if (mn.on) {
         r = menu_tick(dt);
         if (r == MA_REPLAY) { replay = 1; scene = SC_INTRO; intro_reset(); mus_set(MUS_INTRO, 0); sy_drone_want = 0; sy_music_want = 256; }

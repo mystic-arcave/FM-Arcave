@@ -62,7 +62,7 @@ input[type=number]{width:84px}
     <div><h3>HOW TO CONNECT</h3><p>By USB: plug each FM-1 into this computer (a USB hub is fine). A browser tab running the emulator with MIDI on counts as an FM-1 too, through a virtual MIDI port. Bluetooth is not in this version of the firmware yet: the messages are made to pass over Bluetooth MIDI, but the FM-1's radio code is still to be brought over.</p></div>
     <div><h3>WHAT STAYS IN TIME</h3><p>Tempo, beat and bar. A follower slides into place over a beat or two, never jumps mid-note. Change the tune on the leader (ALGORITHM) and every FM-1 takes its tempo. With LINK on, all of FM-ARCAVE's tunes play in one shared key, so different tunes on different machines still agree.</p></div>
     <div><h3>HOW CLOSE</h3><p>The page measures each FM-1's delay with a ping and sends each one the clock moved ahead by that much. "OFF BY" shows how far each FM-1 is from the leader. These numbers come from the emulator so far, not from four FM-1s on a table.</p></div>
-    <div><h3>UNDERSONG, FOR TWO</h3><p>The game for two FM-1s, down the well in the Arcave's floor. Plug both into this computer, start the hub, and roll each Rock to the well: this page passes what each player does to the other, and the clock of the one that leads. LINK does not have to be on for it.</p></div>
+    <div><h3>UNDERSONG, FOR TWO OR THREE</h3><p>The game for two or three FM-1s, down the well in the Arcave's floor. Plug them all into this computer, start the hub, and roll each Rock to the well: this page passes what each player does to the others, and the clock of the one that leads. With three in the well, every game is played for three. LINK does not have to be on for it.</p></div>
     <div><h3>WITHOUT THIS PAGE</h3><p>An FM-1 with LINK on also follows a plain MIDI clock (USB or the TRS jack) from a DAW or a drum machine, and START sets it to bar one.</p></div>
   </div>
 </main>
@@ -99,8 +99,10 @@ function outFor(input) {
   const ins = [...midi.inputs.values()].filter((x) => x.name === input.name), outs = [...midi.outputs.values()].filter((x) => x.name === input.name);
   return outs[Math.max(0, ins.indexOf(input))] || outs[0] || null;
 }
-// UNDERSONG, the game for two: its messages (control changes 110 to 118, and the clock of the FM-1 that leads the game,
-// 102 to 107 with sender 5) are passed from each FM-1 in the game to the other, as they come
+// UNDERSONG, the game for two or three: its messages (control changes 110 to 118, and the clock of the FM-1 that leads
+// the game, 102 to 107 with sender 5) are passed from each FM-1 in the game to the others, as they come. A message with
+// numbers (115, 116, 118, then its op 117) goes on in one piece: with three FM-1s, two players' messages must not mix on
+// the way to the third
 const duo = new Map();                                      // input id -> { out, seen }
 function relay(input, bytes) {
   for (const [id, d] of duo) if (id !== input.id && performance.now() - d.seen < 3000) { try { d.out.send(bytes); } catch (e) {} }
@@ -111,6 +113,8 @@ function onMidi(input, e) {
   const p = (input.acc ||= { tempo: 0, pos: 0 });
   if (d1 >= 110 && d1 <= 118) {
     if (d1 === 110) { const o = duo.get(input.id)?.out || outFor(input); if (o) duo.set(input.id, { out: o, seen: performance.now() }); }
+    if (d1 === 115 || d1 === 116 || d1 === 118) { (p.held ||= []).push([0xBF, d1, d2]); if (p.held.length > 8) p.held.shift(); return; }
+    if (d1 === 117 && p.held) { for (const m of p.held) relay(input, m); p.held = null; }
     relay(input, [0xBF, d1, d2]);
     return;
   }

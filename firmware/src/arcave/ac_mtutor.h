@@ -27,6 +27,7 @@ static const mt_def_t MT_DEF[3] = {
     {4, 0, {4800, 7200, 4800, 7600}, {T_TABLE_2, T_TABLE_1, T_TABLE_2, T_TABLE_2}, {0, 0, 1, 2}, {0, T_TABLE_3, 0, 0}, {0, 0, 0, 0}},
     {4, 1u << 1, {3600, 3600, 3800, 3800}, {T_BLOOM_1, T_BLOOM_2, T_BLOOM_1, T_BLOOM_3}, {0, 0, 1, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}},
 };
+static int32_t mj_tkdx;                          /* JUICE WORKS: the ticket, still sliding in from the front (px to the right) */
 static const uint8_t MJ_OLD[4] = {0, 1, 3, 4};   /* JUICE WORKS: each step's scene (the second pours to the ticket's line) */
 /* each step's demo lasts ms; how many times slower than its scene's own timings it plays (JUICE WORKS has the most to read) */
 static const uint8_t MT_SLOW[3] = {1, 2, 1};
@@ -513,8 +514,8 @@ static int mt_juice(int32_t step, int32_t u, uint32_t tm, mt_act_t *act, uint32_
         int32_t pop = mt_lv ? mt_ramp(MJ_POP, 0, 200) : step == 0 ? mt_ramp(u, 700, 900) : step == 4 ? mt_ramp(u, 200, 400) : 256;
         galpha(galp * pop / 256); jw_glass_draw(gx, gy, 8, &g, step == 2 ? th->pad : th->text); galpha(256);
     }
-    if (step < 3 || (step == 3 && u < 1200)) {   /* the ticket: three parts of the yellow */
-        int32_t tx = 214, hl = (step == 1 || step == 2) && ipulse(tm, 700) > 128;
+    if (step < 3 || (step == 3 && u < 1200)) {   /* the ticket: three parts of the pink */
+        int32_t tx = 214 + mj_tkdx, hl = (step == 1 || step == 2) && ipulse(tm, 700) > 128;
         galpha(step == 3 ? 256 - imin(256, imax(0, u - 700) * 256 / 500) : 256);
         gline(tx, 3, tx, 10, th->mute);
         grect(tx - 11, 10, 23, 58, th->panel); gbox(tx - 11, 10, 23, 58, hl ? th->pad : th->text);
@@ -688,7 +689,96 @@ static int32_t mt_watch_ms(int w)
     }
     return MT_DEF[w].ms[tp.step];
 }
-static void mtutor_open(void) { if (mc.which == 0) les_open(); }
+/* ---------------------------------------------------------------- JUICE WORKS' opening: where the tickets come from.
+ * Before its lesson, the front of the shop, the whole screen: a rock comes to the counter, a drink in a speech bubble
+ * (the very drink of the lesson's ticket). Rock, the barista in a paper hat, presses the button on the till; the order
+ * comes out of it as a ticket, onto the line, and the ticket slides along it through the hatch to the back room. The
+ * front slides away: the back room is the lesson's scene, the ticket coming on along its line from the left (the way
+ * it went out) to hang where the game hangs them, and a voice from off the screen says DELIVER THIS ORDER!. Then the lesson, as ever. PLAY skips it. */
+#define MJO_B 5500                               /* the back room */
+#define MJO_END 8800
+static int32_t mj_op = MJO_END;                  /* how far into the opening (MJO_END: done, or not JUICE WORKS) */
+static void mjo_tick(int32_t dt)
+{
+    int32_t p = mj_op;
+    if (BDOWN(BTN_PLAY)) { mj_op = MJO_END; snd_ui(79); }
+    else mj_op += dt;
+#define MJO_AT(ms) (p < (ms) && mj_op >= (ms))
+    if (MJO_AT(2900)) { sfx(84, 0, 60, W_SQUARE, 1300, 1, 0); sfx(91, 60, 90, W_SQUARE, 1300, 1, 0); }   /* the till's button */
+    if (MJO_AT(3700)) { sfx(79, 0, 120, W_SQUARE, 1400, 2, 120); sfx(86, 90, 200, W_SQUARE, 1400, 2, 120); }   /* a bell: an order */
+    if (MJO_AT(4200)) sfx(96, 0, 500, W_NOISE, 300, 40, 60);   /* along the line */
+    if (MJO_AT(6100)) { sfx(67, 0, 90, W_TRI, 2000, 2, 80); sfx(72, 100, 90, W_TRI, 2000, 2, 80); sfx(76, 200, 160, W_TRI, 2000, 2, 80); }   /* the voice */
+#undef MJO_AT
+    if (mj_op >= MJO_END) { tp_go(0); tp.pt = 300; tp.prev = 299; return; }   /* (the lesson's first demo, from where the back room left it) */
+    tp.pt = 300; tp.prev = 299;                  /* (the back room holds the first step's start) */
+    led_breathe_want |= 1u << BTN_REC; led_play_breathe = 1;
+}
+/* the front of the shop at mj_op, moved ox to the side */
+static void mjo_front(int32_t ox, uint32_t tm)
+{
+    int32_t t = mj_op, k, cx, bx = 60 + ox, by = 120, hop = 0, rail = 22, tkx, tky, ba;
+    jw_glass_t g;
+    g.n = 1; g.c[0] = 0; g.v[0] = Q8(3);
+    grect(0, 0, AC_W, AC_H, th->bg);
+    for (k = 0; k < 8; k++) { galpha(24); gdisc(ox + 15 + k * 31, 40 + (k * 37) % 70, 3 + k % 3, JW_COL[k % 4]); }   /* the wall */
+    galpha(256);
+    gtext(ox + 6, 6, "JUICE WORKS", th->caps[2], 1);
+    ghl(ox + 96, ox + 240, rail, th->rim); ghl(ox + 96, ox + 240, rail + 1, th->mute);   /* the line, to the hatch */
+    grect(ox + 222, rail - 8, 18, 92, th->panel); gbox(ox + 222, rail - 8, 19, 92, th->rim);   /* the hatch to the back room */
+    galpha(90); gtext(ox + 226, rail + 30, "\xE2\x99\xAA", th->mute, 1); galpha(256);
+    /* Rock, the barista, behind the counter: a paper hat; a hop onto the till's button */
+    if (t >= 2500 && t < 3000) hop = isin(iclamp((t - 2500) * 256 / 500, 0, 256) * 128) * 12 >> 14;
+    rock_draw(bx, by - hop, 860, 0, (tm % 3100u) < 150u ? 30 : 256, th->rock, th->rock_rim, th->dark, th->moss, th->eye, th->pupil);
+    {
+        int32_t hy = by - hop - 36, xy[8];      /* (the brim down in the moss, the hat on the hair) */
+        xy[0] = bx - 20; xy[1] = hy + 3; xy[2] = bx + 20; xy[3] = hy + 3; xy[4] = bx + 13; xy[5] = hy - 12; xy[6] = bx - 13; xy[7] = hy - 12;
+        gpoly(xy, 4, th->text); ghl(bx - 20, bx + 21, hy + 2, th->caps[2]); ghl(bx - 20, bx + 21, hy + 1, th->caps[2]); ghl(bx - 20, bx + 21, hy, th->caps[2]);
+    }
+    /* the counter, the till on it: its screen lights as the button goes down, with the drink on it */
+    grect(0, 150, AC_W, 90, th->panel); ghl(0, 240, 150, th->rim); ghl(0, 240, 152, th->mute);
+    cx = 124 + ox;
+    grect(cx - 18, 116, 37, 26, th->bg); gbox(cx - 18, 116, 37, 26, th->text); grect(cx - 3, 142, 7, 8, th->rim);
+    ba = t >= 2900 && t < 4200 ? 256 : 0;
+    if (ba) { galpha(120); grect(cx - 16, 118, 33, 22, th->caps[2]); galpha(256); grect(cx - 5, 122, 11, 3, JW_COL[0]); grect(cx - 5, 127, 11, 3, JW_COL[0]); grect(cx - 5, 132, 11, 3, JW_COL[0]); }
+    gdisc(cx - 34, 146, 4, t >= 2900 && t < 3200 ? th->pad : th->caps[0]); gcirc(cx - 34, 146, 4, th->text);   /* the button */
+    if (t >= 2900 && t < 3200) { galpha(256 - (t - 2900) * 256 / 300); gcirc(cx - 34, 146, 7 + (t - 2900) / 40, th->pad); galpha(256); }
+    /* the ticket: up out of the till, onto the line, along it and through the hatch */
+    if (t >= 3200 && t < 5000) {                 /* (through the hatch by 5000: gone) */
+        int32_t f = iclamp((t - 3200) * 256 / 500, 0, 256), s = iclamp((t - 4200) * 256 / 800, 0, 256);
+        tkx = cx + (262 - 124) * ease8(s) / 256; tky = 112 - (112 - 80) * ease8(f) / 256;
+        galpha(imin(256, f * 2));
+        gline(tkx, rail, tkx, tky - 58, th->mute);
+        grect(tkx - 11, tky - 58, 23, 58, th->panel); gbox(tkx - 11, tky - 58, 23, 58, th->text);
+        jw_glass_draw(tkx, tky - 6, 8, &g, th->text);
+        galpha(256);
+        grect(ox + 222, rail - 8, 18, 92, th->panel); gbox(ox + 222, rail - 8, 19, 92, th->rim);   /* (it goes in behind the hatch's frame) */
+        if (tkx > ox + 222) { galpha(90); grect(ox + 223, rail - 7, 17, 90, th->bg); galpha(256); }
+    }
+    /* the one who orders, in front of the counter, and the drink wanted, in a bubble (it goes once the till has it) */
+    {
+        int32_t in = iclamp(t * 256 / 900, 0, 256), x = ox + 184 + (110 * (256 - ease8(in)) >> 8), y = 204, hp = 0;
+        if (t >= 3700 && t < 4100) hp = isin((t - 3700) * 256 / 400 * 128) * 8 >> 14;   /* pleased */
+        rock_draw(x, y - hp, 1000, (256 - in) * 90, (tm % 2700u) < 150u ? 30 : 256, th->caps[4], th->text, 1, th->moss, th->eye, th->pupil);
+        if (t >= 900 && t < 3600) {
+            int32_t a = imin(256, (t - 900) * 256 / 250), bx0 = x - 26, by0 = 58, xy[6];
+            if (t > 3200) a = (3600 - t) * 256 / 400;
+            galpha(a);
+            (void)bx0;
+            xy[0] = x - 12; xy[1] = by0 + 50; xy[2] = x + 4; xy[3] = by0 + 56; xy[4] = x - 4; xy[5] = y - 48; gpoly(xy, 3, th->text);   /* a speech bubble */
+            gellf(x, by0 + 30, 36, 34, th->text, 0); gellf(x, by0 + 30, 34, 32, th->bg, 0);
+            xy[0] = x - 9; xy[1] = by0 + 52; xy[2] = x + 2; xy[3] = by0 + 56; xy[4] = x - 4; xy[5] = y - 52; gpoly(xy, 3, th->bg);
+            jw_glass_draw(x, by0 + 50, 8, &g, th->text);
+            galpha(256);
+        }
+    }
+}
+/* the back room (the lesson's scene, held at its start): the ticket in on its line, and the voice */
+static void mjo_back(uint32_t tm)
+{
+    int32_t t = mj_op - MJO_B - 600;
+    if (t > 0) say_box(TR(T_JT_DELIVER), 108, imin(256, t * 256 / 200), tm);
+}
+static void mtutor_open(void) { if (mc.which == 0) les_open(); mj_op = mc.which == 1 ? 0 : MJO_END; }
 static void mtutor_close(void) { les_close(); }
 static void mtutor_tick(int32_t dt)
 {
@@ -702,6 +792,7 @@ static void mtutor_tick(int32_t dt)
         {{0, 2600, 3}, {1, 1300, 3}, {1, 3000, 3}, {2, 3000, 3}, {3, 3000, 3}, {-1, 0, 0}},
     };
     int w = mc.which, k;
+    if (w == 1 && mj_op < MJO_END) { mjo_tick(dt); return; }   /* (JUICE WORKS: its opening first) */
     tp.idle_max = w == 0 && tp.step < 2 ? 0x7FFFFFFF : TP_IDLE_MS;   /* (CRYSTAL ROAD's song goes round until the notes are caught) */
     tp_run(dt, MT_DEF[w].n, mt_watch_ms(w), (int)(MT_DEF[w].info >> tp.step & 1u), START[w], LIVE[w]);
     led_breathe_want |= 1u << BTN_REC;
@@ -734,6 +825,18 @@ static void mtutor_draw(void)
     mt_act_t act[4];
     col_t c = th->caps[w * 2 % 5];
     if (tp.phase == TP_END) { tp_end_card(MT_DEF[w].n, c, tm); tp_foot(3, tm); return; }
+    mj_tkdx = 0;
+    if (w == 1 && mj_op < MJO_END) {             /* JUICE WORKS' opening: the front, sliding away to the back room */
+        if (mj_op < MJO_B) {
+            mjo_front(-240 * ease8(iclamp((mj_op - 5000) * 256 / 500, 0, 256)) / 256, tm);
+            tp_foot(3, tm);
+            return;
+        }
+        {   /* the ticket comes on through the hatch: in from the left, the way it went out of the front, along to its place */
+            int32_t f = iclamp((mj_op - MJO_B) * 256 / 900, 0, 256);
+            mj_tkdx = -250 * (256 - f) / 256 * (256 - f) / 256;
+        }
+    }
     u = MT_DEF[w].ms[step] ? tp.pt % MT_DEF[w].ms[step] : tp.pt;
     for (k = 0; k < 27; k++) mt_age[k] = -1;
     mt_lv = live; mt_hl = 0;
@@ -780,6 +883,7 @@ static void mtutor_draw(void)
         galpha(256);
     }
     mt_device(lit, mt_keyage, blit, bdown, act, (int)n, c, tm);
+    if (w == 1 && mj_op < MJO_END) mjo_back(tm);
     /* the lights on the FM-1 itself: the keys the step is about, and any going down */
     for (k = 0; k < 27; k++) {
         int top = k >= 16, idx = top ? k - 16 : k;

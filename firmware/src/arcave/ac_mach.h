@@ -9,10 +9,38 @@
  *                     petal of its own colour. An arrow points off the screen to each knob as it joins. */
 
 enum { MS_TITLE, MS_PLAY, MS_OVER };
-static struct { uint8_t which, state; int32_t t, score, lives, combo, msg_t, flash; uint8_t msg; } mc;
+static struct { uint8_t which, state; int32_t t, score, lives, combo, msg_t, flash, ask; uint8_t msg; } mc;   /* ask: REC once in a game, the box up */
 static uint32_t best[3];
 static uint8_t save_dirty;
 
+/* REC once in any game: a box over it, REC again to leave for the Arcave. stay: the game holds still under it, and
+ * PLAY goes on (the machines); otherwise it runs on and the box goes by itself (UNDERSONG, on everyone's clock) */
+static void rec_box_draw(int stay, uint32_t tm)
+{
+    int32_t a = ts(1, 2), h, h2, y, bh;
+    while (a > 1 && gblock_h(184, TR(T_REC_AGAIN), a) > 120) a--;
+    h = gblock_h(184, TR(T_REC_AGAIN), a); h2 = stay ? TLH(a) + 8 : 0; bh = h + h2 + 24; y = 120 - bh / 2;
+    if (stay) { galpha(150); grect(0, 0, AC_W, AC_H, th->bg); galpha(256); }
+    grect(18, y, 204, bh, th->panel);
+    galpha(150 + ipulse(tm, 900) * 106 / 256); gbox(18, y, 204, bh, th->caps[0]); gbox(19, y + 1, 202, bh - 2, th->caps[0]); galpha(256);
+    gblock(28, y + 12, 184, TR(T_REC_AGAIN), th->text, a, 1);
+    if (stay) gfit(120, y + 12 + h + 8, 184, TR(T_REC_STAY), th->pad, a);
+}
+/* a speech bubble from someone off the screen on the left (JUICE WORKS: DELIVER THIS ORDER!, ORDER UP!), its middle at y */
+static void say_box(const char *txt, int32_t ym, int32_t a, uint32_t tm)
+{
+    int32_t h, y, sc = ts(2, 3), xy[6];
+    if (a <= 0) return;
+    while (sc > 1 && gblock_h(208, txt, sc) > 2 * TLH(sc)) sc--;
+    h = gblock_h(208, txt, sc) + 16; y = ym - h / 2;
+    galpha(a);
+    grect(10, y, 222, h, th->text); grect(12, y + 2, 218, h - 4, th->bg);
+    xy[0] = 10; xy[1] = y + h - 14; xy[2] = 0; xy[3] = y + h + 12; xy[4] = 30; xy[5] = y + h - 2; gpoly(xy, 3, th->text);   /* from off the screen, on the left */
+    xy[0] = 13; xy[1] = y + h - 12; xy[2] = 5; xy[3] = y + h + 5; xy[4] = 27; xy[5] = y + h - 4; gpoly(xy, 3, th->bg);
+    galpha(a * (190 + ipulse(tm, 700) * 66 / 256) / 256);
+    gblock(16, y + 8, 210, txt, th->pad, sc, 1);
+    galpha(256);
+}
 static void mach_msg(int id) { mc.msg = (uint8_t)id; mc.msg_t = 700; }
 static void num_str(char *b, int32_t v)
 {
@@ -110,7 +138,7 @@ static int32_t gh_crystals(void)                 /* crystals earned over every s
     for (t = 0; t < JUKE_N; t++) for (m = 0; m < 3; m++) n += gh_gems_of(t, m);
     return n;
 }
-static int gh_key_lane(int k, int L) { return (k * 15 / 26) * L / 16; }
+static int gh_key_lane(int k, int L) { return L == 4 ? KEY_ZONE[k] : (k * 15 / 26) * L / 16; }   /* (four: the keyboard's colours) */
 /* where key k sits on a strip 240 px wide: the 16 keys of the bottom row 15 px apart, the 11 of the top row between */
 static int32_t gh_key_x(int k)
 {
@@ -713,7 +741,8 @@ static void gh_scores_draw(int32_t y0)
 #define JW_CAP 6                                 /* parts a glass holds */
 #define JW_FLOOR 204
 #define JW_X(k) (30 + (k) * 60)
-static const col_t JW_COL[4] = {AC_RGB(255, 214, 40), AC_RGB(255, 255, 255), AC_RGB(40, 224, 96), AC_RGB(48, 112, 255)};
+static const col_t JW_COL[4] = {AC_RGB(255, 60, 172),   /* the first juice a bright pink */
+                                 AC_RGB(255, 255, 255), AC_RGB(40, 224, 96), AC_RGB(48, 112, 255)};
 #define JW_TOL 184                               /* how far off a mark still serves (Q8 parts): nearly three quarters of one */
 static const uint16_t JW_RATE[4] = {0, 150, 330, 700};   /* parts (Q8) a second, by how far the tap is open */
 typedef struct { uint8_t n, c[3]; int32_t v[3]; } jw_glass_t;   /* layers from the bottom: colour, parts (Q8) */
@@ -723,9 +752,10 @@ static struct {
     int32_t puddle[4], splash[4], out_t, out_x, out_ok;
     struct { uint8_t on, n, c[3], u[3]; int32_t t, life; } tk[JW_NTK];
     int32_t spawn_t, served, multi;              /* multi: drinks of two juices or more asked for so far */
+    int32_t hs, ht, knobbed;                     /* the first drink's hints: which is due (0 a key, 1 a knob, 2 serve, 3 none), ms waited; a knob turned yet */
     uint32_t prev_keys, seed, nseed;
 } jw;
-static int jw_zone(int key) { return key * 4 / AC_NKEY; }
+static int jw_zone(int key) { return KEY_ZONE[key]; }
 static int32_t jw_total(const jw_glass_t *g) { return (g->n > 0 ? g->v[0] : 0) + (g->n > 1 ? g->v[1] : 0) + (g->n > 2 ? g->v[2] : 0); }
 static void jw_hurt(int k)                       /* a drop lost; k: the bay it happened in, or -1 */
 {
@@ -757,6 +787,7 @@ static void jw_serve(int z)
     jw_glass_t *g = &jw.g[z];
     int32_t i, k, best_i = -1, best_e = 0x7FFFFFFF;
     jw.has[z] = 0; jw.out = *g; jw.out_t = 500; jw.out_x = JW_X(z); jw.out_ok = 0;
+    jw.hs = 3;                                   /* (served: the hints are done with) */
     if (!g->n) { snd_ui(60); return; }           /* an empty glass back on the shelf: nothing lost */
     for (i = 0; i < JW_NTK; i++) {
         int32_t e = 0;
@@ -775,10 +806,26 @@ static void jw_serve(int z)
     for (k = 0; k < g->n; k++) sfx(72 + SC_PEN[(g->c[k] + k) % 5], (uint32_t)k * 90u, 500, W_SINE, 2600, 3, 170);
     snd_chime(best_e < 64);
 }
+/* the hint due now (5 s with nothing done, each in turn), and the bay it is about; -1: none */
+static int jw_hint_bay(void)
+{
+    int k;
+    if (jw.hs >= 3 || jw.ht < 5000 || mc.state != MS_PLAY) return -1;
+    if (jw.hs == 0) {                            /* the keys under the tap of the first order's bottom juice */
+        for (k = 0; k < JW_NTK; k++) if (jw.tk[k].on) return jw.tk[k].c[0];
+        return 0;
+    }
+    for (k = 0; k < 4; k++) if (jw.has[k]) return k;   /* the bay with the glass: its knob, its keys */
+    return -1;
+}
 static void juice_tick(int32_t dt)
 {
     uint32_t down = in.kdown, up = jw.prev_keys & ~in.keys, zheld = 0;
     int32_t k, i;
+    jw.ht += dt;                                 /* the first drink: a hint for each thing not done in 5 s */
+    for (k = 0; k < 4; k++) if (in.enc[ENC_KNOB1 + k]) jw.knobbed = 1;
+    if (jw.hs == 0 && down) { jw.hs = 1; jw.ht = 0; }
+    if (jw.hs == 1 && jw.knobbed) { jw.hs = 2; jw.ht = 0; }
     for (k = 0; k < 4; k++) {                    /* the taps */
         int32_t d = in.enc[ENC_KNOB1 + k];
         if (d) {
@@ -840,6 +887,8 @@ static void juice_tick(int32_t dt)
     for (k = 0; k < AC_NKEY; k++) {              /* the keys under a glass are lit, the rest glow */
         if (jw.has[jw_zone(k)]) led_key_want |= 1u << k; else led_key_dim_want |= 1u << k;
     }
+    k = jw_hint_bay();
+    if (k >= 0 && jw.hs != 1 && (mc.t / 300) & 1) for (i = 0; i < AC_NKEY; i++) if (jw_zone((int)i) == k) led_key_want |= 1u << i;   /* (the hint's keys blink) */
 }
 static void jw_glass_draw(int32_t x, int32_t y, int32_t hw, const jw_glass_t *g, col_t rim)   /* y: its foot */
 {
@@ -898,13 +947,15 @@ static void juice_draw(void)
     for (i = 0; i < JW_NTK; i++)                 /* the tickets: the drink as it should stand in the glass */
         if (jw.tk[i].on) {
             int32_t x = 60 + i * 60, left = jw.tk[i].t * 256 / jw.tk[i].life, sway = tsin(tm, 14, i * 20000) >> 13;
+            int32_t f = iclamp((jw.tk[i].life - jw.tk[i].t) * 256 / 700, 0, 256);
+            x -= (x + 20) * (256 - f) / 256 * (256 - f) / 256;   /* (a new order comes along the pipe from the left) */
             jw_glass_t g;
             g.n = jw.tk[i].n;
             for (k = 0; k < g.n; k++) { g.c[k] = jw.tk[i].c[k]; g.v[k] = Q8(jw.tk[i].u[k]); }
             if (left < 64 && (tm / 160u) & 1u) galpha(120);
             gline(x, 16, x + sway, 74, th->mute);   /* (the glass on it is the one under the taps: same width, same marks) */
             grect(x - 17 + sway, 74, 35, 66, th->panel); gbox(x - 17 + sway, 74, 35, 66, left < 64 ? th->caps[0] : th->text);
-            grect(x - 15 + sway, 77, 31 * left / 256, 3, left < 64 ? th->caps[0] : left < 128 ? JW_COL[0] : JW_COL[2]);
+            grect(x - 15 + sway, 77, 31 * left / 256, 3, left < 64 ? th->caps[0] : left < 128 ? GH_ZONE[0] : JW_COL[2]);
             jw_glass_draw(x + sway, 135, 13, &g, th->text);
             galpha(256);
         }
@@ -915,6 +966,30 @@ static void juice_draw(void)
         galpha(256);
     }
     if (mc.flash > 0) { galpha(mc.flash * 110 / 300); grect(0, 0, 240, 240, th->caps[0]); galpha(256); }
+    if (mc.state == MS_PLAY && mc.t < 1900)      /* the start: ORDER UP!, from off the screen */
+        say_box(TR(T_JW_ORDERUP), 112, imin(imin(256, mc.t * 256 / 200), (1900 - mc.t) * 256 / 300), tm);
+    k = jw_hint_bay();
+    if (k >= 0) {                                /* a hint: what to do, and where */
+        char b[120];
+        const char *src = TR(jw.hs == 0 ? T_JW_H_KEY : jw.hs == 1 ? T_JW_H_KNOB : T_JW_H_SERVE);
+        int32_t n = 0, sc = ts(1, 2), h, y = 146, a = imin(256, (jw.ht - 5000) * 256 / 250), x = JW_X(k), bob = iabs(tsin(tm, 50, 0)) * 4 >> 14;
+        for (; *src && n < 118; src++) b[n++] = *src == '#' ? (char)('1' + k) : *src;   /* (#: the knob's number) */
+        b[n] = 0;
+        while (sc > 1 && gblock_h(216, b, sc) > 2 * TLH(sc)) sc--;
+        h = gblock_h(216, b, sc) + 10;
+        galpha(a);
+        grect(8, y, 224, h, th->panel); gbox(8, y, 224, h, th->pad);
+        gblock(12, y + 5, 216, b, th->text, sc, 1);
+        galpha(a * (140 + ipulse(tm, 700) * 116 / 256) / 256);
+        if (jw.hs == 1) {                        /* the tap to open: a ring round it, an arrow up to it */
+            gcirc(x, 40, 27, th->pad); gcirc(x, 40, 28, th->pad);
+            gline2(x, y - 4 - bob, x, 74 - bob, th->pad); gline2(x, 70 - bob, x - 4, 76 - bob, th->pad); gline2(x, 70 - bob, x + 4, 76 - bob, th->pad);
+        } else {                                 /* the keys under it: a box round them, an arrow down to them */
+            gbox(x - 27, JW_FLOOR + 8, 55, 28, th->pad); gbox(x - 26, JW_FLOOR + 9, 53, 26, th->pad);
+            gline2(x, y + h + 2 + bob, x, JW_FLOOR - 2 + bob, th->pad); gline2(x, JW_FLOOR + 2 + bob, x - 4, JW_FLOOR - 4 + bob, th->pad); gline2(x, JW_FLOOR + 2 + bob, x + 4, JW_FLOOR - 4 + bob, th->pad);
+        }
+        galpha(256);
+    }
 }
 
 /* ---------------------------------------------------------------- NIGHT BLOOM */
@@ -1113,11 +1188,11 @@ static void bloom_draw(void)
 static void mach_start(void)
 {
     uint32_t i, now = tr_now_q8() >> 8;
-    mc.state = MS_PLAY; mc.score = 0; mc.combo = 0; mc.t = 0; mc.msg_t = 0; mc.flash = 0;
+    mc.state = MS_PLAY; mc.score = 0; mc.combo = 0; mc.t = 0; mc.msg_t = 0; mc.flash = 0; mc.ask = 0;
     if (mc.which == 0) gh_start();
     else if (mc.which == 1) {
         for (i = 0; i < sizeof jw; i++) ((uint8_t *)&jw)[i] = 0;
-        mc.lives = 5; jw.seed = now * 31u + 7u; jw.spawn_t = 700; jw.prev_keys = in.keys;
+        mc.lives = 5; jw.seed = now * 31u + 7u; jw.spawn_t = 1800; jw.prev_keys = in.keys;   /* (the first order once ORDER UP! goes) */
 #ifdef AC_TEST_CATCH
         jw.seed = 1;
 #endif
@@ -1134,14 +1209,15 @@ static void mach_start(void)
 static void mach_enter(int which)
 {
     uint32_t i;
-    mc.which = (uint8_t)which; mc.state = MS_TITLE; mc.t = 0; mc.msg_t = 0; mc.flash = 0; mc.score = 0; mc.lives = 0;
+    mc.which = (uint8_t)which; mc.state = MS_TITLE; mc.t = 0; mc.msg_t = 0; mc.flash = 0; mc.score = 0; mc.lives = 0; mc.ask = 0;
     gh.card_track = (uint8_t)(mus_track % JUKE_N); gh.swap_t = -10000; gh.demo_track = 255;
     (void)i;
 #ifdef AC_TEST_SCENE
     if (which == 0) gh_test_charts();
 #endif
 }
-/* -1: REC at its start or end, back to the Arcave; 1: HOME, how it is played (arcave.c opens the sheet) */
+/* -1: REC at its start or end (or twice in a game), back to the Arcave; 1: HOME, how it is played (arcave.c opens the
+ * sheet) */
 static int mach_tick(int32_t dt)
 {
     mc.t += dt;
@@ -1160,13 +1236,23 @@ static int mach_tick(int32_t dt)
         else { led_play_breathe = 1; led_breathe_want |= 1u << BTN_HOME | 1u << BTN_REC; }
         return 0;
     }
+    if (mc.ask) {                                /* REC once: the box, the game held (arcave.c pauses its clock) */
+        led_breathe_want |= 1u << BTN_REC; led_play_breathe = 1;
+        if (BDOWN(BTN_REC)) { mc.ask = 0; snd_ui(67); return -1; }
+        if (BDOWN(BTN_PLAY)) { mc.ask = 0; snd_ui(79); }
+        return 0;
+    }
+    if (BDOWN(BTN_REC)) { mc.ask = 1; snd_ui(74); return 0; }
     if (mc.which == 0) road_tick(dt); else if (mc.which == 1) juice_tick(dt); else bloom_tick(dt);
     return 0;
 }
 static void mach_draw(void)
 {
-    if (mc.which == 0) { road_draw(); if (mc.state != MS_PLAY) gh_card(); return; }
-    if (mc.which == 1) juice_draw(); else bloom_draw();
-    if (mc.state == MS_PLAY) mach_hud();
-    else mach_card(MACH_NAME[mc.which], th->caps[mc.which * 2 % 5]);
+    if (mc.which == 0) { road_draw(); if (mc.state != MS_PLAY) gh_card(); }
+    else {
+        if (mc.which == 1) juice_draw(); else bloom_draw();
+        if (mc.state == MS_PLAY) mach_hud();
+        else mach_card(MACH_NAME[mc.which], th->caps[mc.which * 2 % 5]);
+    }
+    if (mc.state == MS_PLAY && mc.ask) rec_box_draw(1, (uint32_t)fm1_ms);
 }

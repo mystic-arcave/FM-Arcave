@@ -1,0 +1,22 @@
+# JUICE WORKS, started: ORDER UP! from off the screen, the first order coming along the pipe from the left; nothing
+# done for 5 s: a hint, the keys under the order's tap (boxed, blinking); a key: a glass, and 5 s later the hint to
+# turn that tap's knob; turned: 5 s later the hint to press the key again; pressed: delivered, no more hints
+500 btn 12
+900 shot
+2400 shot
+2700 shot
+5000 shot
+5800 shot
+6500 keys 1
+6600 keys 0
+6800 shot
+11800 shot
+12500 enc 2 3
+13600 enc 2 -3
+13800 shot
+18800 shot
+19500 keys 1
+19600 keys 0
+20000 shot
+24000 shot
+24100 end

@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// UNDERSONG, the game for two, played by two copies of the browser build wired to each other as the Link page wires
-// two FM-1s: every control change on channel 16 that one sends, the other gets. Nothing else is shared.
+// UNDERSONG, the game for two (or three), played by copies of the browser build wired to each other as the Link page
+// wires FM-1s: every control change on channel 16 that one sends, the others get. Nothing else is shared.
 //   node tests/duo_test.mjs            (after web/emu/build.sh, and the same build with -DAC_TEST_CATCH=1 in build/emu-catch)
 // Part 1, the real build: one FM-1 has been on for an hour and a quarter longer; both roll to the well, find each other, take
-// seats, and play chapters 1 and 2 with keys pressed on every half beat in all four lanes. Both must end on the same
-// score and the same chapter. Part 2, the build whose notes play themselves: chapters 3 and 4, the finale, ROCK-OFF,
-// REC in the middle of a game, and one player going back up to the Arcave.
+// seats, and play chapters 2 and 3 (TWIN ROAD, ECHO STEPS: the first, POTION CHOIR, cleared already) with keys pressed
+// on every half beat in all four lanes. Both must end on the same score and the same chapter. Part 2, the build whose
+// notes play themselves: chapter 4 (NOTE RALLY), the finale, ROCK-OFF,
+// REC once in the middle of a game (a box), and again: that player goes back up to the Arcave. Part 3, three of the second build: they find
+// each other and take three seats, play all five games for three and agree on every score; then one of them goes
+// dark in the middle of a game, and the other two are stopped with the error that says who.
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 const fail = (m) => { console.error("FAIL", m); process.exit(1); };
 const OUT = "build/host"; mkdirSync(OUT, { recursive: true });
@@ -22,11 +25,12 @@ async function fm(path, store, name) {
   ex.web_boot();
   return { ex, name, keysUp: 0, last8: -1 };
 }
-let A, B, mash = false, sent = 0;
-const pump = (a, b) => { for (let v; (v = a.ex.web_midi_out()) >= 0;) if ((v & 255) === 0xBF) { b.ex.web_midi(v & 255, v >> 8 & 127, v >> 16 & 127); sent++; } };
+let A, B, C = null, mash = false, sent = 0, live = null;
+const pump = (a, bs) => { for (let v; (v = a.ex.web_midi_out()) >= 0;) if ((v & 255) === 0xBF) for (const b of bs) { b.ex.web_midi(v & 255, v >> 8 & 127, v >> 16 & 127); sent++; } };
+const all = () => live || (C ? [A, B, C] : [A, B]);
 function run(ms, only) {
   for (let i = 0; i < ms * 441 / 1280; i++) {
-    for (const f of only ? [only] : [A, B]) {
+    for (const f of only ? [only] : all()) {
       f.ex.web_render(128);
       if (mash && !only) {                                  // a key in each lane on every half beat, let go soon after
         const h = Math.floor((f.ex.web_tick() + 3) / 48);
@@ -34,11 +38,11 @@ function run(ms, only) {
         else if (f.keysUp && !--f.keysUp) f.ex.web_keys(0);
       }
     }
-    if (!only) { pump(A, B); pump(B, A); }
+    if (!only) for (const f of all()) pump(f, all().filter((g) => g !== f));
   }
 }
 const tap = (f, btn, ms = 120) => { f.ex.web_buttons(1 << btn); run(60); f.ex.web_buttons(0); run(ms); };
-const st = (f) => { const d = f.ex.web_duo(); return { state: d & 15, seat: d >> 4 & 1, peer: d >> 5 & 1, game: d >> 8 & 15, prog: d >> 12 & 15, done: d >> 16 & 1, stars: d >> 17 & 3 }; };
+const st = (f) => { const d = f.ex.web_duo(); return { state: d & 15, seat: d >> 4 & 3, peer: d >> 6 & 1, game: d >> 8 & 15, prog: d >> 12 & 15, done: d >> 16 & 1, stars: d >> 17 & 3, np: d >> 20 & 3 }; };
 const scene = (f) => f.ex.web_scene() & 255;
 let shots = [];
 function shot(f, label) {
@@ -78,7 +82,7 @@ async function chapter(game, wantStars) {                   // from the menu: op
 }
 
 // ---- part 1
-A = await fm("build/emu/fm-arcave.wasm", save(0), "A"); B = await fm("build/emu/fm-arcave.wasm", save(0), "B");
+A = await fm("build/emu/fm-arcave.wasm", save(1), "A"); B = await fm("build/emu/fm-arcave.wasm", save(1), "B");
 run(75 * 60 * 1000, A);                                     // A has been on for an hour and a quarter
 await toWell(A); run(1500, A); shot(A, "alone");
 if (st(A).state !== 0 || st(A).peer) fail("A should be waiting alone");
@@ -91,17 +95,17 @@ if (Math.abs(A.ex.web_tick() - B.ex.web_tick()) > 3) fail("the clocks did not co
 both("menu");
 B.ex.web_keys(1 << 20); run(200); shot(A, "friendkey"); B.ex.web_keys(0); run(100);
 mash = true;
-await chapter(0, 2); if (st(A).prog !== 1 || st(B).prog !== 1) fail("chapter 1 not kept on both");
 await chapter(1, 2); if (st(A).prog !== 2 || st(B).prog !== 2) fail("chapter 2 not kept on both");
+await chapter(0, 2); if (st(A).prog !== 3 || st(B).prog !== 3) fail("chapter 3 not kept on both");
 mash = false; both("menu2");
 
 // ---- part 2
-A = await fm("build/emu-catch/fm-arcave.wasm", save(2), "A"); B = await fm("build/emu-catch/fm-arcave.wasm", save(2), "B");
+A = await fm("build/emu-catch/fm-arcave.wasm", save(3), "A"); B = await fm("build/emu-catch/fm-arcave.wasm", save(3), "B");
 run(4000, A);
 await toWell(A); await toWell(B);
 until("the two did not find each other again", () => st(A).state === 1 && st(B).state === 1, 4000);
 run(2500);
-await chapter(2, 3); await chapter(3, 3);
+await chapter(3, 3);
 until("no finale", () => st(A).state === 6 && st(B).state === 6, 3000);
 both("finale"); run(1500); tap(A, 12, 300); tap(B, 12, 300);
 if (st(A).prog !== 4 || st(B).prog !== 4) fail("the story is not finished on both");
@@ -112,11 +116,50 @@ await chapter(4, 0);
 tap(B, 12, 400);                                            // ROCK-OFF again, and REC in the middle of it
 tap(A, 12, 300); tap(B, 12, 300);
 until("the second ROCK-OFF did not start", () => st(A).state === 4 && st(B).state === 4, 15000);
-run(3000); tap(B, 13, 400);
-if (st(A).state !== 1 || st(B).state !== 1) fail("REC did not take both back to the list");
-tap(B, 13, 3200);                                           // B goes back up to the Arcave
+run(3000); tap(B, 13, 400); shot(B, "recbox");               // REC once: only the box, the game goes on
+if (st(A).state !== 4 || st(B).state !== 4 || scene(B) !== 5) fail("REC once did more than bring up the box");
+tap(B, 13, 3200);                                           // REC again: B goes back up to the Arcave
 if (scene(B) !== 1) fail("B did not leave");
-if (st(A).state !== 0) fail("A was not told its friend left");
+if (st(A).state !== 7) fail("A was not told its friend left");
 shot(A, "left");
+
+// ---- part 3: three
+A = await fm("build/emu-catch/fm-arcave.wasm", save(4), "A"); B = await fm("build/emu-catch/fm-arcave.wasm", save(4), "B");
+C = await fm("build/emu-catch/fm-arcave.wasm", save(4), "C");
+run(3000, A); run(1500, B);
+await toWell(A); await toWell(B); await toWell(C);
+until("the three did not find each other", () => [A, B, C].every((f) => st(f).state === 1 && st(f).np === 3 && st(f).peer), 5000);
+if (new Set([A, B, C].map((f) => st(f).seat)).size !== 3) fail("two took the same seat");
+run(2500);
+const ta = [A, B, C].map((f) => f.ex.web_tick());
+console.log(`three: seats ${[A, B, C].map((f) => st(f).seat).join(", ")}; clocks ${ta.join(", ")}`);
+if (Math.max(...ta) - Math.min(...ta) > 3) fail("the three clocks did not come together");
+shot(A, "trio-menu");
+for (let g = 0; g < 5; g++) {
+  for (let i = 0; i < g; i++) { A.ex.web_enc(3, 1); run(150); }
+  tap(A, 12, 400);
+  until("the card did not open on all three", () => [A, B, C].every((f) => st(f).state === 2 && st(f).game === g), 3000);
+  shot(C, "trio-how"); tap(A, 12, 200); tap(B, 12, 200); tap(C, 12, 300);
+  until("the game did not start on all three", () => [A, B, C].every((f) => st(f).state === 4), 15000);
+  run(9000); shot(A, "trio-play"); shot(B, "trio-play"); shot(C, "trio-play");
+  until("no result on all three", () => [A, B, C].every((f) => st(f).done), 120000);
+  run(300); shot(A, "trio-result");
+  const sc = [A, B, C].map((f) => f.ex.web_duo_score(-1));
+  console.log(`  for three, game ${g}: ${sc.join(", ")} (${[A, B, C].map((f) => st(f).stars).join(", ")} stars)`);
+  if (g !== 4 && (sc[0] !== sc[1] || sc[1] !== sc[2])) fail("the three disagree on the score");
+  if (g === 4) for (let s = 0; s < 3; s++) if (new Set([A, B, C].map((f) => f.ex.web_duo_score(s))).size !== 1) fail("the three disagree on ROCK-OFF");
+  if (g !== 4 && st(A).stars < 3) fail("too few stars for three who never miss");
+  tap(A, 12, 300); tap(B, 12, 300); tap(C, 12, 300);
+  until("not back at the list", () => [A, B, C].every((f) => st(f).state === 1), 3000);
+}
+tap(A, 12, 400); tap(A, 12, 200); tap(B, 12, 200); tap(C, 12, 300);   // ECHO STEPS again, and C goes dark in the middle
+until("the last game did not start", () => [A, B, C].every((f) => st(f).state === 4), 15000);
+run(4000);
+live = [A, B]; run(4000);
+if (st(A).state !== 7 || st(B).state !== 7) fail("the two left were not stopped with the error (A " + st(A).state + ", B " + st(B).state + ")");
+shot(A, "trio-lost");
+run(800); tap(A, 12, 300); tap(B, 12, 300);
+if (st(A).state !== 1 || st(B).state !== 1 || st(A).np !== 2) fail("after the error the two did not carry on for two");
+shot(A, "trio-after");
 writeFileSync(`${OUT}/duotest-shots.txt`, shots.join("\n") + "\n");
 console.log(`ok (${sent} messages passed, ${shots.length} pictures in ${OUT})`);

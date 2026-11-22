@@ -14,6 +14,7 @@ D=; [ -n "$2" ] && D="-DAC_TEST_STORY=$2"
 [ -n "$CATCH" ] && D="$D -DAC_TEST_CATCH=1"       # CATCH=1: NIGHT BLOOM catches every spore
 [ -n "$TSIZE" ] && D="$D -DAC_TEST_TSIZE=$TSIZE"   # TSIZE=0|1|2: the text size (default: medium, 1)
 [ -n "$DUO" ] && D="$D -DAC_TEST_DUO=$DUO"       # DUO=0..4: UNDERSONG with a friend who never misses, that many chapters in
+[ -n "$NP" ] && D="$D -DAC_TEST_NP=$NP"          # NP=3: with DUO, two such friends (UNDERSONG for three)
 [ -n "$AT" ] && D="$D -DAC_TEST_X=${AT%,*} -DAC_TEST_Y=${AT#*,}"   # AT=X,Y: with SCENE 9, Rock starts in the cave there
 cc -O2 -Wall -Wno-unused-function -Wno-unused-variable -Wno-unused-const-variable -Wno-empty-body -DDINGHY_HOST \
    '-Dsection(x)=' -DAPP_VER='"dev"' $D -Ifirmware/hal -Ifirmware/src -Ifirmware/gen -o "build/host/$N" firmware/src/fm_arcave.c

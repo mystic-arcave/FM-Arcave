@@ -60,45 +60,62 @@ numbers in `fm1_irq.h`, and a path from the stack's receive callback into `midi_
 start. A connectionless variant (the leader advertises its clock, followers only scan) would need no hub at all and
 is worth a look after that.
 
-## UNDERSONG: the game for two
+## UNDERSONG: the game for two or three
 
-Down the well in the Arcave's floor (`firmware/src/arcave/ac_duo.h`) two FM-1s play one game: a story of four
-chapters (ECHO STEPS, TWIN ROAD, PIPE WHISPER, TWIN DRUM), the same four again for the best score once the story is
-told, and ROCK-OFF against each other. Each player sees the other's rock, keys and dial. LINK does not have to be on.
+Down the well in the Arcave's floor (`firmware/src/arcave/ac_duo.h`) two or three FM-1s play one game: a story of four
+chapters (POTION CHOIR, TWIN ROAD, ECHO STEPS, NOTE RALLY), the same four again for the best score once the story is
+told (TWIN ROAD then on any of five songs), and ROCK-OFF against each other. Each player sees the others' rocks, keys and dials. LINK does not have to be on.
 
-An FM-1 only sends MIDI over USB, so the two need something between them that passes each one's messages to the
-other. Nothing else: the relay knows nothing of the game.
+With three in the well every game is its version for three: in ECHO STEPS the caller changes round the three and the
+other two echo together; TWIN ROAD's song is split three ways, its big notes for all three; in POTION CHOIR one pours
+and the other two each see half of the rock that needs it (one its shape and eyes, the other its colour, hat and
+mouth); NOTE RALLY's note goes round the three; ROCK-OFF is all against all. Games for three keep their own best
+scores. Whoever is in the well while the list of games is up plays; a fourth waits at the door. If anyone playing is
+not heard from for two and a half seconds, the game stops on the others' screens with an error that names who left;
+PLAY there goes on with whoever is still there.
 
-- **Two FM-1s:** both by USB on one computer, the Link page open and its hub started.
-- **No FM-1:** the emulator page open in two windows of one browser. They find each other by themselves.
+An FM-1 only sends MIDI over USB, so they need something between them that passes each one's messages to the
+others. Nothing else: the relay knows nothing of the game.
+
+- **Two or three FM-1s:** all by USB on one computer, the Link page open and its hub started.
+- **No FM-1:** the emulator page open in two or three windows of one browser. They find each other by themselves.
 - An emulator with MIDI on and an FM-1 on the same computer meet through the Link page too (a virtual MIDI port).
 
-The messages, control changes on channel 16 like LINK's own:
+The messages, control changes on channel 16 like LINK's own. All but 110 carry the seat s of the one who sends it
+(0, 1 or 2), so each FM-1 knows whose they are:
 
 | CC | Value | |
 | --- | --- | --- |
-| 110 | n, 1-126 | "I am here", every 300 ms. n is drawn at the door; the lower number is seat 0 and leads. The same number twice: draw again |
-| 112, 113 | key 0-26 | a key pressed, a key let go (113 with 127: all) |
-| 114 | 0-11 | the pipe's dial (PIPE WHISPER) |
+| 110 | n, 1-126 | "I am here", every 300 ms. n is drawn at the door; the lowest number is seat 0 and leads, the next seat 1, the next seat 2. The same number twice: draw again |
+| 112, 113 | key 0-26, + 32 s | a key pressed, a key let go (113 with 127: all) |
+| 114 | 0-11, + 16 s | POTION CHOIR: the rock the potion is over (0-7); NOTE RALLY: the lane your rock is in (0-3) |
 | 118, 115, 116 | c, a, b | the three numbers of a message |
-| 117 | op | ends a message and names it |
+| 117 | op + 16 s | ends a message and names it |
+
+The Link page holds 118, 115 and 116 until their 117 comes, then passes the four on together: with three FM-1s, the
+messages of two players must not mix on the way to the third. (The emulator's windows send what each one says in
+one piece anyway.)
 
 | op | a, b, c | |
 | --- | --- | --- |
 | 1 hello | chapters cleared, state | with every 110 |
-| 2 epoch | the leader's clock / 32, 21 bits (c high, a, b low) | LINK's clock is sent modulo 2^19 ticks; this puts the two in the same bar |
-| 3 pick | the line of the list | the list is shared: either player turns it |
+| 2 epoch | the leader's clock / 32, 21 bits (c high, a, b low) | LINK's clock is sent modulo 2^19 ticks; this puts all in the same bar |
+| 3 pick | the line of the list | the list is shared: any player turns it |
 | 4 open | game, + 8 as the story's chapter; 127: closed | |
 | 5 ready | 1 | |
-| 6 go | game (+ 8), the beat it starts on (14 bits: b low, c high) | from seat 0, once both are ready |
-| 7 hit, 8 miss | the note (a low, c high), 1 PERFECT or 2 GOOD | each FM-1 judges its own player and tells the other |
-| 9 quit | 0: out of this game; 1: back up to the Arcave | |
+| 6 go | game (+ 8; + 16 times the song, TWIN ROAD), the beat it starts on (14 bits: b low, c high) | from seat 0, once all are ready |
+| 7 hit, 8 miss | the note (a low, c high), 1 PERFECT or 2 GOOD | each FM-1 judges its own player and tells the others |
+| 7 hit, 8 miss | NOTE RALLY: a the lane it flies to (drawn at random by the one who hit it) + 4 times how well (0 a serve, 1 PERFECT, 2 GOOD), the beat it lands on (b low, c high); miss: it fell | from the one who hit, or dropped, it; the note goes to the next seat (seat 2 to seat 0) |
+| 9 quit | 0: out of this game; 1: back up to the Arcave | REC twice in a game sends 1: the others see that player leave |
 | 10 stray | | ROCK-OFF: a key where no note was |
+| 11 song | the song, 0-4 | TWIN ROAD's card, the story told: turned to another song (nobody is ready again) |
+| 12 pour | the round, the rock (127: none, the time ran out), the bars it took (1-8) | POTION CHOIR, from the one who pours: the next round starts one bar after that bar ends |
 
 Seat 0 also says where its clock is four times a second: CC 102-106 as above, then CC 107 with value 13 (sender 5,
-"follow"). Seat 1 follows it; the relay passes it on unchanged, with no delay taken off, so seat 1 runs behind by
+"follow"). Seats 1 and 2 follow it; the relay passes it on unchanged, with no delay taken off, so they run behind by
 the relay's delay. Each FM-1 judges its own player against its own clock, so that delay never costs a note; it only
-shows as the friend's notes sounding that much late.
+shows as the friends' notes sounding that much late.
 
-`tests/duo_test.mjs` plays the whole of it between two browser builds wired to each other. What has not been tried:
-two real FM-1s on the Link page (its relay pairs each input with the output of the same name, in order).
+`tests/duo_test.mjs` plays the whole of it between two browser builds wired to each other, then all five games for
+three between three, and one of the three going dark in the middle of a game. Two real FM-1s have played it on the
+Link page; three real FM-1s have not been tried yet.

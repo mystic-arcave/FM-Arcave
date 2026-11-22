@@ -1,12 +1,13 @@
+# (JUICE WORKS' opening first: the times below are after its 8.8 s)
 # HOME in JUICE WORKS: PLAY during the first demo skips to the second step (the first stays unticked); its turn left
 # alone 9 s: the demo again; KNOB 1 during that replay goes straight to the turn and opens the tap
 900 btn 8
-1300 shot
-1500 btn 12
-2000 shot
-9500 shot
-17000 shot
-18500 shot
-19000 enc 2 3
-19300 shot
-20500 end
+10100 shot
+10300 btn 12
+10800 shot
+18300 shot
+25800 shot
+27300 shot
+27800 enc 2 3
+28100 shot
+29300 end

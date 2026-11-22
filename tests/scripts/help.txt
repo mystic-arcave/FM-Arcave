@@ -1,28 +1,39 @@
+# JUICE WORKS, HOME: the opening first (a rock orders at the counter, Rock rings it up, the ticket goes along the
+# line to the back room, DELIVER THIS ORDER!), then the lesson:
 # JUICE WORKS, HOME: the lesson. A key under tap 1: a glass; KNOB 1 opens tap 1, it pours to the ticket's line, and
 # closes (one step); the same keys: served (GOOD); hold under tap 1 and press under tap 2: it moves. ALL DONE; HOME: back
 600 shot
 900 btn 8
-3000 shot
-6000 keys 0x1
-6100 keys 0
-6200 shot
-10000 shot
-13500 shot
-15000 enc 2 3
-16000 shot
-17100 enc 2 -3
-17300 shot
-21000 shot
-23500 keys 0x2
-23600 keys 0
-23800 shot
-28000 shot
-33000 keys 0x1
-33200 keys 0x101
-33300 shot
-33500 keys 0
-33800 shot
-35500 shot
-36000 btn 8
-36500 shot
-36700 end
+1500 shot
+2600 shot
+3100 shot
+3800 shot
+4600 shot
+5300 shot
+6000 shot
+6800 shot
+7800 shot
+11800 shot
+14800 keys 0x1
+14900 keys 0
+15000 shot
+18800 shot
+22300 shot
+23800 enc 2 3
+24800 shot
+25900 enc 2 -3
+26100 shot
+29800 shot
+32300 keys 0x2
+32400 keys 0
+32600 shot
+36800 shot
+41800 keys 0x1
+42000 keys 0x101
+42100 shot
+42300 keys 0
+42600 shot
+44300 shot
+44800 btn 8
+45300 shot
+45500 end

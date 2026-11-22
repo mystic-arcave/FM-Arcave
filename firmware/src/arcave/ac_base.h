@@ -220,6 +220,7 @@ static void gzoom_row(int32_t y, int32_t sy, int32_t cx, int32_t inv)
     int32_t x;
     for (x = 0; x < cx; x++) d[x] = s[cx - (((cx - x) * inv) >> 16)];
     for (x = AC_W - 1; x > cx; x--) d[x] = s[cx + (((x - cx) * inv) >> 16)];
+    d[cx] = s[cx];                               /* (the middle column too: left as it was, it showed as a tear) */
 }
 static void gzoom(int32_t cx, int32_t cy, int32_t z)
 {
@@ -431,6 +432,10 @@ static void ac_present(void)
 /* ---------------------------------------------------------------- the panel, read once a frame */
 #define AC_NKEY 27
 static const uint8_t KEY_IS_SHARP[AC_NKEY] = {0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0};
+/* the keyboard in four colours (yellow, white, green, blue), the groups every game with four lanes or bays uses: four
+ * keys of the bottom row each; of the top row three, two, three, three (its 6th key, between white and green, is
+ * green, and its 9th, between green and blue, blue) */
+static const uint8_t KEY_ZONE[AC_NKEY] = {0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3};
 static struct {
     uint32_t keys, kdown, kup;                   /* the 27 keys: held, pressed, let go (bit 0 = F3) */
     uint32_t btn, bdown, bup;                    /* the buttons, bit = BTN_... */

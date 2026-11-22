@@ -1,0 +1,17 @@
+# REC in a game: JUICE WORKS started, a glass and tap 1 open; REC once: the box, the game held (the glass fills no
+# more); PLAY: on again; REC twice: back to the Arcave
+300 shot
+500 btn 12
+1500 keys 1
+1600 keys 0
+1800 enc 2 2
+2600 shot
+2700 btn 13
+3000 shot
+5000 shot
+5200 btn 12
+5600 shot
+6000 btn 13
+6400 btn 13
+7000 shot
+7200 end

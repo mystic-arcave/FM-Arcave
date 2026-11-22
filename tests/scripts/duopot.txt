@@ -1,0 +1,22 @@
+# POTION CHOIR as the story's first chapter (DUO=0), beside a friend who never misses, played by hand: the friend
+# pours the first; the second is yours to pour: a knob moves the potion two rocks on, a key pours it; the fourth is
+# left alone until its eight bars run out
+900 btn 12
+1400 shot
+1700 btn 12
+2200 shot
+2500 btn 12
+6000 shot
+8000 shot
+12600 enc 2 1
+12900 enc 2 1
+13300 shot
+13600 keys 4096
+13800 keys 0
+14300 shot
+17000 shot
+24000 shot
+30000 shot
+46000 shot
+49000 shot
+120000 end

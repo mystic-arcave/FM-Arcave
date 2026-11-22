@@ -117,17 +117,24 @@ static const cv_plat_t CV_PLAT[] = {
 };
 #define CV_JUKE_X 522                            /* the jukebox, on the ground past the Hat */
 #define CV_DIP_W 26                              /* the dip it stands in: half its width, and its depth */
-#define CV_DIP_D 6
+#define CV_DIP_D 4                               /* (the same slight dip as each machine's on its ledge, and the well's) */
+#define CV_MDIP_D CV_DIP_D                       /* the dip each machine stands in, on its ledge */
+#define CV_WELL_X 250                            /* the well down to UNDERSONG, the game for two (ac_duo.h), in the floor before the Hat */
+#define CV_WELL_Y (CV_GROUND + CV_DIP_D)         /* (the ground at its middle, down in its dip) */
+static uint8_t story;                            /* (below: the well and its dip are there only once the jukebox is mended, 4) */
+static int32_t cave_dip_q8(int32_t x, int32_t mid, int32_t dep)   /* how far a dip of depth dep at mid lowers x (Q8) */
+{
+    int32_t j = iabs(x - Q8(mid)), u;
+    if (j >= Q8(CV_DIP_W)) return 0;
+    u = 256 - ((j / CV_DIP_W) * (j / CV_DIP_W) >> 8);
+    return (Q8(dep) * u >> 8) * u >> 8;
+}
 /* both ends of the floor curve up into ramps, with a booster on each: roll out over it and it throws you up the wall */
 static int32_t cave_floor_q8(int32_t x)          /* the ground's height under x (Q8) */
 {
     int32_t d = x < Q8(110) ? Q8(110) - x : x > Q8(CV_W - 110) ? x - Q8(CV_W - 110) : 0;
-    int32_t j = iabs(x - Q8(CV_JUKE_X)), y = Q8(CV_GROUND) - ((d * d) >> 8) / 80;
-    if (j < Q8(CV_DIP_W)) {                      /* a shallow dip in front of the jukebox: Rock settles in it */
-        int32_t u = 256 - ((j / CV_DIP_W) * (j / CV_DIP_W) >> 8);
-        y += (Q8(CV_DIP_D) * u >> 8) * u >> 8;
-    }
-    return y;
+    /* a shallow dip in front of the jukebox, and (mended) the well: Rock settles in them */
+    return Q8(CV_GROUND) - ((d * d) >> 8) / 80 + cave_dip_q8(x, CV_JUKE_X, CV_DIP_D) + (story >= 4 ? cave_dip_q8(x, CV_WELL_X, CV_DIP_D) : 0);
 }
 #define CV_NCHIME 5
 #define CHIME_X(i) (176 + (i) * 34)
@@ -141,7 +148,7 @@ static int32_t cave_floor_q8(int32_t x)          /* the ground's height under x 
 #define CV_NPLAT (sizeof CV_PLAT / sizeof CV_PLAT[0])
 typedef struct { int16_t x, y; uint8_t s, c; } cv_shroom_t;
 static const cv_shroom_t CV_SHROOM[] = {
-    {100, 400, 90, 3}, {118, 400, 50, 0}, {214, 400, 120, 1}, {262, 400, 60, 4}, {340, 400, 80, 2}, {430, 400, 150, 0},
+    {100, 400, 90, 3}, {118, 400, 50, 0}, {214, 400, 120, 1}, {300, 400, 60, 4}, {340, 400, 80, 2}, {430, 400, 150, 0},
     {470, 400, 70, 3}, {558, 400, 90, 2}, {700, 400, 100, 4}, {776, 400, 140, 1}, {662, 344, 70, 2}, {812, 344, 90, 0}, {392, 288, 80, 4},
     {536, 288, 60, 1}, {634, 232, 70, 3}, {782, 232, 100, 2}, {122, 190, 50, 1}, {854, 176, 50, 4},
     {-30, 190, 70, 2}, {-56, 190, 40, 0},
@@ -150,28 +157,47 @@ static const cv_shroom_t CV_SHROOM[] = {
 #define CV_HAT_X 392
 static const int16_t CV_MACH[3][2] = {{740, 344}, {466, 288}, {706, 232}};
 static const char *const MACH_NAME[3] = {"CRYSTAL ROAD", "JUICE WORKS", "NIGHT BLOOM"};
+static int32_t cave_top_q8(uint32_t k, int32_t x)   /* the top of floor k under x (Q8): ledges 1..3 hold the machines
+                                                       0..2, each in a slight dip as the jukebox is, to stop in front of */
+{
+    if (k == 0u) return cave_floor_q8(x);
+    if (k <= 3u) return Q8(CV_PLAT[k].y) + cave_dip_q8(x, CV_MACH[k - 1u][0], CV_MDIP_D);
+    return Q8(CV_PLAT[k].y);
+}
 
 enum { CVA_NONE, CVA_LAMP, CVA_M1, CVA_M2, CVA_M3, CVA_SCORES, CVA_EXIT, CVA_DISH, CVA_DUO };
-#define CV_WELL_X 296                            /* the well down to UNDERSONG, the game for two (ac_duo.h), in the floor before the Hat */
 #define CV_DIVE_HOP 520                          /* down the well: Rock hops over its rim, */
 #define CV_DIVE_IN 1000                          /* drops into it, */
 #define CV_DIVE_MS 1500                          /* and the camera goes in after it */
+/* The well is an old one: a ring of stones, two posts and a little roof, a windlass with a crank, and a bucket on its
+ * rope. PLAY by it: Rock hops into the bucket (CVW_HOP); a box says to lower him, with a knob turning in it (CVW_LOWER);
+ * any knob winds the rope out, the bucket going down with only the top of Rock showing over its rim, and the camera
+ * coming in on the well as it goes; once the bucket is under the rim the rope snaps (CVW_SNAP), and the camera dives
+ * after him as it always has (cv.dive, from CV_DIVE_IN). REC while lowering: Rock hops back out. */
+enum { CVW_NONE, CVW_HOP, CVW_LOWER, CVW_SNAP };
+#define CVW_HOP_MS 560
+#define CVW_SNAP_MS 900
+#define CVW_STEP 12                              /* how far down a knob's click takes the bucket (of 256) */
+#define CVW_ZMAX 836                             /* how close the camera is with the bucket all the way down */
 #define CV_BOARD_X 824                           /* the scores board, on the small ledge high on the right wall */
 #define CV_BOARD_Y 176
 static struct {
     int32_t x, y, vx, vy, th, coy, drag, acc, camx, camy, t, fade, roll_px, sq[5], psst, power_t, boost_t, chime_t[CV_NCHIME], ring_t;
-    int32_t dive, dive_x, dive_y;                /* dive: ms since PLAY at the well (0: not diving); from where */
+    int32_t dive, dive_x, dive_y;                /* dive: ms into the last of the way down (0: not diving); from where */
+    int32_t wl, wt, low, zw;                     /* the well: phase (CVW_...), ms in it, how far the bucket is down (0..256), the zoom */
+    uint8_t wturned;                             /* a knob has been turned at the bucket: the helper goes */
     uint8_t secrets, chimes, friend_awake;       /* secrets: bit 0 the sleeper, 1 the chimes, 2 the ring */
     uint8_t g, inited, met, near;                /* near: 0 nothing, 1 the Hat, 2 the jukebox, 3..5 a machine */
     uint8_t at_juke, juke_ready;                 /* in front of the jukebox; it offers a new song (not until Rock has
                                                     left it once after the last one was kept) */
 } cv;
+static int32_t cvw_by(void) { return CV_WELL_Y - 58 + cv.low * 50 / 256; }   /* the bucket's rim (world y) */
 static uint8_t story;                            /* 0 the intro, 1 in the cave, 2 asked to mend the jukebox, 3 the light is back, 4 power */
 
 static void cave_enter(int fresh)
 {
     if (!cv.inited || fresh) { cv.x = Q8(134); cv.y = cave_floor_q8(Q8(134)) - Q8(9); cv.vx = 0; cv.vy = 0; cv.th = 0; cv.inited = 1; cv.camx = 0; cv.camy = Q8(CV_GROUND - 250); cv.psst = 0; }
-    cv.fade = 256; cv.drag = 0; cv.t = 0; cv.dive = 0;
+    cv.fade = 256; cv.drag = 0; cv.t = 0; cv.dive = 0; cv.wl = 0; cv.low = 0; cv.zw = 256;
     if (story >= 2) cv.met = 1;                  /* the Hat has said its piece: no calling from off the screen */
     sy_drone_want = story >= 4 ? 0 : 150;
     sy_music_want = 256;
@@ -213,6 +239,49 @@ static int cave_tick(int32_t dt)
     cv.fade = imax(0, cv.fade - dt * 256 / 1200);
     if (cv.power_t > 0) cv.power_t = imax(0, cv.power_t - dt);
     if (dlg_tick(dt)) { sy_rumble_want = 0; return CVA_NONE; }
+    if (cv.wl) {                                 /* the well: into the bucket, lowered by the knobs, the rope snaps */
+        int32_t fy = cave_floor_q8(Q8(CV_WELL_X)) - rock_rad(cv.th), tx, ty, ox = cv.x, k;
+        cv.wt += dt;
+        tx = iclamp(Q8(CV_WELL_X - 120), 0, Q8(CV_W - 240)); ty = Q8(CV_GROUND - 132);   /* the camera: the well to the middle */
+        cv.camx += (tx - cv.camx) * imin(160, dt) / 160;
+        cv.camy += (ty - cv.camy) * imin(300, dt) / 300;
+        sy_rumble_want = 0;
+        if (cv.wl == CVW_HOP) {                  /* a hop up and into the bucket */
+            int32_t e = ease8(imin(256, cv.wt * 256 / CVW_HOP_MS));
+            cv.x = cv.dive_x + (Q8(CV_WELL_X) - cv.dive_x) * e / 256;
+            cv.y = cv.dive_y + (Q8(cvw_by() - 3) - cv.dive_y) * e / 256 - ((isin(imin(256, cv.wt * 256 / CVW_HOP_MS) * 128) * 40) >> 6);
+            cv.th += (cv.x - ox) * 1372 / 256;
+            if (cv.wt >= CVW_HOP_MS) { cv.wl = CVW_LOWER; cv.wt = 0; cv.th = 0; sfx(76, 0, 90, W_TRI, 2200, 2, 80); sfx(60, 30, 140, W_NOISE, 400, 2, 60); }
+            return CVA_NONE;
+        }
+        if (cv.wl == CVW_LOWER) {
+            k = in.any_knob - in.enc[ENC_ALGORITHM];
+            if (k) {                             /* the rope out (or back in): a creak a click */
+                int32_t was = cv.low;
+                cv.low = iclamp(cv.low + k * CVW_STEP, 0, 256);
+                if (cv.low != was) { cv.wturned = 1; sfx(50 + (int32_t)(cv.low >> 5), 0, 70, W_SQUARE, 900, 1, 40); sfx(96, 0, 40, W_NOISE, 300, 1, 20); }
+            }
+            cv.x = Q8(CV_WELL_X); cv.y = Q8(cvw_by() - 3);
+            cv.zw = 256 + (CVW_ZMAX - 256) * ease8(cv.low) / 256;
+            led_breathe_want |= 1u << BTN_REC;
+            if (BDOWN(BTN_REC)) {                /* out again, onto the floor by the well */
+                cv.wl = 0; cv.low = 0; cv.zw = 256; cv.x = Q8(CV_WELL_X + 30); cv.y = cave_floor_q8(Q8(CV_WELL_X + 30)) - rock_rad(cv.th);
+                cv.vx = cv.vy = 0; cv.drag = 0; cv.g = 1; snd_ui(67);
+                return CVA_NONE;
+            }
+            if (cv.low >= 256) {                 /* under the rim, as close as it goes: the rope snaps */
+                cv.wl = CVW_SNAP; cv.wt = 0;
+                sfx(96, 0, 160, W_NOISE, 3000, 1, 120); sfx_ex(79, 0, 500, W_SAW, 2600, 1, 120, 0, 0, 65000);
+            }
+            return CVA_NONE;
+        }
+        if (cv.wt >= CVW_SNAP_MS / 3 && cv.wt - dt < CVW_SNAP_MS / 3)   /* and down it goes */
+            { sfx_ex(84, 0, 1300, W_SINE, 2600, 30, 230, 0, 0, 65250); sfx_ex(72, 420, 1100, W_TRI, 2000, 60, 230, 0, 0, 65200); }
+        if (cv.wt >= CVW_SNAP_MS) {              /* the rest is the dive, from the camera's last push on */
+            cv.wl = 0; cv.dive = CV_DIVE_IN; cv.x = Q8(CV_WELL_X); cv.y = fy + Q8(30);
+        }
+        return CVA_NONE;
+    }
     if (cv.dive) {                               /* down the well: a hop over the rim, the drop, the camera after it */
         int32_t fy = cave_floor_q8(Q8(CV_WELL_X)) - rock_rad(cv.th), tx, ty, ox = cv.x;
         cv.dive += dt;
@@ -263,9 +332,16 @@ static int cave_tick(int32_t dt)
         } else cv.vx += (knob * 160) >> 7;       /* a little steering in the air */
         cv.vx = iclamp(cv.vx, -Q8(190), Q8(190));
         cv.vy += GR >> 7;
-        {   /* the dip in front of the jukebox: it slows Rock and draws it to the middle, so only a firm roll goes by */
-            int32_t dx = (cv.x >> 8) - CV_JUKE_X;
-            if (iabs(dx) < CV_DIP_W && cv.y > Q8(CV_GROUND - 30)) cv.vx -= ((GR * dx / 20 * (CV_DIP_W - iabs(dx)) / CV_DIP_W) >> 7) + cv.vx / 40;
+        {   /* the dips in front of the jukebox, the machines and (mended) the well, all alike: they slow Rock and draw
+               it to the middle, so only a firm roll goes by */
+            int32_t dx, m, mx, my;
+            for (m = 0; m < (story >= 4 ? 5 : 4); m++) {   /* the jukebox, the three machines, the well */
+                mx = m == 0 ? CV_JUKE_X : m == 4 ? CV_WELL_X : CV_MACH[m - 1][0];
+                my = m == 0 || m == 4 ? CV_GROUND : CV_MACH[m - 1][1];
+                dx = (cv.x >> 8) - mx;
+                if (cv.g && iabs(dx) < CV_DIP_W && iabs((cv.y >> 8) - my) < 30)
+                    cv.vx -= ((GR * dx / 30 * (CV_DIP_W - iabs(dx)) / CV_DIP_W) >> 7) + cv.vx / 60;
+            }
         }
         if (cv.g) cv.coy = 13; else if (cv.coy > 0) cv.coy--;
         if (first && jump >= 0 && cv.coy > 0) {
@@ -282,7 +358,7 @@ static int cave_tick(int32_t dt)
         cv.g = 0;
         for (k = 0; k < CV_NPLAT; k++) {
             const cv_plat_t *p = &CV_PLAT[k];
-            int32_t top = k == 0u ? cave_floor_q8(cv.x) : Q8(p->y);
+            int32_t top = cave_top_q8(k, cv.x);
             if (cv.vy < 0 || cv.x < Q8(p->x0 - 5) || cv.x > Q8(p->x1 + 5)) continue;
             if (k == 0u ? bot >= top : (py + rad <= top + 256 && bot >= top)) {
                 cv.y = top - rad;
@@ -351,7 +427,7 @@ static int cave_tick(int32_t dt)
     if (cv.at_juke && (story < 4 || cv.juke_ready)) cv.near = 2;
     if (iabs(hx - CV_BOARD_X) < 22 && iabs(hy - (CV_BOARD_Y - 8)) < 22) cv.near = 6;
     if (hx < CV_DOOR_X + 26 && hy > 190 - 40 && hy < 190) cv.near = 7;
-    if (iabs(hx - CV_WELL_X) < 20 && hy > CV_GROUND - 40) cv.near = 8;
+    if (story >= 4 && iabs(hx - CV_WELL_X) < 20 && hy > CV_GROUND - 40) cv.near = 8;   /* (no well before the jukebox is mended) */
     for (i = 0; i < 3; i++) if (iabs(hx - CV_MACH[i][0]) < 26 && iabs(hy - (CV_MACH[i][1] - 8)) < 22) cv.near = (uint8_t)(3 + i);
     if (cv.near) led_play_breathe = 1;
     if (BDOWN(BTN_PLAY) && cv.near) {
@@ -360,9 +436,8 @@ static int cave_tick(int32_t dt)
         else if (cv.near == 6) act = CVA_SCORES;
         else if (cv.near == 7) act = CVA_EXIT;
         else if (cv.near == 8 && story >= 4) {   /* the well: Rock dives in, and the game begins when the dive is over */
-            cv.dive = 1; cv.dive_x = cv.x; cv.dive_y = cv.y; cv.near = 0;
-            sfx_ex(84, 0, 1300, W_SINE, 2600, 30, 230, 0, 0, 65250); sfx_ex(72, 420, 1100, W_TRI, 2000, 60, 230, 0, 0, 65200);
-            sfx(96, 0, 70, W_NOISE, 500, 1, 160);
+            cv.wl = CVW_HOP; cv.wt = 0; cv.low = 0; cv.zw = 256; cv.wturned = 0; cv.dive_x = cv.x; cv.dive_y = cv.y; cv.near = 0;
+            sfx(72, 0, 120, W_TRI, 2200, 2, 120); sfx(96, 0, 70, W_NOISE, 500, 1, 160);
         }
         else if (story >= 4 && cv.near <= 5) act = CVA_M1 + cv.near - 3;
         else { banner_show("", TR(T_NOPOWER), 0); sfx_ex(43, 0, 260, W_SAW, 2400, 2, 120, 0, 0, 65300); }
@@ -477,6 +552,106 @@ static void cave_cabinet(int32_t x, int32_t y, int which, int32_t lit, uint32_t 
     galpha(256);
 }
 
+/* the well at (x, y), y its foot. front 0: the well as a layer behind Rock (all of it, the bucket hanging; once Rock is
+ * in the bucket, only what is behind it: the roof, the posts, the windlass, the back of the ring and its dark mouth).
+ * front 1, with Rock in the bucket: the front of the ring and its stones, then the rope, Rock and the bucket, cut off at
+ * the ring's near lip, so they go down between its back and its front */
+static void cave_well_stones(int32_t x, int32_t y)
+{
+    int32_t k;
+    grect(x - 24, y - 24, 49, 24, th->panel);
+    gellf(x, y - 24, 24, 6, th->panel, 1);       /* (the near half of the ring's top) */
+    gellf(x, y - 24, 20, 4, th->bg, 1);          /* (the mouth's near half, dark) */
+    for (k = 0; k < 3; k++) ghl(x - 24, x + 25, y - 12 + k * 6, th->mute);
+    for (k = 0; k < 3; k++) { int32_t r = k & 1 ? 6 : 0, j; for (j = -21 + r; j < 24; j += 12) gline(x + j, y - 18 + k * 6, x + j, y - 12 + k * 6, th->mute); }
+    garc(x, y - 24, 24, 6, 0, 32768, th->rim, 0); garc(x, y - 24, 20, 4, 0, 32768, th->mute, 0);
+    gline(x - 24, y - 24, x - 24, y, th->rim); gline(x + 24, y - 24, x + 24, y, th->rim);
+}
+static void cave_well_load(int32_t x, int32_t y, int32_t by, int32_t snap, int inb, uint32_t tm, int32_t lit)
+{
+    int32_t k, cut = y - 34, xy[8];
+    if (snap < 0) { gline(x, y - 64, x, by - 14, th->text); gline(x + 1, y - 64, x + 1, by - 14, th->stem); }
+    else {                                       /* snapped: the top end springs up and swings, the rest goes down */
+        int32_t up = imin(22, snap / 12), sw = snap < 600 ? (tsin(tm, 70, 0) * (600 - snap) / 600) >> 12 : 0;
+        gline(x, y - 64, x + sw, cut - up, th->text); gline(x + 1, y - 64, x + 1 + sw, cut - up, th->stem);
+        if (snap < 350) for (k = 0; k < 8; k++) {   /* the snap: a burst at the cut, frayed bits flying */
+            int32_t a = k * 8192 + 2000, r0 = 2 + snap / 30, r1 = 5 + snap / 12;
+            galpha(lit * (350 - snap) / 350);
+            gline(x + ((r0 * icos(a)) >> 14), cut + ((r0 * isin(a)) >> 14), x + ((r1 * icos(a)) >> 14), cut + ((r1 * isin(a)) >> 14), k & 1 ? th->text : th->pad);
+            galpha(lit);
+        }
+    }
+    if (inb && snap < CVW_SNAP_MS / 2)           /* Rock in it, his eyes just over its rim */
+        rock_draw(x, by - 3, 256, 0, (tm % 3100u) < 150u ? 30 : 256, th->rock, th->rock_rim, th->dark, th->moss, th->eye, th->pupil);
+    xy[0] = x - 10; xy[1] = by; xy[2] = x + 10; xy[3] = by; xy[4] = x + 8; xy[5] = by + 10; xy[6] = x - 8; xy[7] = by + 10;
+    gpoly(xy, 4, th->stem); gpolyline(xy, 4, 1, th->rim);
+    ghl(x - 9, x + 10, by + 3, th->rim); ghl(x - 8, x + 9, by + 7, th->rim);
+    if (snap < 0) garc(x, by, 10, 14, 32768, 65536, th->rim, 0);   /* the handle, arched over Rock's head */
+}
+static void cave_well(int32_t x, int32_t y, int on, uint32_t tm, int front)
+{
+    int32_t by = y - (CV_WELL_Y - cvw_by()), k, lit = imax(110, cave_light(CV_WELL_X, CV_GROUND - 30)), ang = cv.low * 900;
+    int32_t snap = cv.wl == CVW_SNAP ? cv.wt : cv.dive ? CVW_SNAP_MS : -1, xy[8];
+    int inb = cv.wl >= CVW_LOWER || cv.dive;
+    if (snap >= 0) by += imin(60, snap * snap / 2000);   /* (the bucket falls once the rope is gone) */
+    galpha(lit);
+    if (front) {
+        cave_well_stones(x, y);
+        gclip_y1 = iclamp(y - 20, 0, AC_H);      /* (below the near lip: inside the well, out of sight) */
+        cave_well_load(x, y, by, snap, inb, tm, lit);
+        gclip_y1 = AC_H;
+        galpha(256);
+        return;
+    }
+    /* the roof, the posts, the windlass and its crank */
+    xy[0] = x - 34; xy[1] = y - 78; xy[2] = x + 34; xy[3] = y - 78; xy[4] = x; xy[5] = y - 100; gpoly(xy, 3, th->panel);
+    gline(x - 34, y - 78, x, y - 100, th->rim); gline(x, y - 100, x + 34, y - 78, th->rim); ghl(x - 34, x + 35, y - 78, th->rim);
+    for (k = 1; k < 4; k++) ghl(x - 34 + k * 8, x + 35 - k * 8, y - 78 - k * 5, th->mute);   /* (its shingles) */
+    grect(x - 25, y - 78, 4, 58, th->stem); grect(x + 22, y - 78, 4, 58, th->stem);
+    grect(x - 21, y - 69, 43, 3, th->stem);                                            /* the axle */
+    grect(x - 9, y - 72, 19, 9, th->stem); gbox(x - 9, y - 72, 19, 9, th->rim);        /* the drum, the rope wound on it */
+    for (k = 0; k < 4; k++) { int32_t o = ((k * 5 + (ang >> 11)) % 20 + 20) % 20 - 9; if (o > -9 && o < 9) gline(x + o, y - 71, x + o + 2, y - 64, th->text); }
+    {   int32_t cx = x + 28, cy = y - 68, hx = cx + ((7 * icos(ang)) >> 14), hy = cy + ((7 * isin(ang)) >> 14);
+        gline2(cx, cy, hx, hy, th->rim); grect(hx - 1, hy - 1, 3, 3, th->text); gdisc(cx, cy, 2, th->rim); }
+    /* the back of the ring of stones, its dark mouth */
+    gellf(x, y - 24, 24, 6, th->panel, 0); gellf(x, y - 24, 20, 4, th->bg, 0);
+    garc(x, y - 24, 24, 6, 32768, 65536, th->rim, 0); garc(x, y - 24, 20, 4, 32768, 65536, th->mute, 0);
+    if (on) {                                    /* its two lights, notes rising out of it */
+        static const col_t WC[2] = {AC_RGB(240, 96, 200), AC_RGB(110, 232, 210)};
+        for (k = 0; k < 2; k++) {
+            int32_t q = (int32_t)((tm / 3u + (uint32_t)k * 500u) % 1000u);
+            gdisc(x + (k ? 23 : -23), y - 82, 2, WC[k]);
+            galpha(lit * (256 - q * 256 / 1000) / 256);
+            if (!inb) gtext(x + (k ? 4 : -9) + (tsin(tm, 20, k * 20000) >> 12), y - 30 - q * 26 / 1000, "\xE2\x99\xAA", WC[k], 1);
+            galpha(lit);
+        }
+    }
+    if (!inb) { cave_well_stones(x, y); cave_well_load(x, y, by, snap, 0, tm, lit); }   /* (a layer: all of it, before Rock) */
+    galpha(256);
+}
+/* over the zoomed well: what to do, and a knob turning; gone once a knob has been turned */
+static void cave_well_help(uint32_t tm)
+{
+    static int32_t fade = 256;
+    int32_t a, sc = ts(1, 2), h, ang = (int32_t)(tm % 1400u) * 46811 / 1000, k, cx = 120, cy = 186;
+    fade = cv.wturned ? imax(0, fade - 24) : imin(256, cv.wt * 256 / 300);
+    if (fade <= 0) return;
+    a = fade;
+    while (sc > 1 && gblock_h(212, TR(T_WELL_LOWER), sc) > 2 * TLH(sc)) sc--;
+    h = gblock_h(212, TR(T_WELL_LOWER), sc);
+    galpha(a);
+    grect(8, 8, 224, h + 14, th->panel); gbox(8, 8, 224, h + 14, th->pad);
+    gblock(14, 15, 212, TR(T_WELL_LOWER), th->text, sc, 1);
+    galpha(a * 220 / 256); gdisc(cx, cy, 30, th->bg); galpha(a);   /* a knob, turning, an arrow round it */
+    gcirc(cx, cy, 16, th->text); gcirc(cx, cy, 15, th->text);
+    for (k = 0; k < 12; k++) { int32_t q = k * 5461 + ang; gp(cx + ((18 * icos(q)) >> 14), cy + ((18 * isin(q)) >> 14), th->mute); }
+    gline2(cx, cy, cx + ((12 * icos(ang - 16384)) >> 14), cy + ((12 * isin(ang - 16384)) >> 14), th->pad);
+    garc(cx, cy, 25, 25, 40000, 62000, th->pad, 1);
+    {   int32_t ex = cx + ((25 * icos(62000)) >> 14), ey = cy + ((25 * isin(62000)) >> 14);
+        gline2(ex, ey, ex - 6, ey - 1, th->pad); gline2(ex, ey, ex - 1, ey + 6, th->pad); }
+    galpha(256);
+}
+
 static void cave_draw(void)
 {
     int32_t cx = cv.camx >> 8, cy = cv.camy >> 8, i, k, lit;
@@ -541,11 +716,12 @@ static void cave_draw(void)
             continue;
         }
         for (x = imax(p->x0, cx - 4); x < imin(p->x1, cx + 244); x += 4) {
+            int32_t y0 = cave_top_q8((uint32_t)i, x << 8) >> 8, y1 = cave_top_q8((uint32_t)i, imin(x + 4, p->x1) << 8) >> 8;
             lit = cave_light(x, p->y);
             galpha(lit);
-            ghl(SX(x), SX(x + 4), SY(p->y), th->rim);
+            gline(SX(x), SY(y0), SX(x + 4), SY(y1), th->rim);
             for (k = 0; k < 3; k++)
-                if (((x / 4 + k * 3) % (5 + k * 2)) < 3 + k) { galpha(lit * (150 - k * 40) / 256); ghl(SX(x), SX(x + 4), SY(p->y + 3 + k * 4), th->bands[(k + i) % 5]); }
+                if (((x / 4 + k * 3) % (5 + k * 2)) < 3 + k) { galpha(lit * (150 - k * 40) / 256); gline(SX(x), SY(y0 + 3 + k * 4), SX(x + 4), SY(y1 + 3 + k * 4), th->bands[(k + i) % 5]); }
         }
         if (i) {                                 /* a ledge's ends hang as rock */
             if (p->x0 != CV_XL) { galpha(cave_light(p->x0, p->y)); gline(SX(p->x0), SY(p->y), SX(p->x0 + 10), SY(p->y + 16), th->rim); }
@@ -648,24 +824,7 @@ static void cave_draw(void)
             galpha(256);
         } else if (cv.power_t == 0 && (tm % 3100u) < 90u) { galpha(200); gline(x - 3, y - 26, x + 2, y - 22, th->pad); gline(x + 2, y - 22, x - 1, y - 20, th->pad); galpha(256); }   /* a spark */
     }
-    {   /* the well: a ring of stones in the floor, two lights in it once the power is back, notes rising */
-        int32_t x = SX(CV_WELL_X), y = SY(CV_GROUND);
-        galpha(imax(90, cave_light(CV_WELL_X, CV_GROUND - 20)));
-        gellf(x, y - 3, 17, 6, th->panel, 0); garc(x, y - 3, 17, 6, 0, 65536, th->rim, 0);
-        gellf(x, y - 3, 11, 3, th->bg, 0);
-        grect(x - 18, y - 12, 3, 10, th->stem); grect(x + 16, y - 12, 3, 10, th->stem);
-        galpha(256);
-        if (on) {
-            static const col_t WC[2] = {AC_RGB(240, 96, 200), AC_RGB(110, 232, 210)};
-            for (k = 0; k < 2; k++) {
-                int32_t q = (int32_t)((tm / 3u + (uint32_t)k * 500u) % 1000u);
-                gdisc(x + (k ? 17 : -17), y - 14, 2, WC[k]);
-                galpha(256 - q * 256 / 1000);
-                gtext(x + (k ? 4 : -9) + (tsin(tm, 20, k * 20000) >> 12), y - 12 - q * 26 / 1000, "\xE2\x99\xAA", WC[k], 1);
-                galpha(256);
-            }
-        }
-    }
+    if (story >= 4) cave_well(SX(CV_WELL_X), SY(CV_WELL_Y), on, tm, 0);   /* the well, once the jukebox is mended (a surprise): behind Rock (its front again over the bucket) */
     {   /* the scores board: a little sign with a cup on it, readable in any light */
         int32_t x = SX(CV_BOARD_X), y = SY(CV_BOARD_Y);
         galpha(imax(110, cave_light(CV_BOARD_X, CV_BOARD_Y - 20)));
@@ -675,7 +834,7 @@ static void cave_draw(void)
         gp(x - 6, y - 29, th->caps[3]); gp(x + 5, y - 29, th->caps[3]);
         galpha(256);
     }
-    for (i = 0; i < 3; i++) cave_cabinet(SX(CV_MACH[i][0]), SY(CV_MACH[i][1]), i, cave_light(CV_MACH[i][0], CV_MACH[i][1] - 20), tm);
+    for (i = 0; i < 3; i++) cave_cabinet(SX(CV_MACH[i][0]), SY(CV_MACH[i][1] + CV_MDIP_D), i, cave_light(CV_MACH[i][0], CV_MACH[i][1] - 20), tm);
     /* the Hat, a little off the ground, watching */
     {
         int32_t x = SX(CV_HAT_X), y = SY(CV_GROUND - 22) + (tsin(tm, 16, 0) >> 12);
@@ -683,9 +842,10 @@ static void cave_draw(void)
         galpha(34); gdisc(x, y - 6, 30, th->pad); galpha(256);
         hat_draw(x, y, 120, th->dark ? HEXC(0x0c1216) : th->hat, th->hat_eye, th->hat_pupil, bl, iclamp(((cv.x >> 8) - CV_HAT_X) * 256 / 70, -256, 256), th->dark, th->hat_rim, 256);
     }
-    if (cv.dive >= CV_DIVE_HOP) {                /* into the well: smaller as it drops, and gone behind the near rim */
+    if (cv.wl >= CVW_LOWER || cv.dive) cave_well(SX(CV_WELL_X), SY(CV_WELL_Y), on, tm, 1);   /* (Rock in the bucket: drawn with it) */
+    else if (cv.dive >= CV_DIVE_HOP) {           /* into the well: smaller as it drops, and gone behind the near rim */
         int32_t q = imin(256, (cv.dive - CV_DIVE_HOP) * 256 / (CV_DIVE_IN - CV_DIVE_HOP));
-        gclip_y1 = iclamp(SY(CV_GROUND) - 1, 0, AC_H);
+        gclip_y1 = iclamp(SY(CV_WELL_Y) - 1, 0, AC_H);
         rock_draw(SX(cv.x >> 8), SY(cv.y >> 8), 256 - q * 120 / 256, cv.th, 256, th->rock, th->rock_rim, th->dark, th->moss, th->eye, th->pupil);
         gclip_y1 = AC_H;
     } else
@@ -712,7 +872,7 @@ static void cave_draw(void)
             px = SX(CV_MACH[cv.near - 3][0]); py = ty - TLH(ts(1, 3)) - 4 - 6 + 6 * ts(1, 3);
         }
         if (cv.near == 8) {                      /* the well: its name, and what PLAY does over that */
-            int32_t ty = SY(CV_GROUND) - 46 - 5 * ts(1, 3);
+            int32_t ty = SY(CV_WELL_Y) - 106 - 5 * ts(1, 3);
             gfit(SX(CV_WELL_X), ty, 232, "UNDERSONG", on ? th->caps[(tm / 500u) % 5u] : th->mute, ts(1, 3));
             if (!on) s = TR(T_NOPOWER);
             px = SX(CV_WELL_X); py = ty - TLH(ts(1, 3)) - 4 - 6 + 6 * ts(1, 3);
@@ -726,12 +886,17 @@ static void cave_draw(void)
     }
     if (cv.power_t > 0) { galpha(cv.power_t * 256 / 1600); grect(0, 0, 240, 240, th->pad); galpha(256); }
     dlg_draw();
-    if (cv.dive) {                               /* the camera goes in on the well's mouth, and then down it into the dark */
+    if (cv.wl >= CVW_LOWER) {                    /* the camera comes in on the well as the bucket goes down, a shake as the rope snaps */
+        int32_t sh = cv.wl == CVW_SNAP && cv.wt < 300 ? (tsin(tm, 40, 0) * (300 - cv.wt) / 300) >> 13 : 0;
+        gzoom(SX(CV_WELL_X) + sh, SY(CV_WELL_Y) - 50 + (36 * ease8(cv.low) >> 8), cv.zw);
+        if (cv.wl == CVW_LOWER) cave_well_help(tm);
+    }
+    if (cv.dive) {                               /* the camera goes on in, down the well into the dark */
         int32_t d = cv.dive, z;
         if (d < CV_DIVE_HOP) z = 256 + ease8(d * 256 / CV_DIVE_HOP) * 160 / 256;
         else if (d < CV_DIVE_IN) z = 416 + ease8((d - CV_DIVE_HOP) * 256 / (CV_DIVE_IN - CV_DIVE_HOP)) * 420 / 256;
-        else { int32_t q = imin(256, (d - CV_DIVE_IN) * 256 / (CV_DIVE_MS - CV_DIVE_IN)); z = 836 + q * q / 256 * q / 256 * 7000 / 256; }
-        gzoom(SX(CV_WELL_X), SY(CV_GROUND) - 3, z);
+        else { int32_t q = imin(256, (d - CV_DIVE_IN) * 256 / (CV_DIVE_MS - CV_DIVE_IN)); z = CVW_ZMAX + q * q / 256 * q / 256 * 7000 / 256; }
+        gzoom(SX(CV_WELL_X), SY(CV_WELL_Y) - 14, z);
         if (d > CV_DIVE_IN) gveil(th->bg, (uint32_t)imin(32, (d - CV_DIVE_IN) * 32 / (CV_DIVE_MS - CV_DIVE_IN - 60)));
     }
     gfade(cv.fade);

@@ -1,0 +1,27 @@
+# NOTE RALLY as the story's fourth chapter (DUO=3), beside a friend who never misses, played by hand: a key serves;
+# Rock stays where it is, so the note falls when it comes back to another lane, and is served again; a knob rolls
+# Rock to another lane
+900 btn 12
+1400 shot
+1700 btn 12
+2200 shot
+2500 btn 12
+7000 shot
+8000 keys 4096
+8200 keys 0
+8700 shot
+10200 shot
+11500 shot
+13000 shot
+14000 enc 2 1
+14200 shot
+15000 keys 2
+15200 keys 0
+16500 shot
+22000 keys 33554432
+22200 keys 0
+23000 shot
+30000 keys 4096
+30200 keys 0
+72000 shot
+73000 end

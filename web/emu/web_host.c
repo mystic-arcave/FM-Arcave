@@ -144,7 +144,7 @@ EXPORT uint32_t web_clock_q8(void) { return tr_now_q8(); }
 EXPORT uint32_t web_bpm_q8(void) { return tr_bpm_q8; }
 /* UNDERSONG (ac_duo.h), for the tests and the page: its state, seat << 4, a friend there << 5, the game << 8, chapters
  * cleared << 12, result written << 16, stars << 17; and the score as this FM-1 has it */
-EXPORT uint32_t web_duo(void) { return du.state | (uint32_t)du.seat << 4 | (uint32_t)(du_peer() ? 1 : 0) << 5 | (uint32_t)du.mission << 8 | (uint32_t)duo_prog << 12 | (uint32_t)du.latched << 16 | (uint32_t)du.stars << 17; }
-EXPORT int32_t web_duo_score(int who) { du_score(); return who < 0 ? du.score : du.sc[who & 1]; }
+EXPORT uint32_t web_duo(void) { return du.state | (uint32_t)(du.seat & 3u) << 4 | (uint32_t)(du_peer() ? 1 : 0) << 6 | (uint32_t)du.mission << 8 | (uint32_t)duo_prog << 12 | (uint32_t)du.latched << 16 | (uint32_t)du.stars << 17 | (uint32_t)du.np << 20; }
+EXPORT int32_t web_duo_score(int who) { du_score(); return who < 0 ? du.score : du.sc[who & 3]; }
 EXPORT uint32_t web_tick(void) { return tr_tick; }
 EXPORT uint32_t web_scene(void) { return scene | (uint32_t)story << 8 | (uint32_t)lang << 16 | (uint32_t)lk.state << 24; }

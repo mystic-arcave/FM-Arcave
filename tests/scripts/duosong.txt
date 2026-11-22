@@ -1,0 +1,14 @@
+# UNDERSONG with its story told (DUO=4) and a friend who never misses, every note of yours caught (CATCH=1): the list
+# of the four games; TWIN ROAD opened; a knob turns its card from SPORE DRIFT to the next song, MYCELIUM NIGHTS; both
+# ready, and that song is the one played and scored
+500 shot
+900 enc 2 1
+1400 btn 12
+2100 shot
+2500 enc 2 1
+3000 shot
+3400 btn 12
+9000 shot
+20000 shot
+55000 shot
+56000 end

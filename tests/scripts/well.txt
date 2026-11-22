@@ -1,20 +1,34 @@
-# the well in the Arcave's floor (the cave lit, Rock beside it): UNDERSONG's name and START over it; PLAY: Rock hops
-# into the well and the camera goes in after it; then the waiting screen, Rock falling (CC 110 goes out), its lines
-# one after another; a key played alone; REC: dark, and back up by the well (the friend is told: op 9)
+# the well in the Arcave's floor (the cave lit, Rock beside it): an old well, a bucket on its rope; UNDERSONG's name
+# and START over it; PLAY: Rock hops into the bucket, a box says to lower him, a knob turning in it; KNOB 1 winds the
+# rope out (the box goes at the first click), the camera coming in as the bucket goes down; under the rim the rope
+# snaps and the camera dives after him; then the waiting screen, Rock falling (CC 110 goes out), its lines one after
+# another; a key played alone; REC: dark, and back up by the well (the friend is told: op 9)
 1500 shot
 2000 btn 12
-2350 shot
-2800 shot
-3250 shot
+2300 shot
+2700 shot
+3300 shot
+3500 enc 2 3
 3700 shot
-5200 shot
-6000 keys 4096
-6200 keys 0
-9300 shot
+4200 enc 2 5
+4500 shot
+5000 enc 2 6
+5300 shot
+5800 enc 2 6
+5900 enc 2 4
+6000 shot
+6200 shot
+6500 shot
+6900 shot
+7300 shot
+9200 shot
+10000 keys 4096
+10200 keys 0
 13300 shot
 17300 shot
 21300 shot
-24000 btn 13
-24200 shot
-25500 shot
-26000 end
+25300 shot
+28000 btn 13
+28200 shot
+29500 shot
+30000 end
