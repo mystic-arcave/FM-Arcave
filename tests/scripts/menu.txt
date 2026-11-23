@@ -17,4 +17,8 @@
 5850 shot
 6100 enc 0 1
 6350 shot
-6800 end
+6600 enc 0 1
+6850 shot
+7100 enc 0 1
+7350 shot
+7600 end

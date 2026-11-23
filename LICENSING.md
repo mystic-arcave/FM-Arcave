@@ -25,6 +25,19 @@ complete source under the same licence too.
 | --- | --- | --- |
 | Terminus font 8x16 (ter-u16n), rendered into `firmware/gen/felucca_font.h` | SIL OFL 1.1 | `assets/fonts/Terminus-LICENSE.txt` |
 | JieLi AC79 SDK: `uboot.boot`, `cfg_tool.bin`, `eq_cfg_hw.bin` are read from your SDK checkout at build time and placed in the package; no SDK files are in this tree | Apache-2.0 | <https://gitee.com/Jieli-Tech/fw-AC79_AIoT_SDK> |
+| Optimist's Bluetooth LE stack by Henri David (hdavid, <https://github.com/w0ts/optimist>), the hardware-tested copy in fm1-base by Charles Vestal (<https://github.com/charlesvestal/fm1-base>, `bt/ble`), as JIANT FM carries it (<https://github.com/juanjiant-bit/JIANT>: with its RSSI hook, unused here, and its pairing key made again instead of kept, `BLE_LTK_DERIVE`). The peripheral's files only: the scanner and the central role (`ble_scan.c`, `ble_ll_central.c`, `ble_hw_wl82_central.c`, `ble_central.c`, `ble_gattc.c`, `ble_smp_init.c`) are left out. Used under the GPL-3.0-only option of its dual licence, headers kept. With it the host test of its BLE-MIDI codec | GPL-3.0-only OR MPL-2.0 | `firmware/bt/ble/`, `tests/ble_midi_test.c`, `LICENSES/MPL-2.0.txt` |
+| Melodee by Kerem Kilic (Ellic Studio, <https://github.com/keremimo/melodee>): the radio drivers as Melodee carries them (Optimist's, with Melodee's start-up replay), and the supplies' set-up the radio needs, as JIANT carries them | GPL-3.0-only | `firmware/hal/fm1_ble.h`, `firmware/hal/fm1_ble_rf.h`, `firmware/hal/fm1_power.h` |
+| JIANT FM by Juan Ignacio Antonucci (Juan Jiant, <https://github.com/juanjiant-bit/JIANT>): the Bluetooth unit and its glue (the start with the interrupts off, the boot guard, the address, MIDI in and out), from which FM-ARCAVE's are taken; its host test of the rings | GPL-3.0-only | `firmware/bt/bt_radio.c` (JIANT's `bt_seg.c`), `firmware/bt/bt_midi.h`, `firmware/src/bt.c` (after JIANT's `bt.c`, `bt_hw.c`), `tests/bt_midi_test.c` |
+| The radio's own calibration, JieLi's (the AC79 SDK's `wl_rf_common.a`) rewritten in C by Charles Vestal for felucca-bsp (<https://github.com/jmarianski/felucca-bsp>, `chip/`) | Apache-2.0 | `firmware/hal/fm1_rf_cal.h`, `LICENSES/Apache-2.0.txt` |
+| The radio's start-up values captured from M-VAVE's V15 (published under Apache-2.0 in fm1_open) and JieLi's SDK, as Optimist and felucca-bsp carry them | Apache-2.0 | `firmware/hal/ble_rf_tables_v15.h`, `LICENSES/Apache-2.0.txt` |
+
+## Radio
+
+Dinghy never switches the FM-1's radio on. FM-ARCAVE does, only while Bluetooth is ON (the default is OFF): a
+Bluetooth LE MIDI peripheral on Optimist's own stack, no JieLi library, linked into the app (`firmware/bt/`,
+`firmware/src/bt.c`). The stack's files are offered by their author under GPL-3.0-only OR MPL-2.0; FM-ARCAVE, and
+every package built from it, is GPL-3.0-only as a whole (the Apache-2.0 radio files above are one-way compatible with
+it). Whoever passes on a firmware built from this is responsible for what their radio transmits where they are.
 
 ## The logo
 

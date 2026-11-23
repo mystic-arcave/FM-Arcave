@@ -1,16 +1,18 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /* The settings, on GLO: the game holds still under a sheet of dark glass. SELECT (or KNOB 1) moves, PRESETS (or
  * KNOB 2) changes; PLAY or OCT+ confirms or steps on (OCT- steps back: in here they do not change the language);
- * GLO closes. ABOUT tells what the Mystic Arcave is. */
+ * GLO closes. ABOUT tells what the Mystic Arcave is. The first line is the player's profile (ac_shop.h); the last
+ * wipes the whole save, and only here: PLAY held on it for three seconds. BLUETOOTH is shown where there is a radio. */
 
-enum { MI_LANG, MI_TEXT, MI_EAR, MI_LOOK, MI_LINK, MI_ABOUT, MI_REPLAY, MI_SKIP, MI_RESET, MI_N };
-enum { MA_NONE, MA_REPLAY, MA_RESET, MA_CHANGED, MA_SKIP };
-static struct { uint8_t on, sel, about, sure; int32_t t, win, rest; } mn;
+enum { MI_PROFILE, MI_LANG, MI_TEXT, MI_EAR, MI_LOOK, MI_LINK, MI_BT, MI_ABOUT, MI_REPLAY, MI_SKIP, MI_RESET, MI_WIPE, MI_N };
+enum { MA_NONE, MA_REPLAY, MA_RESET, MA_CHANGED, MA_SKIP, MA_PROFILE, MA_WIPE, MA_BT };
+static struct { uint8_t on, sel, about, sure; int32_t t, win, rest, hold; } mn;
+static int mi_shown(int i) { return i != MI_BT || bt_state() != BT_NONE; }
 #ifndef APP_VER
 #define APP_VER "dev"
 #endif
 
-static void menu_open(void) { mn.on = 1; mn.sel = 0; mn.about = 0; mn.sure = 0; mn.t = 0; snd_ui(76); }
+static void menu_open(void) { mn.on = 1; mn.sel = 0; mn.about = 0; mn.sure = 0; mn.t = 0; mn.hold = 0; snd_ui(76); }
 static void set_lang(int l) { lang = (uint8_t)(((l % L_N) + L_N) % L_N); }
 static void set_look(int l) { look_i = (uint8_t)(l & 1); th = &LOOKS[look_i]; }
 
@@ -32,11 +34,27 @@ static int menu_tick(int32_t dt)
         return MA_NONE;
     }
     if (BDOWN(BTN_GLO) || BDOWN(BTN_HOME)) { mn.on = 0; snd_ui(67); return MA_NONE; }   /* (arcave.c: this press does not reopen it) */
-    if (mv) { mn.sel = (uint8_t)iclamp(mn.sel + (mv > 0 ? 1 : -1), 0, MI_N - 1); mn.sure = 0; snd_ui(64 + mn.sel); }
+    if (mv) {                                    /* (past a line that is not shown) */
+        int32_t k = mn.sel, d = mv > 0 ? 1 : -1;
+        do k += d; while (k >= 0 && k < MI_N && !mi_shown(k));
+        if (k >= 0 && k < MI_N) mn.sel = (uint8_t)k;
+        mn.sure = 0; mn.hold = 0; snd_ui(64 + mn.sel);
+    }
+    if (mn.sel == MI_WIPE) {                     /* the whole save: PLAY held three seconds, a bar filling */
+        led_play_breathe = 1; led_btn_want |= 1u << BTN_GLO;
+        if (BHELD(BTN_PLAY)) {
+            if (!mn.hold) snd_ui(60);
+            mn.hold += dt;
+            if (mn.hold >= 3000) { mn.hold = 0; mn.on = 0; return MA_WIPE; }
+        } else mn.hold = 0;
+        return MA_NONE;
+    }
     if (ok && !ch) ch = 1;
     if (ch) {
         int d = ch > 0 ? 1 : -1;
         switch (mn.sel) {
+        case MI_PROFILE: if (ok) { mn.on = 0; act = MA_PROFILE; } break;
+        case MI_BT: act = MA_BT; break;          /* (arcave.c turns the radio and keeps the setting) */
         case MI_LANG: set_lang(lang + d); act = MA_CHANGED; break;
         case MI_TEXT: tsize = (uint8_t)((tsize + 3 + d) % 3); act = MA_CHANGED; break;
         case MI_EAR: sy_ear = !sy_ear; act = MA_CHANGED; break;
@@ -54,7 +72,9 @@ static int menu_tick(int32_t dt)
 }
 static void menu_draw(void)
 {
-    static const int LAB[MI_N] = {T_LANGUAGE, T_TEXTSIZE, T_EAR, T_LOOK, T_LINK, T_ABOUT, T_REPLAY, T_SKIP, T_RESET};
+    static const int LAB[MI_N] = {T_PROFILE, T_LANGUAGE, T_TEXTSIZE, T_EAR, T_LOOK, T_LINK, T_BT, T_ABOUT, T_REPLAY, T_SKIP, T_RESET, T_WIPE_ALL};
+    static const int BTS[5] = {T_OFF, T_BT_START, T_BT_ADV, T_BT_CONN, T_BT_FAIL};
+    int bt_up = mn.sel == MI_BT && bt_state() != BT_OFF && bt_state() != BT_NONE;   /* the radio's line, and it is doing something */
     static const int LKS[4] = {T_LINK_ALONE, T_LINK_FOLLOW, T_LINK_LEAD, T_LINK_CLOCK};
     int32_t i, y, sh = ts(2, 4), sf = ts(1, 2), rh, vis, first, y0, foot;
     gveil(th->bg, 25);
@@ -84,8 +104,11 @@ static void menu_draw(void)
     y0 = 6 + TLH(sh) + 6;
     /* the foot: what the selected line has to say (or which knob does what), and how to close */
     foot = 238 - TLH(sf);
-    gfit(120, foot + 2 * sf, 232, TR(T_CLOSE), th->pad, sf);
+    /* (the radio: the name a computer lists it under, in the place of how to close) */
+    gfit(120, foot + 2 * sf, 232, bt_up && bt_name()[0] ? bt_name() : TR(T_CLOSE), th->pad, sf);
     foot -= TLH(sf);
+    if (bt_up) gfit(120, foot + 2 * sf, 232, TR(BTS[imin(bt_state(), 4)]), bt_state() == BT_FAILED ? th->caps[0] : th->caps[3], sf);   /* what it is doing */
+    else
     gfit(120, foot + 2 * sf, 232, mn.sel == MI_LINK && link_id ? TR(LKS[lk.state]) : mn.sel == MI_RESET && mn.sure ? TR(T_SURE)
          : "SELECT \xE2\x86\x91\xE2\x86\x93   OCT+ OK", mn.sel == MI_RESET && mn.sure ? th->caps[0] : mn.sel == MI_LINK && link_id ? th->caps[3] : th->mute, sf);
     /* the lines: as many as fit, the list moving under the selected one. A line too long for the size wraps its
@@ -98,7 +121,10 @@ static void menu_draw(void)
         for (i = 0; i < MI_N; i++) {
             const char *lab = TR(LAB[i]), *val = "";
             int32_t sc = sh;
-            if (i == MI_LANG) val = TR(T_LANG);
+            if (!mi_shown(i)) { vals[i] = val; scs[i] = sc; lw[i] = 216; hs[i] = 0; continue; }
+            if (i == MI_PROFILE) val = pf_named() ? pf.name : "\xE2\x86\x92";
+            else if (i == MI_BT) val = TR(pf.flags & PF_BT ? T_ON : T_OFF);
+            else if (i == MI_LANG) val = TR(T_LANG);
             else if (i == MI_TEXT) val = TR(T_SMALL + tsize);
             else if (i == MI_EAR) val = TR(sy_ear ? T_ON : T_OFF);
             else if (i == MI_LOOK) val = look_i ? "SLOW GLASS" : "BLACK OPAL";
@@ -114,11 +140,19 @@ static void menu_draw(void)
         while (first + vis < MI_N && tot + hs[first + vis] <= room) { tot += hs[first + vis]; vis++; }
         for (i = first, y = y0; i < first + vis; y += hs[i], i++) {
             int32_t sel = i == mn.sel, bh = gblock_h(lw[i], TR(LAB[i]), scs[i]);
-            if (sel) { grect(6, y, 228, hs[i] - 2, th->panel); gbox(6, y, 228, hs[i] - 2, th->pad); }
+            if (!hs[i]) continue;
+            if (sel) { grect(6, y, 228, hs[i] - 2, th->panel); gbox(6, y, 228, hs[i] - 2, i == MI_WIPE ? th->caps[0] : th->pad); }
             gblock(12, y + (hs[i] - 2 - bh) / 2, lw[i], TR(LAB[i]), sel ? th->text : th->mute, scs[i], 0);
             gtextr(228, y + (hs[i] - 2 - 5 * scs[i]) / 2 + 1, vals[i], sel ? th->pad : th->mute, scs[i]);
         }
     }
     if (first > 0) gtextc(120, y0 - 6, "\xE2\x86\x91", th->mute, 1);
     if (first + vis < MI_N) gtextc(120, foot - 5, "\xE2\x86\x93", th->mute, 1);
+    if (mn.sel == MI_WIPE) {                     /* what holding PLAY here does, and a bar that fills while it is held */
+        int32_t a = ts(1, 3), h = gblock_h(204, TR(T_WIPE), a), yb = y0 + 2;
+        grect(8, yb, 224, h + 30, th->panel); gbox(8, yb, 224, h + 30, th->caps[0]);
+        gblock(18, yb + 6, 204, TR(T_WIPE), th->text, a, 1);
+        gbox(30, yb + h + 14, 180, 9, th->mute);
+        grect(32, yb + h + 16, 176 * imin(mn.hold, 3000) / 3000, 5, th->caps[0]);
+    }
 }

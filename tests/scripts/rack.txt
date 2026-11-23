@@ -1,0 +1,83 @@
+# the music room: open the MUSHROOM RACK (its lesson the first time), then play it
+300 shot
+2000 btn 5
+2700 shot
+6000 shot
+9800 shot
+12800 shot
+15900 shot
+18200 shot
+21500 shot
+25200 shot
+30300 shot
+33500 shot
+37500 shot
+40500 shot
+44300 shot
+47500 shot
+52300 shot
+56500 shot
+# the lesson is over: the line with everything as it comes
+61000 shot
+62300 shot
+# three pods, the ends bounce
+63000 enc 5 1
+63040 enc 5 1
+64400 shot
+64600 enc 0 1
+65600 shot
+# SEQ: the reset on; held, LENGTH down to 8 sixteenths, ACCENT
+66000 btn 11
+67000 shot
+67200 btndown 11
+67400 enc 2 -1
+67600 enc 5 1
+68000 shot
+68200 btnup 11
+# top row: the line up three steps; a pod dropped by hand on cap 11
+68600 keys 0x100000
+68800 keys 0
+69200 keys 0x40000
+69300 shot
+69400 keys 0
+# other pods, another line, tilt the other way, the sieve off
+70000 enc 6 1
+70040 enc 6 1
+70080 enc 6 1
+70500 enc 1 1
+70540 enc 1 1
+70580 enc 1 1
+71500 shot
+72000 enc 3 -1
+72040 enc 3 -1
+72080 enc 3 -1
+72120 enc 3 -1
+72500 enc 4 -1
+72540 enc 4 -1
+72580 enc 4 -1
+72620 enc 4 -1
+72660 enc 4 -1
+72700 enc 4 -1
+72740 enc 4 -1
+72780 enc 4 -1
+73500 shot
+74000 enc 2 1
+74040 enc 2 1
+74080 enc 2 1
+74120 enc 2 1
+75000 shot
+# EDIT: numbered caps, two in hand, changed; then PLAY off
+75500 btn 6
+76000 shot
+76200 keys 0x810
+76500 enc 2 1
+76540 enc 2 1
+76700 enc 4 1
+76740 enc 4 1
+76780 enc 4 1
+77000 shot
+77200 keys 0
+77500 btn 6
+78000 btn 12
+79500 shot
+80000 end

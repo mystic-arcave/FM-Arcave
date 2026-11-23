@@ -499,6 +499,7 @@ static void du_latch(void)
 #endif
     if (du.cleared) snd_chime(1);
     else { sfx(60, 0, 500, W_TRI, 3000, 5, 150); sfx(55, 180, 500, W_TRI, 3000, 5, 150); sfx(48, 360, 1200, W_TRI, 3000, 5, 150); }
+    tix_pay(2 + (int32_t)du.stars * 6, th->caps[3]);   /* the tickets: two for playing with friends, six a star */
 }
 static void du_play_tick(int32_t now)
 {
@@ -673,6 +674,7 @@ static int duo_tick(int32_t dt)
 {
     int me, k, n, s, busy = 0;
     uint8_t it[8];
+    if (du.state == DUS_RESULT) tix_tick(dt); else tix.on = 0;   /* (the tickets come out over the result; the game runs on) */
 #ifdef AC_TEST_DUO                               /* (tests) friends always there, the seats after yours, ready when you are */
     if (duo_prog < AC_TEST_DUO) duo_prog = AC_TEST_DUO;   /* (that many chapters cleared on all; 4: the story told) */
     du.nonce = 1; du.last_rx = fm1_ms;
@@ -1419,5 +1421,6 @@ static void duo_draw(void)
         if (du.t > 600) { galpha(150 + ipulse(tm, 1500) * 106 / 256); gfit(120, 224, 232, TR(T_PRESSPLAY), th->pad, ts(1, 2)); galpha(256); }
         break; }
     }
+    if (du.state == DUS_RESULT) tix_draw();
     if (du_ask > 0 && (du.state == DUS_COUNT || du.state == DUS_PLAY)) rec_box_draw(0, tm);
 }

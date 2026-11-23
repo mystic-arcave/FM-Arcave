@@ -1,0 +1,25 @@
+# the pool: ENV opens it; levels, a mute, the current, the menu
+1500 btn 4
+2500 shot
+2600 enc 2 -5
+2800 enc 5 3
+3000 enc 6 -6
+3300 shot
+3400 keys 0x1
+3500 keys 0
+3600 btn 5
+4200 shot
+4300 btndown 5
+4400 enc 2 3
+4700 shot
+4800 btnup 5
+5000 btn 6
+5300 enc 0 6
+5600 enc 3 2
+5900 shot
+6000 enc 0 8
+6400 shot
+6600 btn 6
+7000 btn 8
+7600 shot
+8000 end

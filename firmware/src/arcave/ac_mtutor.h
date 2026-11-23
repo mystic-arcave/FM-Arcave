@@ -327,7 +327,7 @@ static void mt_road_bg(int32_t L, int32_t now, int32_t beat)
 static void mt_road_rock(int32_t x0, int32_t x1, int32_t f, uint32_t tm)
 {
     int32_t hop = 12 * f * (256 - f) / 16384;
-    rock_draw(x0 + (x1 - x0) * f / 256, MT_RY1 - 6 - hop, 180, (int32_t)tm * 40, (tm % 3100u) < 150u ? 40 : 256, th->rock, th->rock_rim, th->dark, th->moss, th->eye, th->pupil);
+    prock_draw(x0 + (x1 - x0) * f / 256, MT_RY1 - 6 - hop, 180, (int32_t)tm * 40, (tm % 3100u) < 150u ? 40 : 256);
 }
 /* steps A, B, C: the lesson's song on the road */
 static int mt_road_song(uint32_t tm, mt_act_t *act, uint32_t *lit)
@@ -728,7 +728,7 @@ static void mjo_front(int32_t ox, uint32_t tm)
     galpha(90); gtext(ox + 226, rail + 30, "\xE2\x99\xAA", th->mute, 1); galpha(256);
     /* Rock, the barista, behind the counter: a paper hat; a hop onto the till's button */
     if (t >= 2500 && t < 3000) hop = isin(iclamp((t - 2500) * 256 / 500, 0, 256) * 128) * 12 >> 14;
-    rock_draw(bx, by - hop, 860, 0, (tm % 3100u) < 150u ? 30 : 256, th->rock, th->rock_rim, th->dark, th->moss, th->eye, th->pupil);
+    prock_draw(bx, by - hop, 860, 0, (tm % 3100u) < 150u ? 30 : 256);
     {
         int32_t hy = by - hop - 36, xy[8];      /* (the brim down in the moss, the hat on the hair) */
         xy[0] = bx - 20; xy[1] = hy + 3; xy[2] = bx + 20; xy[3] = hy + 3; xy[4] = bx + 13; xy[5] = hy - 12; xy[6] = bx - 13; xy[7] = hy - 12;

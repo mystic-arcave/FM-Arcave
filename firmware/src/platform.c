@@ -7,6 +7,8 @@
  *   updater             the M-UPGRADE SysEx path: the web installer / the hub can always reach the FM-1
  *   MIDI                USB in and out, the FM-1's TRS jack in (midi_get: 1 USB, 2 TRS; midi_send); clock and
  *                       transport (F8 FA FB FC) reach the app too
+ *   Bluetooth           (FM-ARCAVE) BLE MIDI in and out, as a peripheral "FM-ARCAVE XXXX": bt_set, bt_state, bt_name
+ *                       (bt.c; midi_get: 3; midi_send goes to it too while a central listens). Off until bt_set(1)
  *   USB audio           the output as a class-compliant 16-bit stereo input, 44.1 or 48 kHz
  *   keys, knobs, LEDs   fm1_in.notes / buttons, fm1_input_edges, fm1_enc_take, fm1_led_key, fm1_led_key_glow
  *                       (hal/fm1_input.h; SMK-37: hal/smk_input.h, the same calls and velocity, pads, faders, wheels)
@@ -139,6 +141,9 @@ static uint32_t fm1_breaths(void) { return (fm1_ms - smk_br_t0) / 2250u; }
 #if BOARD_SMK37 && FELUCCA_UART
 #error "BOARD_SMK37: no UART MIDI IN (RX on PH8, a key-matrix row on the SMK)"
 #endif
+#ifndef FELUCCA_BT
+#define FELUCCA_BT (!BOARD_SMK37)               /* Bluetooth LE MIDI (bt.c, firmware/bt/): the FM-1 */
+#endif
 #include "usb.c"
 #if FELUCCA_UART
 #include "midi_uart.c"                          /* (sloopDX's, after Felucca Salt: the ring read by content; cable 1) */
@@ -268,8 +273,9 @@ static int sector_load(uint32_t at, void *p, uint32_t n)
 }
 static int settings_load(void *p, uint32_t n) { return sector_load(SETTINGS_AT, p, n); }
 static int settings_save(const void *p, uint32_t n) { return area_save(SETTINGS_AT, 1u, STORE_MAGIC, p, n); }
-static int blob_load(uint32_t i, void *p, uint32_t n) { return i < NBLOB ? sector_load(BLOBS_AT + i * 0x1000u, p, n) : -1; }
-static int blob_save(uint32_t i, const void *p, uint32_t n) { return i < NBLOB ? area_save(BLOBS_AT + i * 0x1000u, 1u, STORE_MAGIC, p, n) : -1; }
+/* (with Bluetooth, the FM-1: the last blob is the platform's, bt.c's record) */
+static int blob_load(uint32_t i, void *p, uint32_t n) { return i < NBLOB - FELUCCA_BT ? sector_load(BLOBS_AT + i * 0x1000u, p, n) : -1; }
+static int blob_save(uint32_t i, const void *p, uint32_t n) { return i < NBLOB - FELUCCA_BT ? area_save(BLOBS_AT + i * 0x1000u, 1u, STORE_MAGIC, p, n) : -1; }
 /* slot i: SLOT_SECT sectors, up to SLOT_MAX bytes. slot_load reads straight into p (no buffer that big): on -1 p holds
  * rubbish, start afresh */
 #define SLOT_MAGIC 0x544F4C53u                  /* "SLOT" */
@@ -315,8 +321,9 @@ static void smk_trim_read(void)
 }
 #endif
 
-/* ---- MIDI: USB and the TRS jack share one ring of 4-byte USB-MIDI packets (USB cable 0, the jack cable 1) */
-static int midi_get(uint8_t *st, uint8_t *d1, uint8_t *d2)   /* 1 (USB) or 2 (TRS): a message; 0: none */
+/* ---- MIDI: USB, the TRS jack and Bluetooth share one ring of 4-byte USB-MIDI packets (USB cable 0, the jack cable 1,
+ * Bluetooth cable 2: bt.c bt_midi_rx) */
+static int midi_get(uint8_t *st, uint8_t *d1, uint8_t *d2)   /* 1 (USB), 2 (TRS) or 3 (Bluetooth): a message; 0: none */
 {
     uint32_t pk;
     if (mi_r == mi_w)
@@ -326,11 +333,19 @@ static int midi_get(uint8_t *st, uint8_t *d1, uint8_t *d2)   /* 1 (USB) or 2 (TR
     *st = (uint8_t)(pk >> 8);
     *d1 = (uint8_t)(pk >> 16);
     *d2 = (uint8_t)(pk >> 24);
-    return pk & 0xF0u ? 2 : 1;
+    return (pk & 0xF0u) == 0x20u ? 3 : pk & 0xF0u ? 2 : 1;
 }
-static void midi_send(uint32_t st, uint32_t d1, uint32_t d2)   /* USB out, from the main loop only; F8 FA FB FC too */
+#if FELUCCA_BT
+static void bt_midi_tx(uint32_t pkt);           /* bt.c */
+#endif
+static void midi_send(uint32_t st, uint32_t d1, uint32_t d2)   /* USB out, and Bluetooth while a central listens; from the
+                                                                * main loop only; F8 FA FB FC too */
 {
-    midi_out_event((st >> 4) | st << 8 | (d1 & 0x7Fu) << 16 | (d2 & 0x7Fu) << 24);
+    uint32_t pkt = (st >> 4) | st << 8 | (d1 & 0x7Fu) << 16 | (d2 & 0x7Fu) << 24;
+    midi_out_event(pkt);
+#if FELUCCA_BT
+    bt_midi_tx(pkt);
+#endif
 }
 
 /* ---- the timer: 10 kHz key scan, milliseconds, USB at 2 kHz. It outranks the audio ISR; nested in a
@@ -416,6 +431,8 @@ void fm1_alnk0_irq(void)                       /* via isr_alnk0 (hal/fm1_isr.S) 
 }
 extern void isr_alnk0(void);
 
+#include "bt.c"                                 /* Bluetooth LE MIDI (the FM-1), or its stand-ins */
+
 /* ---- the main loop's duties: watchdog, USB, the installer's update request, the MASTER knob */
 static void platform_poll(void)
 {
@@ -440,6 +457,9 @@ static void platform_poll(void)
     }
     if (fm1_ms >= 30000u && bootguard.pending)
         bootguard_clear(&bootguard);            /* 30 s up: this firmware boots */
+#if FELUCCA_BT
+    bt_tick();                                  /* Bluetooth: its start (3 s after power-on, when asked for), its state */
+#endif
     {   /* the battery: read once a second, smoothed (the game turns it into a level, ac_base.h batt_pct) */
         static uint32_t batt_ms;
         if (fm1_ms - batt_ms >= 1000u) {
@@ -505,6 +525,9 @@ void fm1_cstart(void)
     flash_ok = FL_JEDEC_OK(FL_FAR(fl_jedec_ram)());
 #endif
     ota_boot_cleanup();
+#if FELUCCA_BT
+    bt_boot();                                  /* Bluetooth's boot guard; the supplies, if it was ON (bt.c) */
+#endif
     lcd_init();
     lcd_fill(0, 0, 240, 240, C_BLACK);
     fm1_input_init();
@@ -521,6 +544,10 @@ void fm1_cstart(void)
     fm1_timer5_start(isr_timer5, 4);
     fm1_guard_lock_top();
     fm1_irq_enable_all();
+#if FELUCCA_BT && defined(FELUCCA_BT_TEST)      /* (a test build, DINGHY_DEFS=-DFELUCCA_BT_TEST=1 ./build.sh: Bluetooth ON
+                                                 * from power-on whatever the app saved, to try the radio by itself) */
+    bt_set(1);
+#endif
     app_main();
     for (;;)
         platform_poll();

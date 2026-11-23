@@ -1,0 +1,22 @@
+# two machines played and Rock not named: back by the machines the Hat calls from the left; Rock rolls down to it and it
+# tells of the settings on GLO and a name for Rock (the tickets' talk has been had: DONE=3 and the test's flag)
+1500 shot
+2600 shot
+3000 enc 2 -6
+3200 enc 2 -6
+3400 enc 2 -6
+3600 enc 2 -6
+3800 enc 2 -6
+4000 enc 2 -6
+4200 shot
+5500 shot
+7000 shot
+7500 btn 12
+9500 shot
+10000 btn 12
+12000 shot
+12500 btn 12
+14500 shot
+15000 btn 12
+15500 shot
+16000 end

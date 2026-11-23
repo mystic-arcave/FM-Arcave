@@ -38,7 +38,7 @@ typedef struct {
 } rock_t;
 
 static struct {
-    uint8_t phase, turned, on_course, done, pad_jump, exact, on_pad, found, loop_on;
+    uint8_t phase, turned, on_course, done, pad_jump, exact, on_pad, found, loop_on, hollow;   /* hollow: Rock is in the one behind the start (a secret: arcave.c) */
     int32_t t;                                   /* ms in this phase */
     rock_t r;
     int32_t eyes, camx, camy, camz, cam_y, c_off, fade, hint, cave_a, cave_t, course_t, near, clean, bonus, spores, rings;
@@ -103,6 +103,7 @@ static void rock_phys(rock_t *s, int32_t knob, int32_t jump)
     if (jump >= 0 && s->coy > 0) {
         s->vy = imin(s->vy, 0) - Q8(JMIN) - (JMAX - JMIN) * jump;
         s->g = 0; s->coy = 0; s->jumped = 1;
+        deco_jump(KEY_ZONE[imax(in.hikey, 0)], s->x, s->y);
     }
     s->x += s->vx >> 7; s->y += s->vy >> 7;
     if (s->x < Q8(CO_XMIN)) { s->x = Q8(CO_XMIN); s->vx = imax(0, s->vx); }
@@ -252,6 +253,8 @@ static int intro_tick(int32_t dt)
     if (G.oct == 1 && (fm1_breaths() >= 3u || lang_touched || G.phase > IP_WIDE)) G.oct = 2;
     if (G.oct == 1) led_breathe_want |= 1u << BTN_OCT_DOWN | 1u << BTN_OCT_UP;
     if (in.kdown && G.phase != IP_TITLE) snd_keys(in.kdown, 0);
+    if (in.hikey >= 0 && G.phase == IP_PLAY) deco_key_fx(KEY_ZONE[in.hikey], r->x, r->y);
+    pfx_tick(dt);
     if (G.phase == IP_TITLE) {
         G.fade = G.t > 5600 ? imin(256, (G.t - 5600) * 256 / 600) : 0;
         if (G.t > 6200) { G.phase = IP_WIDE; G.t = -800; }
@@ -310,6 +313,8 @@ static int intro_tick(int32_t dt)
         } else {
             G.acc += dt * 128;
             while (G.acc >= 1000) { G.acc -= 1000; rock_phys(r, knob, first ? jump : -1); first = 0; }
+            deco_jump_tick(dt, r->g, r->x, r->y);
+            if (r->g) deco_trail(r->x, r->y + rock_rad(r->th), r->vx, dt);
         }
         if (G.step_cd > 0) G.step_cd -= dt;
         if (live && G.race && G.step_cd <= 0 && (r->g || r->coy > 0) && r->vx < -Q8(20))
@@ -340,6 +345,7 @@ static int intro_tick(int32_t dt)
         if (G.race_show > 0) G.race_show -= dt;
         /* the hollow behind the start is hidden by a rock face until Rock is up on the ledge and rolls into it */
         G.veil = iclamp(G.veil + (r->x < Q8(CO_WALLX - 16) ? -dt : dt) * 256 / 450, 0, 256);
+        if (live && r->x < Q8(CO_WALLX - 40) && G.veil < 64) G.hollow = 1;   /* well inside it, the rock face gone: found */
         if (!G.found && r->x < Q8(CO_CARDX + 110)) { G.found = 1; snd_jingle(); }
         if (G.rocket > 0) {
             G.rocket -= dt;
@@ -862,7 +868,8 @@ static void intro_draw(void)
         grect(WX(G.trail[i].x) - 2, WY(G.trail[i].y) - 2, 4, 4, th->caps[iabs((G.trail[i].x >> 8) / 9) % 5]);
     }
     galpha(256);
-    rock_draw(WX(r->x), WY(r->y), z, r->th, G.eyes, th->rock, th->rock_rim, th->dark, th->moss, th->eye, th->pupil);
+    pfx_draw(G.camx, G.camy, z);
+    prock_live(WX(r->x), WY(r->y), z, r->th, G.eyes);
     {   /* words in the sky */
         int32_t pulse = 97 + 159 * ipulse(tm, 2600) / 256;
         if (G.phase == IP_WIDE && G.t > 1000) {

@@ -1,0 +1,34 @@
+# the settings' first line, PLAYER PROFILE: the first time NAME YOUR ROCK. A key of the top row and one of the bottom
+# type A and L; PRESETS rolls the next place to C; SELECT back a place and OCT- rubs out; FX throws the dice; PLAY
+# keeps the name: HELLO, then the card; PLAY there: the upgrades; GLO back to the card, GLO again to the settings
+1000 btn 7
+1400 shot
+1600 btn 12
+2000 shot
+2200 keys 0x2
+2300 keys 0
+2500 keys 0x1
+2600 keys 0
+2800 shot
+3000 enc 6 1
+3100 enc 6 1
+3200 enc 6 1
+3400 shot
+3500 enc 0 -1
+3700 btn 0
+3900 shot
+4100 btn 2
+4350 shot
+4900 shot
+5200 btn 12
+5500 shot
+6300 shot
+8000 shot
+8300 btn 12
+8500 shot
+9200 shot
+9500 btn 7
+9900 shot
+10100 btn 7
+10500 shot
+10800 end

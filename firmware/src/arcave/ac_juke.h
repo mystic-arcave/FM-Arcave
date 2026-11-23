@@ -561,7 +561,7 @@ static void jk_rock(int32_t t, uint32_t tm)
     ang = -5200 + (tsin(tm, 18, 0) >> 6);         /* leaning in from the corner, rocking a little */
     if (t >= JR_GRIN && t < JR_OUT) y += (isin((int32_t)((tm % 520u) * 65536u / 520u)) * 2) >> 14;   /* (chuckling) */
     g = t < JR_GRIN ? 0 : ease8((t - JR_GRIN) * 256 / 220);   /* the grin, coming */
-    rock_draw(x, y, JR_Z, ang, g > 128 ? 0 : 256, th->rock, th->rock_rim, th->dark, th->moss, th->eye, th->pupil);
+    prock_draw(x, y, JR_Z, ang, g > 128 ? 0 : 256);
     c = icos(ang); sn = isin(ang);
     if (g > 128)                                 /* eyes shut happy: two arches */
         for (e = -1; e <= 1; e += 2) {

@@ -89,12 +89,24 @@ static int32_t rock_rad(int32_t a)               /* how far the rock reaches dow
     }
     return m;
 }
+/* Rock's eyes alone, at screen (x, y), zoom z (Q8), turned by a; eyes 0..256 (how open) */
+static void rock_eyes(int32_t x, int32_t y, int32_t z, int32_t a, int32_t eyes, col_t eye, col_t pupil)
+{
+    int32_t s = isin(a), c = icos(a), e;
+    if (eyes < 15) return;
+    for (e = -1; e <= 1; e += 2) {
+        int32_t ex = x + ((((e * 34 * c + 10 * s) / 10) >> 6) * z >> 16), ey = y + ((((e * 34 * s - 10 * c) / 10) >> 6) * z >> 16);
+        gellf(ex, ey, imax(1, (23 * z) / 2560), imax(1, (imax(40, 200 * eyes / 256) * z) / 25600), eye, 0);
+        if (eyes > 102 && z >= 200)
+            gellf(ex + (4 * z) / 2560, ey, imax(1, (8 * z) / 2560), imax(1, (130 * eyes / 256 * z) / 25600), pupil, 0);
+    }
+}
 /* at screen (x, y), zoom z (Q8), turned by a; eyes 0..256 (how open) */
 static void rock_draw(int32_t x, int32_t y, int32_t z, int32_t a, int32_t eyes, col_t body, col_t rim, int has_rim,
                       col_t moss, col_t eye, col_t pupil)
 {
     static const int8_t MOSS[4][3] = {{-50, -70, 26}, {-10, -86, 30}, {30, -80, 26}, {60, -64, 20}};   /* tenths */
-    int32_t s = isin(a), c = icos(a), xy[18], i, e;
+    int32_t s = isin(a), c = icos(a), xy[18], i;
 #define RX(px, py) (x + ((((px) * c - (py) * s) >> 6) * z >> 16))
 #define RY(px, py) (y + ((((px) * s + (py) * c) >> 6) * z >> 16))
     for (i = 0; i < 4; i++)
@@ -103,13 +115,7 @@ static void rock_draw(int32_t x, int32_t y, int32_t z, int32_t a, int32_t eyes, 
     for (i = 0; i < 9; i++) { xy[2 * i] = RX(ROCK_P[i][0], ROCK_P[i][1]); xy[2 * i + 1] = RY(ROCK_P[i][0], ROCK_P[i][1]); }
     gpoly(xy, 9, body);
     if (has_rim) gpolyline(xy, 9, 1, rim);
-    if (eyes >= 15)
-        for (e = -1; e <= 1; e += 2) {
-            int32_t ex = x + ((((e * 34 * c + 10 * s) / 10) >> 6) * z >> 16), ey = y + ((((e * 34 * s - 10 * c) / 10) >> 6) * z >> 16);
-            gellf(ex, ey, imax(1, (23 * z) / 2560), imax(1, (imax(40, 200 * eyes / 256) * z) / 25600), eye, 0);
-            if (eyes > 102 && z >= 200)
-                gellf(ex + (4 * z) / 2560, ey, imax(1, (8 * z) / 2560), imax(1, (130 * eyes / 256 * z) / 25600), pupil, 0);
-        }
+    rock_eyes(x, y, z, a, eyes, eye, pupil);
 #undef RX
 #undef RY
 }

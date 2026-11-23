@@ -49,3 +49,14 @@ th{font:400 11px/1.2 var(--pix);letter-spacing:.1em;color:var(--mute)}
 .tabs a{font:400 12px/1 var(--pix);letter-spacing:.1em;color:var(--mute);text-decoration:none;padding:12px 20px}
 .tabs a:hover{color:var(--opal)}
 .tabs a[aria-current]{background:var(--opal);color:#000}
+.btn.sm{font-size:11px;padding:9px 11px}
+.btbox{display:grid;gap:10px;justify-items:start}
+.btbox[hidden],.btbox [hidden]{display:none}
+.bts{display:grid;width:100%}
+.bt{display:grid;grid-template-columns:14px minmax(0,max-content) minmax(70px,1fr) auto;gap:4px 14px;align-items:center;padding:12px 0;border-top:1px solid var(--line)}
+.bt .dot{width:10px;height:10px;background:var(--line2)}
+.bt.on .dot{background:var(--opal)}.bt.connecting .dot{background:var(--amber)}.bt.twin .dot{background:var(--blue)}
+.bt .nm{font:400 13px/1.2 var(--pix);letter-spacing:.06em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bt .st{font:400 11px/1.4 var(--pix);letter-spacing:.08em;color:var(--mute)}
+.bt.on .st{color:var(--opal)}.bt.lost .st,.bt.connecting .st{color:var(--amber)}
+@media (max-width:620px){.bt{grid-template-columns:14px minmax(0,1fr) auto}.bt .st{grid-column:2/-1;grid-row:2}}

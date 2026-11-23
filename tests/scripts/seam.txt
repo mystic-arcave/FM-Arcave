@@ -1,0 +1,123 @@
+# the CRYSTAL SEAM: open it (its lesson the first time, 7 steps), then it plays by itself; every control in turn; EDIT; PLAY off and on
+300 shot
+1500 btn 6
+5500 shot
+11500 shot
+18500 shot
+26500 shot
+31500 shot
+40000 shot
+47000 shot
+51500 shot
+54000 shot
+57500 shot
+57600 enc 3 -1
+57670 enc 3 -1
+57740 enc 3 -1
+57810 enc 3 -1
+61000 shot
+61100 keys 0x80
+61190 keys 0
+61400 keys 0x80
+61490 keys 0
+61700 shot
+61900 keys 0x2000
+61990 keys 0
+62150 shot
+62300 enc 3 1
+62300 enc 4 1
+62300 enc 5 1
+62370 enc 3 1
+62370 enc 4 1
+62370 enc 5 1
+62440 enc 3 1
+62440 enc 4 1
+62440 enc 5 1
+62510 enc 3 1
+62510 enc 4 1
+62510 enc 5 1
+62580 enc 3 1
+62580 enc 5 1
+62650 enc 3 1
+65500 shot
+65600 enc 0 1
+65600 enc 6 1
+65670 enc 0 1
+65670 enc 6 1
+65740 enc 0 1
+65810 enc 0 1
+65880 enc 0 1
+68500 shot
+68600 enc 6 1
+68600 enc 2 1
+68600 enc 0 -1
+68670 enc 2 1
+68670 enc 0 -1
+68740 enc 2 1
+68740 enc 0 -1
+68810 enc 2 1
+68810 enc 0 -1
+68880 enc 0 -1
+68950 enc 0 -1
+69020 enc 0 -1
+69090 enc 0 -1
+69160 enc 0 -1
+69230 enc 0 -1
+69300 enc 0 -1
+69370 enc 0 -1
+71500 shot
+71600 enc 6 1
+71600 enc 2 -1
+71600 enc 0 1
+71600 enc 4 -1
+71600 enc 5 -1
+71670 enc 6 1
+71670 enc 2 -1
+71670 enc 0 1
+71670 enc 4 -1
+71670 enc 5 -1
+71740 enc 2 -1
+71740 enc 0 1
+71740 enc 4 -1
+71740 enc 5 -1
+71810 enc 0 1
+71810 enc 4 -1
+71810 enc 5 -1
+71880 enc 0 1
+71880 enc 5 -1
+71950 enc 0 1
+71950 enc 5 -1
+72020 enc 0 1
+72600 btn 11
+74500 shot
+74600 btndown 11
+74700 enc 5 1
+74700 enc 2 1
+75300 shot
+75400 btnup 11
+77000 shot
+77100 btn 6
+77800 shot
+77900 keys 0x10000
+77990 keys 0
+78100 enc 2 -1
+78100 enc 3 1
+78170 enc 2 -1
+78170 enc 3 1
+78240 enc 3 1
+78700 shot
+78800 enc 1 1
+78870 enc 1 1
+79300 shot
+79400 enc 1 1
+79470 enc 1 1
+79540 enc 1 1
+79610 enc 1 1
+79900 shot
+80000 btn 6
+82500 shot
+82600 btn 12
+84500 shot
+84600 btn 12
+87500 shot
+88000 end

@@ -1,0 +1,85 @@
+# EDIT: the upgrades, with 600 tickets. MOSSY tried on and bought (the Hat takes the tickets), a MUSHROOM CAP, GLASSES,
+# a RAINBOW trail; then the keys' shelves: PINK light bought and given to yellow's keys by a key, SPARK to blue's, BELL,
+# FLIP; STAR JUMP: not enough tickets. EDIT closes; in the cave Rock rolls and the keys throw off what they wear
+1000 btn 6
+1300 shot
+1700 shot
+1900 enc 0 1
+2300 shot
+2500 btn 12
+2900 shot
+3500 shot
+4300 shot
+5400 shot
+5600 enc 6 1
+5800 enc 0 1
+5950 enc 0 1
+6100 enc 0 1
+6250 enc 0 1
+6500 shot
+6700 btn 12
+9600 shot
+9800 enc 6 1
+10000 enc 0 1
+10150 enc 0 1
+10300 enc 0 1
+10500 btn 12
+13400 shot
+13600 enc 6 1
+13800 enc 0 1
+13900 enc 0 1
+14000 enc 0 1
+14100 enc 0 1
+14200 enc 0 1
+14300 enc 0 1
+14500 btn 12
+17400 shot
+17600 enc 6 1
+17800 enc 0 1
+18000 shot
+18200 btn 12
+20000 shot
+21100 shot
+21300 keys 0x1
+21400 keys 0
+21600 shot
+21800 enc 6 1
+22000 enc 0 1
+22200 btn 12
+25100 keys 0x100000
+25250 shot
+25400 keys 0
+25600 enc 6 1
+25800 enc 0 1
+26000 btn 12
+28900 keys 0x2000
+29000 keys 0
+29200 shot
+29400 enc 6 1
+29600 enc 0 1
+29800 btn 12
+32700 keys 0x1
+32900 shot
+33000 keys 0
+33100 shot
+33400 enc 0 1
+33500 enc 0 1
+33600 enc 0 1
+33700 enc 0 1
+33800 enc 0 1
+34000 btn 12
+34300 shot
+35800 btn 6
+36200 shot
+36400 enc 2 6
+36600 enc 2 6
+36800 enc 2 6
+36900 keys 0x1
+37000 shot
+37050 keys 0
+37200 shot
+37400 keys 0x100000
+37500 shot
+37600 keys 0
+37800 shot
+38200 end

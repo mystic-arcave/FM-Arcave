@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ARCAVE LINK ONLINE: UNDERSONG with friends far away</title>
-<meta name="description" content="Play UNDERSONG, FM-ARCAVE's game for two or three, with friends on other computers: a private lobby, a real FM-1 by USB or the emulator.">
+<meta name="description" content="Play UNDERSONG, FM-ARCAVE's game for two or three, with friends on other computers: a private lobby, a real FM-1 by USB or Bluetooth, or the emulator.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Silkscreen&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../../site.css">
@@ -52,7 +52,7 @@ main{padding:clamp(36px,6vw,72px) 0 0;display:grid;gap:44px}
     <p class="kicker">Arcave Link</p>
     <nav class="tabs" aria-label="Link"><a href="../">LOCAL</a><a href="./" aria-current="page">ONLINE</a></nav>
     <h1 style="font-size:clamp(28px,5vw,48px);margin:22px 0 18px">Down the well, together from far away</h1>
-    <p class="lead">UNDERSONG over the internet. Make a private lobby, send its code to a friend, and both of you roll Rock down the well: on a real FM-1 by USB, or on the emulator in this browser. Up to three computers in a lobby.</p>
+    <p class="lead">UNDERSONG over the internet. Make a private lobby, send its code to a friend, and both of you roll Rock down the well: on a real FM-1 by USB or Bluetooth, or on the emulator in this browser. Up to three computers in a lobby.</p>
   </div>
 
   <div class="panes">
@@ -60,10 +60,16 @@ main{padding:clamp(36px,6vw,72px) 0 0;display:grid;gap:44px}
       <h2 id="h-here"><b>1</b> ON THIS COMPUTER</h2>
       <div class="row">
         <button class="btn" id="usb">USE MY FM-1 (USB)</button>
+        <button class="btn" id="bt">ADD AN FM-1 BY BLUETOOTH</button>
         <button class="btn" id="emu">OPEN THE EMULATOR</button>
       </div>
+      <div class="btbox" id="btbox" hidden>
+        <div class="bts" id="bts" hidden></div>
+        <p class="status" id="btsay" role="status"></p>
+        <button class="btn sm" id="btall" type="button" hidden>NOT IN THE LIST? SHOW EVERY BLUETOOTH MIDI DEVICE</button>
+      </div>
       <div class="list" id="here"></div>
-      <div class="empty" id="here-none">Plug your FM-1 in and press USE MY FM-1, or open the emulator. Then roll Rock to the well and go down: they show here once they are in it.</div>
+      <div class="empty" id="here-none">Plug your FM-1 in and press USE MY FM-1, or switch its Bluetooth on (GLO) and press ADD AN FM-1 BY BLUETOOTH, or open the emulator. Then roll Rock to the well and go down: they show here once they are in it.</div>
       <p class="status" id="ports"></p>
     </section>
 
@@ -94,7 +100,7 @@ main{padding:clamp(36px,6vw,72px) 0 0;display:grid;gap:44px}
   <div class="cols">
     <div><h3>WHAT PASSES</h3><p>Only UNDERSONG's own messages: who is in the well, the keys and dials of each player, and the clock of the one who leads. The lobby server passes them on and knows nothing of the game. No sound or picture is sent: each FM-1 plays the game itself.</p></div>
     <div><h3>DISTANCE</h3><p>Each FM-1 judges its own player against its own clock, so the time messages take never costs you a note. It shows only as your friends' notes sounding a little late. The ping by each name is the round trip from that computer to the lobby server.</p></div>
-    <div><h3>REAL OR EMULATED</h3><p>Any mix works: an FM-1 against an emulator, two FM-1s at your end and one at your friend's. Every FM-1 on this computer and every emulator window in this browser goes into the lobby. Keep the emulator's own MIDI switched off here, or it is heard twice.</p></div>
+    <div><h3>REAL OR EMULATED</h3><p>Any mix works: an FM-1 against an emulator, two FM-1s at your end and one at your friend's. Every FM-1 on this computer, by USB or by Bluetooth, and every emulator window in this browser goes into the lobby. An FM-1 that is in both ways is counted once. Keep the emulator's own MIDI switched off here, or it is heard twice.</p></div>
     <div><h3>PRIVATE</h3><p>Lobbies are not listed anywhere: a lobby is found by its code alone. It closes when it has been empty for half an hour. If the connection breaks, this page joins again by itself.</p></div>
   </div>
 </main>
@@ -103,15 +109,18 @@ main{padding:clamp(36px,6vw,72px) 0 0;display:grid;gap:44px}
 <script type="module">
 import { Gather, HELLO, outFor, holdTheLink } from "../undersong.js";
 import { LobbyClient, SERVER } from "../lobby.js";
+import { BlePorts, Twins, rankOf, bleRows, bleAdd, bleSay } from "../ble.js";
 const $ = (id) => document.getElementById(id);
 const q = new URLSearchParams(location.search);
 const server = q.get("server") || SERVER;
 const NAME = "fm-arcave-online-name";
 const now = () => performance.now();
 
-// ---- this computer: FM-1s by USB (Web MIDI) and the emulator's windows in this browser (BroadcastChannel)
-const here = new Map();                                     // a MIDI input's id, or "emu" -> { kind, label, g, hello, heard, out }
-const emu = { kind: "emu", label: "EMULATOR, THIS BROWSER", g: new Gather(), hello: -1e9, heard: -1e9 };
+// ---- this computer: FM-1s by USB (Web MIDI), FM-1s by Bluetooth (ble.js) and the emulator's windows in this browser
+// (BroadcastChannel)
+const here = new Map();                                     // a MIDI input's id, a Bluetooth port's, or "emu" -> { id, kind, label, g, hello, heard, out }
+const emu = { id: "emu", kind: "emu", label: "EMULATOR, THIS BROWSER", g: new Gather(), hello: -1e9, heard: -1e9 };
+const twins = new Twins();                                  // one FM-1 heard two ways (USB and Bluetooth): one of the two counts
 here.set("emu", emu);
 const bc = "BroadcastChannel" in window ? new BroadcastChannel("fm-arcave-link") : null;
 // an emulator window sends a plain list; what a Link page passes on comes as { relay, m }, and is not taken back
@@ -123,24 +132,26 @@ const inWell = (s) => now() - s.hello < 1500;
 const live = (s) => now() - s.hello < 3000;
 
 function fromHere(s, cc, v) {
-  s.heard = now();
+  // (an FM-1 that is in by a cable and by Bluetooth says everything twice: its second road is left out)
+  if (s !== emu && twins.take(s.id, rankOf(s.kind === "ble" ? s.out : { name: s.label }), cc, v, now())) { s.twin = twins.shadowOf(s.id); return; }
+  s.twin = null; s.heard = now();
   if (cc === HELLO) { if (!inWell(s)) setTimeout(paintHere); s.hello = now(); }
   const d = s.g.take(cc, v);
   if (!d || !online) return;
   lobby.send(d);
-  for (const x of here.values()) if (x !== s && x.out && live(x)) try { x.out.send(bytes(d)); } catch (e) {}
+  for (const x of here.values()) if (x !== s && x.out && live(x) && !twins.same(x.id, s.id) && twins.shadowOf(x.id) == null) try { x.out.send(bytes(d)); } catch (e) {}
   if (s !== emu && bc) bc.postMessage({ relay: 1, m: pack(d) });
 }
 function fromLobby(f, d) {
   if (!online) return;
-  for (const x of here.values()) if (x.out && live(x)) try { x.out.send(bytes(d)); } catch (e) {}
+  for (const x of here.values()) if (x.out && live(x) && twins.shadowOf(x.id) == null) try { x.out.send(bytes(d)); } catch (e) {}
   if (bc) bc.postMessage({ relay: 1, m: pack(d) });
 }
 function hookMidi() {
   for (const i of midi.inputs.values()) i.onmidimessage = (e) => {
     if (e.data[0] !== 0xBF || e.data.length < 3) return;
     let s = here.get(i.id);
-    if (!s) { s = { kind: "usb", label: i.name, g: new Gather(), hello: -1e9, heard: -1e9, out: outFor(midi, i) }; here.set(i.id, s); }
+    if (!s) { s = { id: i.id, kind: "usb", label: i.name, g: new Gather(), hello: -1e9, heard: -1e9, out: outFor(midi, i) }; here.set(i.id, s); }
     fromHere(s, e.data[1], e.data[2]);
   };
   for (const [id, s] of here) if (s.kind === "usb") { const i = midi.inputs.get(id); s.out = i ? outFor(midi, i) : null; }
@@ -155,6 +166,30 @@ $("usb").addEventListener("click", async () => {
   $("usb").textContent = "FM-1 BY USB: ON"; $("usb").classList.add("on");
 });
 $("emu").addEventListener("click", () => { window.open("../../emu/", "fm-arcave-emu"); });
+// FM-1s by Bluetooth: each one chosen in the browser's list, then heard and spoken to as a USB one is
+const ble = new BlePorts({
+  message: (p, d) => {
+    if (d[0] !== 0xBF || d.length < 3) return;
+    let s = here.get(p.id);
+    if (!s) { s = { id: p.id, kind: "ble", label: p.name, g: new Gather(), hello: -1e9, heard: -1e9, out: p }; here.set(p.id, s); }
+    fromHere(s, d[1], d[2]);
+  },
+  change: () => { for (const id of [...here.keys()]) if (id.startsWith("ble:") && !ble.ports.has(id)) { here.delete(id); twins.forget(id); } paintBle(); paintHere(); },
+});
+const nameOf = (id) => { const s = here.get(id); return s ? (s.kind === "ble" ? "BLUETOOTH " : "USB ") + s.label : "ANOTHER PORT"; };
+function paintBle() {
+  bleRows($("bts"), ble, (p) => { const o = twins.shadowOf(p.id); return o ? "THE SAME FM-1 AS " + nameOf(o).toUpperCase() + ": COUNTED ONCE" : ""; });
+  $("btbox").hidden = $("bts").hidden && !$("btsay").textContent;
+}
+const btSay = (t) => { $("btsay").textContent = t; paintBle(); };
+async function addBle(every) {
+  const p = await bleAdd(ble, btSay, every);
+  $("btall").hidden = !!p || !ble.supported || every;
+  if (p) btSay(p.name + ": CONNECTED BY BLUETOOTH. ROLL ROCK TO THE WELL AND GO DOWN.");
+}
+$("bt").addEventListener("click", () => addBle(false));
+$("btall").addEventListener("click", () => addBle(true));
+bleSay(ble).then((no) => { if (no) { $("bt").disabled = true; btSay(no); } });
 
 function paintHere() {
   const list = [...here.values()].filter((s) => now() - s.heard < 10000);
@@ -164,16 +199,17 @@ function paintHere() {
     const r = document.createElement("div"); r.className = "who" + (inWell(s) ? " well" : "");
     r.innerHTML = '<span class="dot"></span><span class="nm"></span><span class="ms"></span><span class="sub"></span>';
     r.querySelector(".nm").textContent = s.kind === "emu" ? "EMULATOR" : "FM-1";
-    r.querySelector(".sub").textContent = (s.kind === "emu" ? "This browser" : "USB: " + s.label) + (inWell(s) ? ", down the well" : ", not in the well");
+    r.querySelector(".sub").textContent = (s.kind === "emu" ? "This browser" : (s.kind === "ble" ? "Bluetooth: " : "USB: ") + s.label) + (inWell(s) ? ", down the well" : ", not in the well");
     $("here").appendChild(r);
   }
 }
 function whatPlays() {
   const l = [...here.values()].filter((s) => now() - s.heard < 10000);
-  const usb = l.some((s) => s.kind === "usb"), em = l.some((s) => s.kind === "emu");
+  // (to the lobby an FM-1 is an FM-1, by cable or by Bluetooth: "usb" is the word the server knows for one)
+  const usb = l.some((s) => s.kind === "usb" || s.kind === "ble"), em = l.some((s) => s.kind === "emu");
   return { kind: usb && em ? "usb+emu" : usb ? "usb" : em ? "emu" : "", well: l.some(inWell) };
 }
-setInterval(() => { paintHere(); if (online) paintWho(); }, 1000);
+setInterval(() => { paintHere(); paintBle(); if (online) paintWho(); }, 1000);
 
 // ---- the lobby
 const lobby = new LobbyClient(server, {
@@ -201,7 +237,7 @@ const WHY = {
   server: "The lobby server could not be reached.",
   lost: "The connection to the lobby was lost, and joining again did not work.",
 };
-const KIND = { usb: "FM-1 by USB", emu: "the emulator", "usb+emu": "FM-1 and emulator", "": "nothing in the well yet" };
+const KIND = { usb: "an FM-1", emu: "the emulator", "usb+emu": "FM-1 and emulator", "": "nothing in the well yet" };
 const say = (t) => { $("status").textContent = t; };
 const spaced = (c) => c ? c.slice(0, 3) + " " + c.slice(3) : "";
 function paintWho() {
@@ -250,7 +286,7 @@ function fromLink() {
 addEventListener("hashchange", fromLink);
 if (!fromLink() && !server) say("This site has no lobby server set up yet.");
 paintHere();
-window.__online = { here, lobby, emu };
+window.__online = { here, lobby, emu, ble, twins };
 </script>
 </body>
 </html>

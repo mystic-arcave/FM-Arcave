@@ -1,0 +1,75 @@
+# (a look at every stone, hat, face and trail tried on in the upgrades: for checking the drawings)
+1000 btn 6
+1800 shot
+1920 enc 0 1
+2100 shot
+2220 enc 0 1
+2400 shot
+2520 enc 0 1
+2700 shot
+2820 enc 0 1
+3000 shot
+3120 enc 0 1
+3300 shot
+3420 enc 0 1
+3600 shot
+3720 enc 0 1
+3900 shot
+4020 enc 0 1
+4200 shot
+4320 enc 0 1
+4500 shot
+4620 enc 6 1
+4920 shot
+5040 enc 0 1
+5220 shot
+5340 enc 0 1
+5520 shot
+5640 enc 0 1
+5820 shot
+5940 enc 0 1
+6120 shot
+6240 enc 0 1
+6420 shot
+6540 enc 0 1
+6720 shot
+6840 enc 0 1
+7020 shot
+7140 enc 0 1
+7320 shot
+7440 enc 0 1
+7620 shot
+7740 enc 0 1
+7920 shot
+8040 enc 6 1
+8340 shot
+8460 enc 0 1
+8640 shot
+8760 enc 0 1
+8940 shot
+9060 enc 0 1
+9240 shot
+9360 enc 0 1
+9540 shot
+9660 enc 0 1
+9840 shot
+9960 enc 0 1
+10140 shot
+10260 enc 0 1
+10440 shot
+10560 enc 6 1
+10860 shot
+10980 enc 0 1
+11160 shot
+11280 enc 0 1
+11460 shot
+11580 enc 0 1
+11760 shot
+11880 enc 0 1
+12060 shot
+12180 enc 0 1
+12360 shot
+12480 enc 0 1
+12660 shot
+12780 enc 6 1
+13380 end

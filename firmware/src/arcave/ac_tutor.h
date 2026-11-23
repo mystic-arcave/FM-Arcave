@@ -159,7 +159,7 @@ static void tp_end_card(int32_t n, col_t c, uint32_t tm)
     }
     galpha(256);
     ghl(70, 170, 92, th->rim);
-    rock_draw(120, 80 - hop, 300, (int32_t)tm * 30, (tm % 3100u) < 150u ? 30 : 256, th->rock, th->rock_rim, th->dark, th->moss, th->eye, th->pupil);
+    prock_draw(120, 80 - hop, 300, (int32_t)tm * 30, (tm % 3100u) < 150u ? 30 : 256);
     gfit(120, 112, 228, TR(T_TU_ALL), c, sc);
     for (k = 0; k < n; k++) tp_check(120 - n * 8 + k * 16 + 7, 120 + 5 * sc + 10, 9, th->pad);
 }
@@ -405,7 +405,7 @@ static void tu_ground(int32_t x, int32_t y0, int32_t y1)
 }
 static void tu_rock(int32_t x, int32_t y, int32_t ang, uint32_t tm)
 {
-    rock_draw(x, y, 256, ang, (tm % 3100u) < 150u ? 30 : 256, th->rock, th->rock_rim, th->dark, th->moss, th->eye, th->pupil);
+    prock_draw(x, y, 256, ang, (tm % 3100u) < 150u ? 30 : 256);
 }
 /* a roll, hop or other-grip step: how far Rock has rolled (s, in the scene's pixels: only the steps with a knob turning
  * move it) and how high it is hopping (a hop with each press: small from the bottom row, big from the top) */

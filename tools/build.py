@@ -177,6 +177,12 @@ def build_app():
             ("cc", "-c", FW / "hal" / "fm1_vec.S", "-o", OUT / "fm1_vec.o"),
             ("cc", "-c", FW / "hal" / "fm1_isr.S", "-o", OUT / "fm1_isr.o"),
             ("cc", *flags, "-c", FW / "src" / "fm_arcave.c", "-o", OUT / "fm-arcave.o")]
+    objs = [OUT / "crt0.o", OUT / "fm1_vec.o", OUT / "fm1_isr.o", OUT / "fm-arcave.o"]
+    if BOARD == "fm1":              # Bluetooth LE MIDI (firmware/bt/bt_radio.c: the stack and the radio's driver, a unit
+                                    # of its own so that its names meet none of the game's; src/bt.c calls it)
+        cmds.append(("cc", *CFLAGS, "-fdata-sections", "-Ifirmware/hal", "-Ifirmware/bt/ble", "-c",   # (JIANT's flags for it)
+                     FW / "bt" / "bt_radio.c", "-o", OUT / "bt.o"))
+        objs.append(OUT / "bt.o")
     tc_all(*cmds)
     elf = OUT / "fm-arcave.elf"
     ld = FW / "app.ld"
@@ -186,8 +192,7 @@ def build_app():
             raise SystemExit("app.ld: the XIP LENGTH line was not found")
         ld = OUT / "app.ld"
         ld.write_text(txt.replace("LENGTH = 0x8DFBC", f"LENGTH = {APP_SLOT:#X}".replace("0X", "0x")))
-    tc("pi32v2/bin/ld", "--gc-sections", "-e", "_start", "-T", ld, OUT / "crt0.o", OUT / "fm1_vec.o",
-       OUT / "fm1_isr.o", OUT / "fm-arcave.o", "-o", elf)
+    tc("pi32v2/bin/ld", "--gc-sections", "-e", "_start", "-T", ld, *objs, "-o", elf)
     for sect in ("text.bin", "data.bin", "ramtext.bin"):
         (OUT / sect).unlink(missing_ok=True)
     *_, syms, dis, rt = tc_all(("common/bin/objcopy", "-O", "binary", "-j", ".text", elf, OUT / "text.bin"),
@@ -251,7 +256,8 @@ def check(img, syms, dis, rt):
     return errors, notes
 
 
-# Every hardware register access lives in hal/. In src/ and loader/ (comments stripped):
+# Every hardware register access lives in hal/ (and, for the radio, in the imported driver under bt/ble/, which this
+# check does not read). In src/ and loader/ (comments stripped):
 #  - no volatile pointer cast, except of a C object's address (`*(volatile T *)&x`: a read-once
 #    of a RAM flag shared with an ISR, e.g. usb.c ota_wire_send);
 #  - no literal in a register or reserved window (core SFRs 0x10000-0x13FFF, SFC 0x40000-0x43FFF,

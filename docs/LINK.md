@@ -38,27 +38,123 @@ Bluetooth MIDI stacks that drop SysEx.
 it is from the leader, and can lead from its own clock when no FM-1 should. `tests/emu_test.mjs` plays a hub against
 the browser build: the follower lands within two ticks (about 12 ms at 100 BPM) in that test.
 
-## Bluetooth: what was found, and what is not done
+## Bluetooth
 
-FM-ARCAVE 0.1 has **no Bluetooth**: Dinghy's platform has none. The messages above were chosen so that the day it has,
-nothing else changes. What reading the open FM-1 Bluetooth code (Optimist's stack, as JIANT and fm1-base carry it)
-showed:
+An FM-1 running FM-ARCAVE can be a **Bluetooth LE MIDI peripheral**: a computer or phone connects to it as to any
+BLE-MIDI instrument, and to several FM-1s at once. Everything above and below (LINK's clock, UNDERSONG's messages)
+then goes over Bluetooth as it goes over USB, both ways: `midi_send` sends to USB and to the Bluetooth link, and what
+arrives over Bluetooth comes out of `midi_get` (as source 3). The messages were chosen for this: plain control
+changes, which a BLE-MIDI link passes (it passes channel messages and `F8 FA FB FC`; no SysEx, so the installer
+stays on USB).
 
-- It is a BLE MIDI **peripheral** with **one link** at a time. A central role exists in the sources but is not built
-  or proven on the device. So four FM-1s cannot connect to each other, and one FM-1 cannot be the hub for three.
-- A hub is therefore needed in any case: a computer or phone that holds four BLE MIDI links (macOS and iOS do), running
-  the Link page or the same logic.
-- Incoming BLE MIDI drops SysEx and song position; only channel messages and `F8 FA FB FC` pass. Hence control changes.
-- The 13-bit BLE timestamps are decoded and then ignored on the way in; using them would take the connection
-  interval's jitter (7.5 to 11.25 ms) out of the hub's messages.
-- The radio's start takes about 160 ms with interrupts off, and its interrupts rank below audio.
+- **Off until it is turned on.** The game keeps ON or OFF in its own save and tells the platform (`bt_set`,
+  `firmware/src/bt.c`); with it off the radio is never touched and the FM-1 starts exactly as before.
+- **The name** is `FM-ARCAVE XXXX`: XXXX are the last four hex digits of the FM-1's own address, made once at the
+  first ON and kept, so two FM-1s side by side can be told apart. The service is the standard BLE-MIDI one
+  (`03B80E5A-EDE8-4B33-A751-6CE34EC4C700`, its MIDI I/O characteristic `7772E5DB-3868-4112-A1A9-F2669D106BF3`:
+  `firmware/bt/ble/ble_host.h`, `ble_att.c`).
+- **One link per FM-1**, and the FM-1 never connects out: the hub is still a computer or phone (the Link page), which
+  holds a link to each FM-1.
+- **Pairing**: none is asked for. A computer that insists on pairing (Windows, some Macs and Androids) gets Just Works
+  pairing, no PIN.
+- **The first ON restarts the FM-1 once.** The radio needs the FM-1's supplies set the way the stock firmware sets
+  them (`firmware/hal/fm1_power.h`), and that is done at power-on, before the sound and the screen start, only when
+  Bluetooth was ON the last time. So the first time ON is chosen, the FM-1 restarts itself three seconds later and
+  comes up with Bluetooth on; from then on it is simply on at power-on (the radio starts three seconds in, with about
+  a third of a second of silence while it calibrates itself).
+- **The guard.** If the radio's start hangs or crashes, the FM-1 resets once and comes up with Bluetooth off and
+  FAILED in its place; it does not try again by itself (`firmware/src/bt.c`, the boot guard; `tests/bt_guard_test.c`
+  plays every case on a computer).
+- **Timing.** A BLE link passes MIDI once per connection interval (7.5 to 11.25 ms is what the FM-1 asks for), so a
+  message is up to that much later than over USB, unevenly. LINK's hub already measures each FM-1's delay by its
+  pings and takes it off; UNDERSONG judges each player on their own FM-1. Outgoing messages carry BLE-MIDI
+  timestamps; incoming timestamps are not used.
 
-To bring it over: the stack's sources (`bt/ble/`, about 5,300 lines without the central role), the radio headers
-(`fm1_ble.h`, `fm1_ble_rf.h`, `fm1_rf_cal.h`, the RF tables), a glue file after JIANT's `bt_seg.c`, the BLE interrupt
-numbers in `fm1_irq.h`, and a path from the stack's receive callback into `midi_get`'s queue. About 33 KB of flash and
-6 KB of RAM; both are there. It has to be tried on a device, with the boot guard JIANT uses for a radio that fails to
-start. A connectionless variant (the leader advertises its clock, followers only scan) would need no hub at all and
-is worth a look after that.
+What it is made of: Optimist's BLE stack (Henri David) with the WL82 radio driver, the copy JIANT FM ships on FM-1s
+(`firmware/bt/ble/`, the peripheral's part only), JIANT's unit around it (`firmware/bt/bt_radio.c`) and the
+platform's side after JIANT's (`firmware/src/bt.c`). It is linked into the app (about 33 KB of flash, under 5 KB of
+RAM), compiled as a unit of its own (`tools/build.py`: `build/bt.o`). Where JIANT keeps the stack in a flash segment
+of its own outside a full app slot, FM-ARCAVE's slot has the room. The SMK-37 build has no Bluetooth.
+
+**Not yet tried on an FM-1.** It builds, and the parts with no hardware in them are tested on a computer
+(`sh tests/run_bt_tests.sh`: the BLE-MIDI packets, the rings, the platform's rules). That the radio starts, advertises
+and holds a link beside FM-ARCAVE's sound and screen, only an FM-1 can show. `DINGHY_DEFS=-DFELUCCA_BT_TEST=1
+./build.sh` makes a build with Bluetooth on from power-on, to try the radio before anything else.
+
+## Bluetooth on the Link page
+
+Both tabs of the Link page take an FM-1 over Bluetooth as they take one over USB, in any mix. The shared code is
+`web/link/ble.js`; `tests/ble_web_test.mjs` tries all of it without an FM-1.
+
+### Two ways in
+
+- **From the page (Web Bluetooth, Chrome or Edge):** ADD AN FM-1 BY BLUETOOTH opens the browser's list, one FM-1 a
+  press (the browser asks each time), any number at once. The list shows devices that advertise the BLE-MIDI service
+  (`03B80E5A-EDE8-4B33-A751-6CE34EC4C700`) under a name that starts with `FM-ARCAVE`; each FM-1 adds four characters
+  of its own (`FM-ARCAVE 3F2A`), which is how two are told apart. If the computer still lists an FM-1 under an older
+  name, NOT IN THE LIST? SHOW EVERY BLUETOOTH MIDI DEVICE drops the name from the filter. The page then reads and
+  writes the MIDI I/O characteristic (`7772E5DB-3868-4112-A1A9-F2669D106BF3`: notifications in, writes without
+  response out). Safari and Firefox have no Web Bluetooth: the button is greyed there and the page says so.
+- **Through the computer's own Bluetooth MIDI** (on a Mac: Audio MIDI Setup, Bluetooth): the FM-1 then shows up as a
+  MIDI port, and START THE HUB or USE MY FM-1 finds it like a USB one, in any browser with Web MIDI.
+
+A Bluetooth FM-1 is a port like any other to the hub: LINK's clock and pings, UNDERSONG's relay (`undersong.js`'s
+Gather), the online lobby. To the lobby server an FM-1 by Bluetooth is `usb`, its word for "an FM-1 plays here":
+the server is unchanged.
+
+### The packets
+
+BLE-MIDI 1.0, the same rules as the firmware's codec (`firmware/bt/ble/ble_midi.c`): a header octet with the time's
+high bits, then for each message a time octet and the message, a repeated status left out (running status) with its
+time octet kept. Incoming packets are read whole: several messages a packet, running status with or without its time
+octet, the time's high part stepping inside a packet, real time anywhere, SysEx followed to its end and left out.
+
+Outgoing, the page is never told the MTU, so it never writes more than 20 octets (the smallest MTU, 23, less 3).
+That is exactly six control changes on one channel: LINK's clock (102 to 107) is one write, and so is an UNDERSONG
+message (118, 115, 116, 117) and the game leader's clock. What one `send` holds is kept in one packet whenever it
+fits; a longer one is cut between two messages, never inside one. A browser refuses a second write while one is under
+way, so each FM-1 has a queue: one write at a time, and what was said meanwhile goes together in the next, in order.
+Channel messages and real time only, as the firmware takes nothing else over Bluetooth.
+
+### Delay
+
+A Bluetooth message waits for the two radios' next meeting (the connection interval, 7.5 to 15 ms on a computer,
+sometimes more), so both directions are later than USB and not by the same amount twice. What the hub already did
+for late messages covers it: of an FM-1's last six reports it goes by the one least held up, and the firmware trusts
+the one of four hub messages that asks for the most. For Bluetooth ports the hub also pings twice as often (once a
+second) and keeps the quickest of sixteen round trips instead of eight; the delay starts from 12 ms until the first
+answers are in. The delay is still taken as half the quickest round trip, which over Bluetooth can be a few
+milliseconds more than the quickest one-way trip: a Bluetooth follower may sit that much ahead. The BLE-MIDI time
+octets are decoded but not used; using them to take the interval's jitter out is the next refinement, and needs
+numbers from real FM-1s first.
+
+### A broken link, and an FM-1 that is in twice
+
+- A link that drops shows LINK LOST: TRYING AGAIN in the list; the page reconnects by itself (after 0.5, 1, 2, 4, then
+  every 8 s) and the FM-1 keeps its row. REMOVE lets it go.
+- One FM-1 heard on two ports (USB and Bluetooth, or Bluetooth through the computer's MIDI and through the page at
+  once) would count as two players and be sent its own messages back. `Twins` in `ble.js` tells by content: the whole
+  clock an FM-1 reports (tempo, position, sender) and its "I am here" (110) down the well. The same one on two ports
+  within 0.4 s, four times running: one FM-1. The cable is kept before the air, the computer's MIDI before the page's
+  link; the other port is a shadow: nothing it says is used, nothing is sent to it, and the page says THE SAME FM-1
+  AS ... : COUNTED ONCE. Three reports running with no match (the cable pulled) and the shadow counts again.
+- Two USB FM-1s carry the same port name. Inputs and outputs of one name are paired in order, as before; names that
+  differ only by IN and OUT now pair too. Each ping now carries its own number, so an answer that comes in on
+  another input than expected shows the output was the other one's, and the LOCAL hub swaps the pair. That needs
+  LINK on (an FM-1 answers pings only then).
+
+### What is proven, and what only FM-1s can show
+
+`tests/ble_web_test.mjs` proves, in Node: the codec (round trips, and both ways against the firmware's own C codec
+when it is in the tree or `BLE_MIDI_C` points at it); and the two pages' own scripts, run behind a made-up
+`navigator.bluetooth` and Web MIDI with made-up FM-1s: two by Bluetooth take the page's clock, never two writes at
+once and none over 20 octets, UNDERSONG's messages whole, in order and once, a link coming back, an FM-1 in twice
+counted once, crossed USB pairs put right, the online lobby both ways.
+
+Not proven, because it needs real FM-1s and a real radio: that the browser's list shows them (the firmware must put
+the service in its advertisement and the name in its scan response, as the stack does); how long the real round
+trips are and how steady; two or more real links at once on one computer; a computer-connected and a page-connected
+link to the same FM-1 at once; Windows, where port names and Bluetooth MIDI differ; Chrome on Android.
 
 ## UNDERSONG: the game for two or three
 

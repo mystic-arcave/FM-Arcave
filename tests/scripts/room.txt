@@ -1,0 +1,31 @@
+# the music room: in, roll to the geode, open it (its lesson the first time), then play
+300 shot
+1500 shot
+2000 btn 3
+2600 shot
+4000 shot
+9000 shot
+15000 shot
+22000 shot
+29000 shot
+36000 shot
+42000 shot
+49000 shot
+56000 shot
+58000 shot
+58500 enc 2 1
+60000 btn 11
+62000 shot
+63000 btn 6
+63500 keys 0x10
+63700 keys 0
+64000 enc 2 4
+64500 enc 3 3
+65000 shot
+65500 btn 10
+66000 btn 12
+66500 shot
+67000 btn 10
+67300 btn 6
+69000 shot
+70000 end

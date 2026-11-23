@@ -1,5 +1,6 @@
 # from the title: GLO, SELECT down to SKIP TO THE MYSTIC ARCAVE, OCT+ confirms: the cave; then OCT+ changes the language again
 2000 btn 7
+2200 enc 0 1
 2400 enc 0 1
 2600 enc 0 1
 2800 enc 0 1

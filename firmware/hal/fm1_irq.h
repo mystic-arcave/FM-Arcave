@@ -47,10 +47,17 @@ typedef struct {
 /* Not static: .noinit holds whatever the last run (or power-on) left, and a
  * file-local object would let the compiler assume its zero initial value and
  * fold the magic check away. */
+#ifdef FM1_IRQ_EXTERN                        /* (FM-ARCAVE, as JIANT V10.12) a second unit (firmware/bt/bt_radio.c): the
+                                              * app's record, and none of the exception's code */
+extern fm1_crash_t fm1_crash;
+#else
 fm1_crash_t fm1_crash __attribute__((section(".noinit")));
+#endif
 
 extern const char fm1_fatal_stubs[];
+#ifndef FM1_IRQ_EXTERN
 static void fm1_fault(const fm1_crash_t *c);   /* application: report, then reset */
+#endif
 
 static void fm1_irq_init(void)
 {
@@ -87,6 +94,7 @@ static void fm1_irq_enable_all(void)
     fm1_irq_on();
 }
 
+#ifndef FM1_IRQ_EXTERN                        /* (the app's alone, not the Bluetooth unit's) */
 /* called from fm1_fatal_common (fm1_vec.S) with the saved frame:
  * f[0..15] r0..r15, f[16] reti, f[17] rete, f[18] retx, f[19] stub+6,
  * f[20] psr, f[21] icfg, f[22] usp, f[23] ssp, f[24] sp, f[25] interrupted rets */
@@ -116,3 +124,4 @@ void fm1_fault_c(uint32_t *f)
     for (;;)
         ;
 }
+#endif

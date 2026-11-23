@@ -1,0 +1,41 @@
+# CRYSTAL ROAD (CATCH=1), SPORE DRIFT in PEBBLE to its end: the tickets come out of the machine (the strip, the count,
+# the sum) over the result card, then the card; REC: back in the Arcave the Hat calls; Rock rolls to it and it tells of
+# the tickets and EDIT, page by page
+500 enc 1 1
+1200 enc 2 1
+1800 btn 12
+17300 shot
+17700 shot
+18100 shot
+18500 shot
+18900 shot
+19300 shot
+19700 shot
+20100 shot
+20500 shot
+21200 shot
+23500 btn 13
+26000 shot
+26200 enc 2 5
+26400 enc 2 5
+26600 enc 2 5
+26800 enc 2 5
+27000 enc 2 5
+27200 enc 2 5
+27400 shot
+27600 enc 2 5
+27800 enc 2 5
+28000 enc 2 5
+28200 enc 2 5
+28400 enc 2 5
+30000 shot
+32000 shot
+32500 btn 12
+34500 shot
+35000 btn 12
+37000 shot
+37500 btn 12
+39500 shot
+40000 btn 12
+40500 shot
+41000 end

@@ -145,7 +145,7 @@ static void sheet_draw(void)
         b[2][n++] = ':'; b[2][n++] = (char)('0' + t / 600 % 6); b[2][n++] = (char)('0' + t / 60 % 10);
         b[2][n++] = ':'; b[2][n++] = (char)('0' + t / 10 % 6); b[2][n++] = (char)('0' + t % 10); b[2][n] = 0;
         sheet_row(y, TR(T_PLAYTIME), b[2], th->pad); y += rh;
-        b[3][0] = (char)('0' + (cv.secrets & 1u) + (cv.secrets >> 1 & 1u) + (cv.secrets >> 2 & 1u)); b[3][1] = '/'; b[3][2] = '3'; b[3][3] = 0;
+        b[3][0] = (char)('0' + (cv.secrets >> 1 & 1u) + (cv.secrets >> 2 & 1u) + (cv.secrets >> 3 & 1u)); b[3][1] = '/'; b[3][2] = '3'; b[3][3] = 0;
         sheet_row(y, TR(T_SECRETS), b[3], th->pad);
         gfit(120, 238 - TLH(ts(1, 2)) + 2 * ts(1, 2), 232, TR((sh.t / 3000) & 1 ? T_SCROLL : T_SCORES_CLOSE), (sh.t / 3000) & 1 ? th->caps[3] : th->mute, ts(1, 2));
     }

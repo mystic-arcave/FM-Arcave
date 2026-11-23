@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ARCAVE LINK: several FM-1s on one clock</title>
-<meta name="description" content="The hub that keeps several FM-1s running FM-ARCAVE in time with each other over MIDI.">
+<meta name="description" content="The hub that keeps several FM-1s running FM-ARCAVE in time with each other, by USB or by Bluetooth.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Silkscreen&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../site.css">
@@ -50,9 +50,16 @@ input[type=number]{width:84px}
   </div>
   <div class="bar">
     <button class="btn on" id="go">START THE HUB</button>
+    <button class="btn" id="bt">ADD AN FM-1 BY BLUETOOTH</button>
     <label>LEADER <select id="leader"><option value="page">THIS PAGE</option></select></label>
     <label>TEMPO <input type="number" id="bpm" min="40" max="240" value="100"></label>
     <span class="status" id="status" role="status">Stopped. On each FM-1: GLO, LINK, pick a number from 1 to 4.</span>
+  </div>
+  <div class="btbox" id="btbox" hidden>
+    <div class="bts" id="bts" hidden></div>
+    <p class="status" id="btsay" role="status"></p>
+    <button class="btn sm" id="btall" type="button" hidden>NOT IN THE LIST? SHOW EVERY BLUETOOTH MIDI DEVICE</button>
+    <p class="status" id="twice" role="status" hidden></p>
   </div>
   <div>
     <div class="dev head"><span>NO.</span><span>PORT</span><span>ROLE</span><span>BAR</span><span>DELAY</span><span>OFF BY</span></div>
@@ -60,24 +67,31 @@ input[type=number]{width:84px}
     <div id="none">No FM-1 has spoken yet.</div>
   </div>
   <div class="cols">
-    <div><h3>HOW TO CONNECT</h3><p>By USB: plug each FM-1 into this computer (a USB hub is fine). A browser tab running the emulator with MIDI on counts as an FM-1 too, through a virtual MIDI port. Bluetooth is not in this version of the firmware yet: the messages are made to pass over Bluetooth MIDI, but the FM-1's radio code is still to be brought over.</p></div>
+    <div><h3>HOW TO CONNECT</h3><p>By USB: plug each FM-1 into this computer (a USB hub is fine). By Bluetooth: switch Bluetooth on in the FM-1's settings (GLO), press ADD AN FM-1 BY BLUETOOTH here and pick it from the browser's list, once for each FM-1; each shows as FM-ARCAVE and four characters of its own. Any mix of the two works, and an FM-1 that is in both ways is counted once. A browser tab running the emulator with MIDI on counts as an FM-1 too, through a virtual MIDI port.</p></div>
     <div><h3>WHAT STAYS IN TIME</h3><p>Tempo, beat and bar. A follower slides into place over a beat or two, never jumps mid-note. Change the tune on the leader (ALGORITHM) and every FM-1 takes its tempo. With LINK on, all of FM-ARCAVE's tunes play in one shared key, so different tunes on different machines still agree.</p></div>
-    <div><h3>HOW CLOSE</h3><p>The page measures each FM-1's delay with a ping and sends each one the clock moved ahead by that much. "OFF BY" shows how far each FM-1 is from the leader. These numbers come from the emulator so far, not from four FM-1s on a table.</p></div>
-    <div><h3>UNDERSONG, FOR TWO OR THREE</h3><p>The game for two or three FM-1s, down the well in the Arcave's floor. Plug them all into this computer, start the hub, and roll each Rock to the well: this page passes what each player does to the others, and the clock of the one that leads. With three in the well, every game is played for three. LINK does not have to be on for it. Friends on other computers: the <a href="online/">ONLINE</a> tab.</p></div>
-    <div><h3>WITHOUT THIS PAGE</h3><p>An FM-1 with LINK on also follows a plain MIDI clock (USB or the TRS jack) from a DAW or a drum machine, and START sets it to bar one.</p></div>
+    <div><h3>HOW CLOSE</h3><p>The page measures each FM-1's delay with a ping and sends each one the clock moved ahead by that much. "OFF BY" shows how far each FM-1 is from the leader. Bluetooth takes longer than a cable and not the same time twice, so the page pings a Bluetooth FM-1 more often and goes by the quickest answers. These numbers come from the emulator so far, not from four FM-1s on a table.</p></div>
+    <div><h3>UNDERSONG, FOR TWO OR THREE</h3><p>The game for two or three FM-1s, down the well in the Arcave's floor. Bring them all in here, by USB or by Bluetooth, start the hub, and roll each Rock to the well: this page passes what each player does to the others, and the clock of the one that leads. With three in the well, every game is played for three. LINK does not have to be on for it. Friends on other computers: the <a href="online/">ONLINE</a> tab.</p></div>
+    <div><h3>WITHOUT THIS PAGE</h3><p>An FM-1 with LINK on also follows a plain MIDI clock (USB, Bluetooth or the TRS jack) from a DAW or a drum machine, and START sets it to bar one. A computer's own Bluetooth MIDI settings can connect an FM-1 too (on a Mac: Audio MIDI Setup); it then comes in here as a MIDI port, like a USB one.</p></div>
   </div>
 </main>
 <footer class="foot"><p>The messages are control changes 102 to 118 on MIDI channel 16; <a href="https://github.com/mystic-arcave/FM-Arcave/blob/main/docs/LINK.md">docs/LINK.md</a> has the whole protocol. Nothing leaves this computer.</p></footer>
 </div>
 <script type="module">
 import { Gather, outFor as pairOf, holdTheLink } from "./undersong.js";
+import { BlePorts, Twins, rankOf, bleRows, bleAdd, bleSay } from "./ble.js";
 // The hub. Time is performance.now() milliseconds; the clock is in quarter ticks (384 to a beat), modulo 2^21, as on the wire.
+// A port is where one FM-1 is heard: a Web MIDI input (USB, or Bluetooth through the computer's own MIDI) or an FM-1
+// this page holds by Bluetooth itself (ble.js). The hub treats them alike
 const $ = (id) => document.getElementById(id);
 const MOD = 1 << 21, wrap = (d) => ((d % MOD) + MOD + MOD / 2) % MOD - MOD / 2;
 const rate = (bpm) => bpm * 384 / 60000;                   // quarter ticks a millisecond
-let midi = null, running = false, timer = 0, seq = 0;
+let midi = null, running = false, timer = 0, seq = 0, pingN = 0;
 const devs = new Map();                                     // "port|number" -> an FM-1
 const page = { t0: performance.now(), pos0: 0, bpm: 100 };  // the page's own clock, when it leads
+const proven = new Map();                                   // a MIDI input's id -> the output a ping's answer showed to be its own
+const twins = new Twins();                                  // one FM-1 heard on two ports: one of the two counts
+const ble = new BlePorts({ message: (p, d, t) => onMsg(p, d, t), change: () => paintBle() });
+const isBle = (port) => port.kind === "ble";
 
 function pagePos(t) { return (page.pos0 + (t - page.t0) * rate(page.bpm)) % MOD; }
 function devPos(d, t) {                                     // where an FM-1's clock is at time t, from its best recent word
@@ -93,25 +107,37 @@ function leaderPos(t) {
   page.bpm = d.bpm; page.t0 = t; page.pos0 = devPos(d, t);
   return { pos: page.pos0, bpm: d.bpm };
 }
-function out(d, cc, v) { try { d.out.send([0xBF, cc, v & 127]); } catch (e) {} }
-
-const outFor = (input) => pairOf(midi, input);
+// control changes on channel 16 to one FM-1, [cc, v, cc, v, ...], in one piece: by Bluetooth they go in one packet
+function send(o, d) {
+  const bytes = []; for (let i = 0; i + 1 < d.length; i += 2) bytes.push(0xBF, d[i], d[i + 1] & 127);
+  try { o.send(bytes); } catch (e) {}
+}
+// what to send on to reach the FM-1 heard on a port: a Bluetooth one is its own way back; a MIDI input's output is
+// found by its name (undersong.js), or is the one a ping's answer has shown
+const outOf = (port) => (isBle(port) ? port : midi ? pairOf(midi, port, proven) : null);
+function repair() {                                         // the MIDI ports changed, or a pair was proven: every way back again
+  if (!midi) return;
+  for (const id of [...proven.keys()]) if (!midi.inputs.has(id)) proven.delete(id);
+  for (const d of devs.values()) if (!d.ble) { const i = midi.inputs.get(d.inId); if (i) d.out = outOf(i) || d.out; }
+  for (const [id, x] of duo) if (!x.ble) { const i = midi.inputs.get(id); if (i) x.out = outOf(i) || x.out; }
+}
 // UNDERSONG, the game for two or three: its messages (control changes 110 to 118, and the clock of the FM-1 that leads
 // the game, 102 to 107 with sender 5) are passed from each FM-1 in the game to the others, as they come, gathered by
 // undersong.js: a message with numbers (115, 116, 118, then its op 117) goes on in one piece, so with three FM-1s two
 // players' messages never mix on the way to the third
-const duo = new Map();                                      // input id -> { out, seen }
-function relay(input, d) {
-  const bytes = []; for (let i = 0; i + 1 < d.length; i += 2) bytes.push(0xBF, d[i], d[i + 1]);
-  for (const [id, x] of duo) if (id !== input.id && performance.now() - x.seen < 3000) { try { x.out.send(bytes); } catch (e) {} }
+const duo = new Map();                                      // port id -> { out, seen, ble }
+function relay(port, d) {
+  for (const [id, x] of duo)
+    if (id !== port.id && !twins.same(id, port.id) && twins.shadowOf(id) == null && performance.now() - x.seen < 3000) send(x.out, d);
 }
-function onMidi(input, e) {
-  const [st, d1, d2] = e.data, t = e.timeStamp || performance.now();
-  if (st !== 0xBF || !running) return;
-  const p = (input.acc ||= { tempo: 0, pos: 0 }), g = (input.gather ||= new Gather());
+function onMsg(port, data, t) {
+  const [st, d1, d2] = data;
+  if (st !== 0xBF || data.length < 3 || !running) return;
+  if (twins.take(port.id, rankOf(port), d1, d2, t)) return; // a second road to an FM-1 already heard: left out
+  const p = (port.acc ||= { tempo: 0, pos: 0 }), g = (port.gather ||= new Gather());
   if ((d1 >= 110 && d1 <= 118) || (d1 === 107 && d2 === 13)) {   // UNDERSONG's, and its leader's clock: on to the friends
-    if (d1 === 110) { const o = duo.get(input.id)?.out || outFor(input); if (o) duo.set(input.id, { out: o, seen: performance.now() }); }
-    const d = g.take(d1, d2); if (d) relay(input, d);
+    if (d1 === 110) { const o = duo.get(port.id)?.out || outOf(port); if (o) duo.set(port.id, { out: o, seen: performance.now(), ble: isBle(port) }); }
+    const d = g.take(d1, d2); if (d) relay(port, d);
     return;
   }
   if (d1 >= 102 && d1 <= 106) g.take(d1, d2);
@@ -121,42 +147,60 @@ function onMidi(input, e) {
   else if (d1 === 105) p.pos |= d2 << 7;
   else if (d1 === 106) p.pos |= d2;
   else if (d1 === 107 && (d2 & 7) && !(d2 & 8)) {           // an FM-1 saying where it is
-    const key = input.id + "|" + (d2 & 7);
+    const key = port.id + "|" + (d2 & 7);
     let d = devs.get(key);
     if (!d) {
-      const o = outFor(input);
+      const o = outOf(port);
       if (!o) return;
-      d = { key, num: d2 & 7, port: input.name, inId: input.id, out: o, delay: 2, rtts: [], samples: [], ref: null, bpm: 100, off: null, seen: 0 };
+      // (a Bluetooth link starts from a likely delay: its real one is known after a few pings)
+      d = { key, num: d2 & 7, port: (isBle(port) ? "BLUETOOTH: " : "") + port.name, inId: port.id, ble: isBle(port), out: o, delay: isBle(port) ? 12 : 2, rtts: [], samples: [], ref: null, bpm: 100, off: null, seen: 0 };
       devs.set(key, d); rebuild();
     }
     d.bpm = p.tempo / 32; d.seen = t;
     d.samples.push({ t, pos: p.pos });
     if (d.samples.length > 6) d.samples.shift();
     // a message that was held up arrives late for what it says: of the last six, the one least held up is the reference
+    // (by Bluetooth every message waits for the radios' next meeting, up to a few hundredths of a second: the same cure)
     let best = null, bv = -Infinity;
     for (const s of d.samples) { const v = wrap(s.pos - d.samples[0].pos) - (s.t - d.samples[0].t) * rate(d.bpm); if (v > bv) { bv = v; best = s; } }
     d.ref = best;
   } else if (d1 === 109) {                                   // the answer to a ping
-    for (const d of devs.values()) if (d.inId === input.id && d.ping && d.ping.n === d2) {
-      d.rtts.push(t - d.ping.t); if (d.rtts.length > 8) d.rtts.shift();
-      d.delay = Math.min(...d.rtts) / 2; d.ping = null;
+    for (const d of devs.values()) if (d.ping && d.ping.n === d2) {
+      if (d.inId === port.id) {
+        // the delay is half the quickest round trip: a Bluetooth one varies more, so more of them are kept
+        d.rtts.push(t - d.ping.t); if (d.rtts.length > (d.ble ? 16 : 8)) d.rtts.shift();
+        d.delay = Math.min(...d.rtts) / 2;
+        if (!d.ble) proven.set(d.inId, d.ping.out);
+        d.ping = null;
+      } else if (!d.ble && !isBle(port) && !twins.same(d.inId, port.id)) d.ping.stray = port.id;   // answered on another input
     }
   }
 }
 function tick() {
   const now = performance.now(), lead = $("leader").value;
+  let gone = false;
   seq++;
-  for (const d of devs.values()) {
+  for (const d of [...devs.values()]) {
+    if (twins.shadowOf(d.inId) != null) { devs.delete(d.key); gone = true; continue; }   // it is in by another road too
     if (now - d.seen > 3000) { d.off = null; continue; }
-    if (seq % 8 === 0 && !d.ping) { d.ping = { n: (seq >> 3) & 127, t: performance.now() }; out(d, 108, d.ping.n); }
-    else if (d.ping && now - d.ping.t > 1500) d.ping = null;
+    if (d.ping && now - d.ping.t > 1500) {
+      // no answer where it was expected, but one on another input: that output is the other input's. Same-named
+      // ports paired the wrong way round are put right here
+      if (d.ping.stray && midi && midi.inputs.has(d.ping.stray)) { proven.set(d.ping.stray, d.ping.out); repair(); }
+      d.ping = null;
+    }
+    if (!d.ping && seq % (d.ble ? 4 : 8) === 0) {            // each ping its own number: an answer names its question
+      pingN = pingN % 127 + 1; d.ping = { n: pingN, t: performance.now(), out: d.out }; send(d.out, [108, d.ping.n]);
+    }
     const L = leaderPos(now + d.delay);
-    if (d.key === lead) { out(d, 107, 16); d.off = 0; continue; }
+    if (d.key === lead) { send(d.out, [107, 16]); d.off = 0; continue; }
     d.off = wrap(devPos(d, now) - leaderPos(now).pos) / rate(L.bpm);       // milliseconds
     const t = Math.round(L.bpm * 32), p = Math.round(L.pos) % MOD;
-    out(d, 102, t >> 7); out(d, 103, t); out(d, 104, p >> 14); out(d, 105, p >> 7); out(d, 106, p); out(d, 107, 8);
+    send(d.out, [102, t >> 7, 103, t, 104, p >> 14, 105, p >> 7, 106, p, 107, 8]);
   }
-  paint();
+  for (const id of [...duo.keys()]) if (twins.shadowOf(id) != null) duo.delete(id);
+  if (gone) rebuild();
+  paint(); paintBle();
 }
 function rebuild() {
   const sel = $("leader"), keep = sel.value;
@@ -189,6 +233,25 @@ function paint() {
   if (running) $("status").textContent = n + (n === 1 ? " FM-1" : " FM-1s") + " in the link, " + Math.round(leaderPos(now).bpm) + " BPM."
     + (g ? " UNDERSONG: " + (g > 1 ? g + " players linked." : "one player waiting for a friend.") : "");
 }
+// the Bluetooth FM-1s, and any FM-1 that is in twice (by a cable and by Bluetooth, or by Bluetooth two ways)
+const nameOf = (id) => { const p = ble.ports.get(id); return p ? "BLUETOOTH " + p.name : midi?.inputs.get(id)?.name || "ANOTHER PORT"; };
+function paintBle() {
+  bleRows($("bts"), ble, (p) => { const o = twins.shadowOf(p.id); return o ? "THE SAME FM-1 AS " + nameOf(o).toUpperCase() + ": COUNTED ONCE" : ""; });
+  const twice = [];
+  if (midi) for (const i of midi.inputs.values()) { const o = twins.shadowOf(i.id); if (o) twice.push(i.name.toUpperCase() + " IS THE SAME FM-1 AS " + nameOf(o).toUpperCase() + ": COUNTED ONCE."); }
+  $("twice").textContent = twice.join(" "); $("twice").hidden = !twice.length;
+  $("btbox").hidden = $("bts").hidden && !$("btsay").textContent && !twice.length;
+}
+const btSay = (t) => { $("btsay").textContent = t; paintBle(); };
+async function addBle(every) {
+  const p = await bleAdd(ble, btSay, every);
+  $("btall").hidden = !!p || !ble.supported || every;      // nothing chosen: the list of every Bluetooth MIDI device is one press away
+  if (p && !running) btSay(p.name + ": CONNECTED BY BLUETOOTH. START THE HUB.");
+  paintBle();
+}
+$("bt").addEventListener("click", () => addBle(false));
+$("btall").addEventListener("click", () => addBle(true));
+bleSay(ble).then((no) => { if (no) { $("bt").disabled = true; btSay(no); } });
 $("bpm").addEventListener("change", () => {
   const now = performance.now(); page.pos0 = pagePos(now); page.t0 = now;
   page.bpm = Math.min(240, Math.max(40, +$("bpm").value || 100));
@@ -199,17 +262,22 @@ $("go").addEventListener("click", async () => {
   // one hub in a browser: the ONLINE tab, in another tab, passes UNDERSONG on too
   const mine = await new Promise((ok) => { release = holdTheLink(ok); });
   if (!mine) { release = null; $("status").textContent = "The ONLINE tab is running in this browser: leave its lobby first."; return; }
+  let noMidi = "";
   if (!midi) {
-    const no = (t) => { release(); release = null; $("status").textContent = t; };
-    if (!navigator.requestMIDIAccess) { no("This browser has no Web MIDI. Use Chrome or Edge."); return; }
-    try { midi = await navigator.requestMIDIAccess(); } catch (e) { no("The browser gave no MIDI access."); return; }
-    const hook = () => { for (const i of midi.inputs.values()) i.onmidimessage = (e) => onMidi(i, e); };
-    hook(); midi.onstatechange = hook;
+    if (!navigator.requestMIDIAccess) noMidi = "This browser has no Web MIDI.";
+    else try { midi = await navigator.requestMIDIAccess(); } catch (e) { noMidi = "The browser gave no MIDI access."; }
+    if (midi) {
+      const hook = () => { for (const i of midi.inputs.values()) i.onmidimessage = (e) => onMsg(i, e.data, e.timeStamp || performance.now()); repair(); };
+      hook(); midi.onstatechange = hook;
+    }
   }
+  if (!midi && !ble.supported) { release(); release = null; $("status").textContent = noMidi + " Use Chrome or Edge."; return; }   // no way in at all
   running = true; timer = setInterval(tick, 250); $("go").textContent = "STOP THE HUB";
-  $("status").textContent = "Listening on " + midi.inputs.size + " MIDI ports...";
+  const nb = ble.ports.size, bt = nb ? nb + (nb === 1 ? " FM-1" : " FM-1s") + " by Bluetooth" : "";
+  $("status").textContent = midi ? "Listening on " + midi.inputs.size + " MIDI ports" + (bt ? " and " + bt : "") + "..."
+    : noMidi + " Bluetooth only: " + (bt ? "listening to " + bt + "..." : "add an FM-1 by Bluetooth.");
 });
-window.__link = { devs, page, duo };
+window.__link = { devs, page, duo, ble, twins, proven };
 </script>
 </body>
 </html>

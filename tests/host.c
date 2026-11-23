@@ -136,6 +136,20 @@ static int blob_save(uint32_t i, const void *p, uint32_t n) { return i < NBLOB ?
 static int slot_load(uint32_t i, void *p, uint32_t n) { return i < NSLOT ? host_load(host_slot[i], SLOT_MAX, p, n) : -1; }
 static int slot_save(uint32_t i, const void *p, uint32_t n) { return i < NSLOT ? host_save(host_slot[i], SLOT_MAX, p, n, "slot", i) : -1; }
 
+/* Bluetooth: none on a computer. BT=1 (tests/run_arcave.sh): a pretend radio, to see the settings' line: turned on it
+ * "starts" for a second, waits for a computer for three, then one "connects" */
+enum { BT_OFF, BT_STARTING, BT_ADV, BT_CONN, BT_FAILED, BT_NONE };
+#ifdef AC_TEST_BT
+static uint32_t host_bt_on, host_bt_t0;
+static int bt_state(void) { uint32_t d = fm1_ms - host_bt_t0; return !host_bt_on ? BT_OFF : d < 1000u ? BT_STARTING : d < 4000u ? BT_ADV : BT_CONN; }
+static void bt_set(int on) { if (on && !host_bt_on) host_bt_t0 = fm1_ms; host_bt_on = (uint32_t)(on != 0); }
+static const char *bt_name(void) { return "FM-ARCAVE 3F2A"; }
+#else
+static int bt_state(void) { return BT_NONE; }
+static void bt_set(int on) { (void)on; }
+static const char *bt_name(void) { return ""; }
+#endif
+
 static uint8_t mq[64][4];                       /* status, data 1, data 2, source (1 USB, 2 TRS) */
 static uint32_t mq_w, mq_r;
 static int midi_get(uint8_t *st, uint8_t *d1, uint8_t *d2)

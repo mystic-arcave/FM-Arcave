@@ -1,0 +1,19 @@
+# the gift shop in the room up on the left (Rock starts on the high ledge, just right of it): the stall, its keeper
+# asleep behind the counter; a gentle roll and Rock settles in its dip: the keeper wakes, GIFT SHOP over the awning,
+# PLAY: the upgrades open; EDIT closes them; a firm roll on past the stall to the room's far end: the door outside
+1200 shot
+1500 enc 2 -2
+2600 shot
+3400 shot
+3600 btn 12
+4300 shot
+4600 btn 6
+5000 shot
+5200 enc 2 -8
+5350 enc 2 -8
+5500 enc 2 -8
+5650 enc 2 -8
+5800 enc 2 -8
+6600 shot
+7600 shot
+8000 end

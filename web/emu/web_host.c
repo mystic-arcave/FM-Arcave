@@ -55,6 +55,11 @@ static void lcd_blit(uint32_t x, uint32_t y, uint32_t w, uint32_t h, const uint1
 /* MIDI: in from the page (Web MIDI), out to it */
 static uint8_t w_mi[256][3], w_mo[256][3];
 static uint32_t w_mi_w, w_mi_r, w_mo_w, w_mo_r;
+/* Bluetooth: none in a browser (the page itself speaks to FM-1s: web/link/ble.js) */
+enum { BT_OFF, BT_STARTING, BT_ADV, BT_CONN, BT_FAILED, BT_NONE };
+static int bt_state(void) { return BT_NONE; }
+static void bt_set(int on) { (void)on; }
+static const char *bt_name(void) { return ""; }
 static int midi_get(uint8_t *st, uint8_t *d1, uint8_t *d2)
 {
     if (w_mi_r == w_mi_w) return 0;

@@ -1,0 +1,88 @@
+# about the music room: right along the floor to the booster, onto the slide, down it onto the cap; then the pool's bubble
+400 shot
+500 enc 2 4
+620 enc 2 4
+740 enc 2 4
+860 enc 2 4
+980 enc 2 4
+1100 enc 2 4
+1220 enc 2 4
+1340 enc 2 4
+1460 enc 2 4
+1580 enc 2 4
+1700 enc 2 4
+1820 enc 2 4
+1940 enc 2 4
+2060 enc 2 4
+2180 enc 2 4
+2300 enc 2 4
+2420 enc 2 4
+2540 enc 2 4
+2660 enc 2 4
+2780 enc 2 4
+2900 enc 2 4
+3020 enc 2 4
+3140 enc 2 4
+3260 enc 2 4
+3380 enc 2 4
+3500 enc 2 4
+3620 enc 2 4
+3740 enc 2 4
+3860 enc 2 4
+3980 enc 2 4
+4100 enc 2 4
+4220 enc 2 4
+4340 enc 2 4
+4460 enc 2 4
+4580 enc 2 4
+4700 enc 2 4
+4820 enc 2 4
+4940 enc 2 4
+5060 enc 2 4
+5180 enc 2 4
+5300 enc 2 4
+5420 enc 2 4
+5540 enc 2 4
+5660 enc 2 4
+5780 enc 2 4
+5900 enc 2 4
+6020 enc 2 4
+6140 enc 2 4
+6260 enc 2 4
+6380 enc 2 4
+6500 enc 2 4
+1500 shot
+2500 shot
+3200 shot
+3900 shot
+4400 shot
+4800 shot
+5200 shot
+5600 shot
+6000 shot
+6400 shot
+6800 shot
+7200 shot
+7600 shot
+8000 shot
+8600 shot
+9200 shot
+9300 enc 2 -4
+9420 enc 2 -4
+9540 enc 2 -4
+9660 enc 2 -4
+9780 enc 2 -4
+9900 enc 2 -4
+10020 enc 2 -4
+10140 enc 2 -4
+10260 enc 2 -4
+10380 enc 2 -4
+10500 enc 2 -4
+10620 enc 2 -4
+10740 enc 2 -4
+11000 shot
+12000 shot
+13000 shot
+14000 shot
+15000 shot
+16000 end

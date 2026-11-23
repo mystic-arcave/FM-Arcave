@@ -386,7 +386,7 @@ static void snd_keys(uint32_t down, int32_t up12)   /* every key just pressed, i
     int32_t k;
     for (k = 0; k < AC_NKEY; k++)
         if (down >> k & 1u) {
-            sfx(key_play(k) + (up12 ? 12 : 0), 0, 600, W_TRI, 3600, 6, 160);
+            pf_key_voice(k, key_play(k) + (up12 ? 12 : 0));   /* (in the voice its colour wears: ac_prof.h) */
 #ifdef AC_TEST_SCENE
             printf("%6u ms  key %d plays %d (tune %u)\n", fm1_ms, k, key_play(k) + (up12 ? 12 : 0), (uint32_t)mus_track);   /* (tests) */
 #endif

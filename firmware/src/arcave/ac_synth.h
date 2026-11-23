@@ -15,7 +15,11 @@ typedef struct {
     uint32_t sweep;                              /* pitch: inc * sweep >> 16 a block (65536 = steady) */
     int32_t gl, gr, send;                        /* Q8 */
     int32_t rs, dr;                              /* Q8: how much goes to the reverb; the drive into a clip (0: none) */
-    uint8_t on, wave, stage;
+    /* the music room's (ac_room.h): a resonant filter whose cutoff starts fenv above fcut and falls to it, and a glide */
+    int32_t fcut, fenv, fq, lp, bp;              /* Q8 semitones (a note number), Q8 semitones, the damping Q15, its state */
+    uint32_t fdec, inc_to;                       /* the cutoff's fall a block (as dec); the pitch a glide ends on */
+    uint16_t swn;                                /* blocks of sweep left before the pitch settles on inc_to (0: no end) */
+    uint8_t on, wave, stage, fmode;              /* fmode 0: no filter; 1: low-pass; 2: band-pass */
 } sy_voice_t;
 static sy_voice_t sy_v[SY_NV];
 
@@ -25,7 +29,18 @@ typedef struct {
     int8_t note, det, pan;
     uint8_t wave, send;
     uint8_t rsend, drv;                          /* the reverb's share 0..255; distortion 0..8 */
+    uint8_t fmode, cut, res, fenv, fms8;         /* the filter: 0 none; its cutoff as a note; resonance 0..255; how many
+                                                    semitones above the cutoff it opens to; that fall's time, 8 ms units */
+    int8_t gl; uint8_t glms8;                    /* a glide: it starts gl semitones away and takes glms8 * 8 ms to arrive */
 } sy_ev_t;
+/* the filter and glide of the next note asked for with sfx_fx (the music room sets it, sfx_fx takes it and clears it) */
+static struct { uint8_t fmode, cut, res, fenv, fms8, glms8; int8_t gl; } sy_x;
+static void sfx_filter(int mode, int32_t cut, int32_t res, int32_t fenv, int32_t ms)
+{
+    sy_x.fmode = (uint8_t)mode; sy_x.cut = (uint8_t)(cut < 1 ? 1 : cut > 127 ? 127 : cut); sy_x.res = (uint8_t)(res < 0 ? 0 : res > 255 ? 255 : res);
+    sy_x.fenv = (uint8_t)(fenv < 0 ? 0 : fenv > 96 ? 96 : fenv); sy_x.fms8 = (uint8_t)(ms < 16 ? 2 : ms > 2000 ? 250 : ms / 8);
+}
+static void sfx_glide(int32_t semis, int32_t ms) { sy_x.gl = (int8_t)(semis < -36 ? -36 : semis > 36 ? 36 : semis); sy_x.glms8 = (uint8_t)(ms < 8 ? 1 : ms > 2000 ? 250 : ms / 8); }
 #define SY_QN 64u
 static sy_ev_t sy_q[SY_QN];
 static volatile uint32_t sy_qw;                  /* main loop writes */
@@ -40,6 +55,7 @@ static int16_t sy_dl[SY_DLN] AC_POOL;
 static uint32_t sy_dlw;
 static int32_t sy_dllp;
 static volatile int32_t sy_echo_fb = 115;        /* Q8 */
+static volatile uint32_t sy_echo_len = SY_DLN;   /* the echo's time, in half-rate samples (the music room sets it to the tempo) */
 /* the reverb (the player's song may ask for it): three damped combs and an allpass, at half the sample rate */
 #define RV_L0 1117u
 #define RV_L1 1277u
@@ -97,6 +113,17 @@ static void sy_start(const sy_ev_t *e)           /* in the interrupt */
     v->rs = e->rsend;
     v->dr = e->drv ? 256 + e->drv * 200 : 0;
     v->wave = e->wave;
+    v->fmode = e->fmode; v->lp = v->bp = 0; v->swn = 0;
+    if (e->fmode) {
+        v->fcut = (int32_t)e->cut << 8; v->fenv = (int32_t)e->fenv << 8;
+        v->fq = 46000 - (int32_t)e->res * 170;   /* damping: 1.4 (none) down to 0.08 (it rings) */
+        v->fdec = 65536u - 328499u / (uint32_t)imax((int32_t)e->fms8 * 8, 20);
+    }
+    if (e->gl && e->glms8) {                     /* a glide: from gl semitones away, a block at a time, then exactly there */
+        int32_t nb = imax(1, (int32_t)e->glms8 * 8 * 441 / 320);
+        v->inc_to = v->inc; v->inc = sy_inc(e->note + e->gl, e->det);
+        v->sweep = (uint32_t)(65536 - e->gl * 3785 / nb); v->swn = (uint16_t)nb;
+    }
     v->on = 1;
 }
 
@@ -113,6 +140,8 @@ static void sfx_fx(int32_t note, uint32_t delay_ms, uint32_t dur_ms, uint32_t wa
     e->vol = (uint16_t)vol; e->att_ms = (uint16_t)att_ms; e->dur_ms = (uint16_t)imin((int32_t)dur_ms, 60000);
     e->wave = (uint8_t)wave; e->send = (uint8_t)send; e->sweep = (uint16_t)(sweep ? sweep : 0u);
     e->rsend = (uint8_t)rsend; e->drv = (uint8_t)drv;
+    e->fmode = sy_x.fmode; e->cut = sy_x.cut; e->res = sy_x.res; e->fenv = sy_x.fenv; e->fms8 = sy_x.fms8; e->gl = sy_x.gl; e->glms8 = sy_x.glms8;
+    sy_x.fmode = 0; sy_x.gl = 0;
     sy_qw = w + 1u;
 }
 static void sfx_ex(int32_t note, uint32_t delay_ms, uint32_t dur_ms, uint32_t wave, uint32_t vol, uint32_t att_ms,
@@ -132,6 +161,7 @@ static void sy_now_fx(int32_t note, uint32_t dur_ms, uint32_t wave, uint32_t vol
     e.at = 0; e.note = (int8_t)iclamp(note, 0, 127); e.det = (int8_t)det; e.pan = (int8_t)pan;
     e.vol = (uint16_t)((vol * (uint32_t)sy_music) >> 8); e.att_ms = (uint16_t)att_ms; e.dur_ms = (uint16_t)dur_ms;
     e.wave = (uint8_t)wave; e.send = (uint8_t)send; e.sweep = (uint16_t)sweep; e.rsend = (uint8_t)rsend; e.drv = (uint8_t)drv;
+    e.fmode = 0; e.gl = 0; e.glms8 = 0;
     if (e.vol) sy_start(&e);
 }
 static void sy_now(int32_t note, uint32_t dur_ms, uint32_t wave, uint32_t vol, uint32_t att_ms, uint32_t send, int32_t det, int32_t pan, uint32_t sweep)
@@ -152,7 +182,7 @@ static void mus_tick(uint32_t tick);             /* ac_music.h: the tunes */
 
 static uint32_t sy_noise = 0xACE1ACE1u;
 static uint32_t sy_dph[3], sy_lfo;
-static int32_t sy_rlp, sy_hat_z;
+static int32_t sy_rlp, sy_rlp2, sy_hat_z;
 
 static void arcave_audio(int32_t *out, uint32_t n)
 {
@@ -190,11 +220,21 @@ static void arcave_audio(int32_t *out, uint32_t n)
         for (v = 0; v < SY_NV; v++) {
             sy_voice_t *o = &sy_v[v];
             uint32_t ph, inc;
-            int32_t a, gl, gr, sd, rs, dr;
+            int32_t a, gl, gr, sd, rs, dr, ff = 0, fq = 0, flp = 0, fbp = 0;
             if (!o->on) continue;
             if (o->stage == 0u) { o->amp += o->att; if (o->amp >= o->vol) { o->amp = o->vol; o->stage = 1; } }
             else { o->amp = (int32_t)(((int64_t)o->amp * o->dec) >> 16); if (o->amp < 2048) { o->on = 0; continue; } }
-            if (o->sweep != 65536u) o->inc = (uint32_t)(((uint64_t)o->inc * o->sweep) >> 16);
+            if (o->sweep != 65536u) {
+                o->inc = (uint32_t)(((uint64_t)o->inc * o->sweep) >> 16);
+                if (o->swn && --o->swn == 0u) { o->inc = o->inc_to; o->sweep = 65536u; }
+            }
+            if (o->fmode) {                      /* the filter's cutoff, once a block */
+                int32_t c = o->fcut + o->fenv;
+                o->fenv = (int32_t)(((int64_t)o->fenv * o->fdec) >> 16);
+                ff = (int32_t)(((uint64_t)sy_inc(c >> 8, ((c & 255) * 100) >> 8) * 205887u) >> 32);
+                if (ff > 24000) ff = 24000;
+                fq = o->fq; flp = o->lp; fbp = o->bp;
+            }
             ph = o->ph; inc = o->inc; a = o->amp >> 8; gl = o->gl; gr = o->gr; sd = o->send; rs = o->rs; dr = o->dr;
             if (rs) sy_rv_live = 4200;           /* (three seconds after its last note) */
             for (i = 0; i < 32u; i++) {
@@ -212,6 +252,14 @@ static void arcave_audio(int32_t *out, uint32_t n)
                     sy_noise ^= sy_noise << 13; sy_noise ^= sy_noise >> 17; sy_noise ^= sy_noise << 5;
                     s = (int32_t)(sy_noise & 0xFFFFu) - 32768; { int32_t z = s; s = (s - sy_hat_z) >> 1; sy_hat_z = z; } break;
                 }
+                if (o->fmode) {                  /* a state-variable filter: low-pass or band-pass */
+                    flp += (ff * fbp) >> 15;
+                    if (flp > 60000) flp = 60000; else if (flp < -60000) flp = -60000;
+                    fbp += (int32_t)(((int64_t)ff * (s - flp - (int32_t)(((int64_t)fq * fbp) >> 15))) >> 15);
+                    if (fbp > 60000) fbp = 60000; else if (fbp < -60000) fbp = -60000;
+                    s = o->fmode == 1u ? flp : fbp;
+                    if (s > 60000) s = 60000; else if (s < -60000) s = -60000;
+                }
                 if (dr) { s = (s * dr) >> 8; if (s > 30000) s = 30000; else if (s < -30000) s = -30000; }   /* driven into a clip */
                 s = (s * a) >> 15;
                 mix[2u * i] += (s * gl) >> 8;
@@ -220,6 +268,7 @@ static void arcave_audio(int32_t *out, uint32_t n)
                 rvb[i] += (s * rs) >> 8;
             }
             o->ph = ph;
+            if (o->fmode) { o->lp = flp; o->bp = fbp; }
         }
         /* the cave's hum: two low sines a hair apart and a fifth that comes and goes */
         sy_drone += iclamp(sy_drone_want - sy_drone, -1, 1);
@@ -239,16 +288,18 @@ static void arcave_audio(int32_t *out, uint32_t n)
                 if (!(i & 7u)) snd[i] += s >> 2;
             }
         }
-        /* the rock rolling: low noise */
+        /* the rock rolling: low noise, through two low-pass stages so no hiss is left on top (one stage sounded
+           like static), and softer than it was */
         sy_rumble += iclamp(sy_rumble_want - sy_rumble, -6, 6);
         if (sy_rumble > 0) {
-            int32_t kq = iclamp(sy_rumble_pitch, 40, 900);
+            int32_t kq = iclamp(sy_rumble_pitch, 40, 420);
             for (i = 0; i < 32u; i++) {
                 int32_t s;
                 sy_noise ^= sy_noise << 13; sy_noise ^= sy_noise >> 17; sy_noise ^= sy_noise << 5;
                 s = (int32_t)(sy_noise & 0xFFFFu) - 32768;
                 sy_rlp += ((s - sy_rlp) * kq) >> 14;
-                s = (sy_rlp * sy_rumble) >> 6;
+                sy_rlp2 += ((sy_rlp - sy_rlp2) * kq) >> 14;
+                s = (sy_rlp2 * sy_rumble * 3) >> 8;
                 mix[2u * i] += s; mix[2u * i + 1u] += s;
             }
         }
@@ -257,7 +308,7 @@ static void arcave_audio(int32_t *out, uint32_t n)
             int32_t in_ = (snd[i] + snd[i + 1u]) >> 1, o = sy_dl[sy_dlw];
             sy_dllp += ((o - sy_dllp) * 13000) >> 15;
             sy_dl[sy_dlw] = (int16_t)iclamp(in_ + ((sy_dllp * sy_echo_fb) >> 8), -32000, 32000);
-            sy_dlw = (sy_dlw + 1u) & (SY_DLN - 1u);
+            if (++sy_dlw >= sy_echo_len) sy_dlw = 0;
             mix[2u * i] += sy_dllp; mix[2u * i + 1u] += sy_dllp;
             mix[2u * i + 2u] += sy_dllp; mix[2u * i + 3u] += sy_dllp;
         }

@@ -16,6 +16,10 @@ D=; [ -n "$2" ] && D="-DAC_TEST_STORY=$2"
 [ -n "$DUO" ] && D="$D -DAC_TEST_DUO=$DUO"       # DUO=0..4: UNDERSONG with a friend who never misses, that many chapters in
 [ -n "$NP" ] && D="$D -DAC_TEST_NP=$NP"          # NP=3: with DUO, two such friends (UNDERSONG for three)
 [ -n "$AT" ] && D="$D -DAC_TEST_X=${AT%,*} -DAC_TEST_Y=${AT#*,}"   # AT=X,Y: with SCENE 9, Rock starts in the cave there
+[ -n "$TICKETS" ] && D="$D -DAC_TEST_TICKETS=$TICKETS"   # TICKETS=n: that many tickets in the pocket
+[ -n "$DONE" ] && D="$D -DAC_TEST_DONE=$DONE"   # DONE=bits: machines a round has been finished on (1 CRYSTAL ROAD, 2 JUICE WORKS, 4 NIGHT BLOOM)
+[ -n "$WEAR" ] && D="$D -DAC_TEST_WEAR=$WEAR"   # WEAR=n: everything owned and a set of it on, trail n (1-6)
+[ -n "$BT" ] && D="$D -DAC_TEST_BT=1"           # BT=1: a pretend radio, so the settings show BLUETOOTH
 cc -O2 -Wall -Wno-unused-function -Wno-unused-variable -Wno-unused-const-variable -Wno-empty-body -DDINGHY_HOST \
    '-Dsection(x)=' -DAPP_VER='"dev"' $D -Ifirmware/hal -Ifirmware/src -Ifirmware/gen -o "build/host/$N" firmware/src/fm_arcave.c
 rm -f build/host/"$N"-*.ppm

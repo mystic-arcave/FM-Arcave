@@ -88,6 +88,9 @@ static void mach_over(void)
     mc.state = MS_OVER; mc.t = 0;
     if ((uint32_t)mc.score > best[mc.which]) { best[mc.which] = (uint32_t)mc.score; save_dirty = 1; }
     sfx(60, 0, 500, W_TRI, 3000, 5, 150); sfx(55, 180, 500, W_TRI, 3000, 5, 150); sfx(48, 360, 1200, W_TRI, 3000, 5, 150);
+    /* the tickets: JUICE WORKS one for every 25 points, NIGHT BLOOM one for every 8, and one for having played */
+    pf_round_done(mc.which);
+    tix_pay(1 + mc.score / (mc.which == 1 ? 25 : 8), th->caps[mc.which * 2 % 5]);
 }
 
 /* ---------------------------------------------------------------- CRYSTAL ROAD */
@@ -261,6 +264,10 @@ static void gh_end(int cleared)
     if (cleared && !(gh_flags & 1u)) { gh_flags |= 1u; gh.unlocked = 1; save_dirty = 1; }
     if (cleared) { snd_chime(1); if (gh.unlocked) snd_whoosh(); }
     else { sfx(60, 0, 500, W_TRI, 3000, 5, 150); sfx(55, 180, 500, W_TRI, 3000, 5, 150); sfx(48, 360, 1200, W_TRI, 3000, 5, 150); }
+    /* the tickets: one for having played, one for every six notes caught in PEBBLE (three in ROCK, two in CRYSTAL), four
+     * a crystal, three for reaching the song's end */
+    pf_round_done(0);
+    tix_pay(1 + gh.hits * (gh_mode + 1) / 6 + g * 4 + (cleared ? 3 : 0), th->caps[0]);
 }
 static void gh_rock_to(int32_t x, int32_t now)   /* Rock leaps toward x from wherever he is */
 {
@@ -442,7 +449,7 @@ static void road_scene(int32_t now, int play, uint32_t tm, uint32_t t)
         if (t == 2) gh_crystal(x, y, s * 7 / 8, th->caps[(uint32_t)b % 5u], beat, 0, 0);   /* CRYSTAL STEPS: crystals */
         else if (t == 5 && (b & 1)) {           /* ROLL ON: rock friends rolling along, a bounce on the beat */
             int32_t hop = beat * s / 1600;
-            rock_draw(x, y - 6 * s / 256 - hop, s, now * 500 * (side > 0 ? -1 : 1), 256, th->rock, th->rock_rim, th->dark, th->moss, th->eye, th->pupil);
+            prock_draw(x, y - 6 * s / 256 - hop, s, now * 500 * (side > 0 ? -1 : 1), 256);
         }
         else mush_draw(x, y, s * 230 / 256 + beat * s / 1800, th->caps[(uint32_t)b % 5u], th->stem, beat);
     }
@@ -506,7 +513,7 @@ static void road_scene(int32_t now, int play, uint32_t tm, uint32_t t)
         int32_t f = ease8(iclamp((now - gh.rock_t) * 256 / 16, 0, 256)), hop = (L == 4 ? 16 : 9) * f * (256 - f) / 16384;
         int32_t spin = play && now - gh.perf_t >= 0 && now - gh.perf_t < 30 ? (now - gh.perf_t) * 65536 / 30 : 0;   /* (a PERFECT: a spin) */
         if (!play) f = 256;
-        rock_draw(gh.rock_x0 + (gh.rock_x1 - gh.rock_x0) * f / 256, GH_YS - 8 - hop - (spin ? 6 : 0), 256, now * 300 + spin, (tm % 3100u) < 150u ? 40 : 256, th->rock, th->rock_rim, th->dark, th->moss, th->eye, th->pupil);
+        prock_draw(gh.rock_x0 + (gh.rock_x1 - gh.rock_x0) * f / 256, GH_YS - 8 - hop - (spin ? 6 : 0), 256, now * 300 + spin, (tm % 3100u) < 150u ? 40 : 256);
     }
     if (play) {
         for (st = imax(0, now / 24); st <= (now + 96) / 24 && st < n; st++)
@@ -1188,7 +1195,7 @@ static void bloom_draw(void)
 static void mach_start(void)
 {
     uint32_t i, now = tr_now_q8() >> 8;
-    mc.state = MS_PLAY; mc.score = 0; mc.combo = 0; mc.t = 0; mc.msg_t = 0; mc.flash = 0; mc.ask = 0;
+    mc.state = MS_PLAY; mc.score = 0; mc.combo = 0; mc.t = 0; mc.msg_t = 0; mc.flash = 0; mc.ask = 0; tix.on = 0;
     if (mc.which == 0) gh_start();
     else if (mc.which == 1) {
         for (i = 0; i < sizeof jw; i++) ((uint8_t *)&jw)[i] = 0;
@@ -1209,7 +1216,7 @@ static void mach_start(void)
 static void mach_enter(int which)
 {
     uint32_t i;
-    mc.which = (uint8_t)which; mc.state = MS_TITLE; mc.t = 0; mc.msg_t = 0; mc.flash = 0; mc.score = 0; mc.lives = 0; mc.ask = 0;
+    mc.which = (uint8_t)which; mc.state = MS_TITLE; mc.t = 0; mc.msg_t = 0; mc.flash = 0; mc.score = 0; mc.lives = 0; mc.ask = 0; tix.on = 0;
     gh.card_track = (uint8_t)(mus_track % JUKE_N); gh.swap_t = -10000; gh.demo_track = 255;
     (void)i;
 #ifdef AC_TEST_SCENE
@@ -1225,6 +1232,12 @@ static int mach_tick(int32_t dt)
     if (mc.flash > 0) mc.flash -= dt;
     if (BDOWN(BTN_HOME)) return 1;
     if (mc.state != MS_PLAY) {
+        if (tix.on) {                            /* the tickets coming out: the card waits under them; PLAY goes to the sum */
+            tix_tick(dt); mc.t = 0;
+            if (BDOWN(BTN_PLAY) || BDOWN(BTN_REC)) tix_skip();
+            led_play_breathe = 1;
+            return 0;
+        }
         if (BDOWN(BTN_REC)) return -1;
         if (mc.which == 0) {                     /* (CRYSTAL ROAD: KNOB 1 the mode; no song recorded, no start) */
             int ok = gh_card_tick();
@@ -1254,5 +1267,6 @@ static void mach_draw(void)
         if (mc.state == MS_PLAY) mach_hud();
         else mach_card(MACH_NAME[mc.which], th->caps[mc.which * 2 % 5]);
     }
+    if (mc.state != MS_PLAY) tix_draw();
     if (mc.state == MS_PLAY && mc.ask) rec_box_draw(1, (uint32_t)fm1_ms);
 }

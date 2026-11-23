@@ -100,8 +100,9 @@ static void dlg_draw(void)
 /* ---------------------------------------------------------------- the cave */
 #define CV_W 880
 #define CV_GROUND 400
-#define CV_XL (-104)                             /* the left wall of the room up on the left */
-#define CV_DOOR_X (-82)                          /* the door outside, in that wall */
+#define CV_XL (-240)                             /* the left wall of the room up on the left */
+#define CV_DOOR_X (CV_XL + 22)                   /* the door outside, in that wall: the way out is through the gift shop */
+#define CV_SHOP_X (-104)                         /* the gift shop, a stall in that room: the upgrades (ac_shop.h) */
 typedef struct { int16_t x0, x1, y; uint8_t kind; } cv_plat_t;   /* kind 0: a ledge; 1: a springy cap */
 static const cv_plat_t CV_PLAT[] = {
     {0, CV_W, CV_GROUND, 0},
@@ -110,11 +111,18 @@ static const cv_plat_t CV_PLAT[] = {
     {612, 800, 232, 0},                          /* machine 3 */
     {578, 606, 384, 1},                          /* a cap by the first ledge */
     {586, 612, 312, 1},                          /* one between the first and second, for the third */
-    {CV_XL, 132, 190, 0},                        /* high on the left wall: only the booster reaches it; its far end is
-                                                    a small room with the door back outside */
+    {CV_XL, 132, 190, 0},                        /* high on the left wall: only the booster reaches it; further in is
+                                                    a room with the gift shop and, past it, the door back outside */
     {788, 866, 176, 0},                          /* high on the right wall */
     {98, 126, 178, 1},                           /* a cap up there, toward the chimes */
+    {866, 1112, 176, 2},                         /* (mended) the tunnel out of the right wall, off the end of the high
+                                                    right ledge: level at its mouth, then down to the music room's door */
 };
+#define CV_TUN 9                                 /* (its place in the list) */
+#define CV_TUN_X1 1112
+#define CV_TUN_H 46                              /* the tunnel's height */
+#define CV_TDOOR_X 1098                          /* the music room's door, in the tunnel's end */
+static int32_t cave_tun_q8(int32_t x) { return Q8(176) + iclamp(x - Q8(884), 0, Q8(186)) * 60 / 186; }   /* the tunnel's floor under x (Q8) */
 #define CV_JUKE_X 522                            /* the jukebox, on the ground past the Hat */
 #define CV_DIP_W 26                              /* the dip it stands in: half its width, and its depth */
 #define CV_DIP_D 4                               /* (the same slight dip as each machine's on its ledge, and the well's) */
@@ -139,7 +147,6 @@ static int32_t cave_floor_q8(int32_t x)          /* the ground's height under x 
 #define CV_NCHIME 5
 #define CHIME_X(i) (176 + (i) * 34)
 #define CHIME_Y(i) (116 + (i) * (i) * 2)          /* an arch: the far ones hang lower */
-#define CV_FRIEND_X 44
 #ifndef CV_RING_X                               /* the ring: out in the air beyond the high right ledge, too high for any hop
                                                    from below; only a big hop at full roll off the ledge's end reaches it */
 #define CV_RING_X 670
@@ -162,10 +169,13 @@ static int32_t cave_top_q8(uint32_t k, int32_t x)   /* the top of floor k under 
 {
     if (k == 0u) return cave_floor_q8(x);
     if (k <= 3u) return Q8(CV_PLAT[k].y) + cave_dip_q8(x, CV_MACH[k - 1u][0], CV_MDIP_D);
+    if (k == 6u) return Q8(CV_PLAT[k].y) + cave_dip_q8(x, CV_SHOP_X, CV_MDIP_D);   /* (the gift shop stands in one too) */
+    if (k == CV_TUN) return cave_tun_q8(x);
     return Q8(CV_PLAT[k].y);
 }
 
-enum { CVA_NONE, CVA_LAMP, CVA_M1, CVA_M2, CVA_M3, CVA_SCORES, CVA_EXIT, CVA_DISH, CVA_DUO };
+enum { CVA_NONE, CVA_LAMP, CVA_M1, CVA_M2, CVA_M3, CVA_SCORES, CVA_EXIT, CVA_DISH, CVA_DUO, CVA_ROOM, CVA_SHOP };
+#define CV_ENTER_MS 1100                         /* into the music room: Rock into the door, the camera after him */
 #define CV_DIVE_HOP 520                          /* down the well: Rock hops over its rim, */
 #define CV_DIVE_IN 1000                          /* drops into it, */
 #define CV_DIVE_MS 1500                          /* and the camera goes in after it */
@@ -186,8 +196,11 @@ static struct {
     int32_t dive, dive_x, dive_y;                /* dive: ms into the last of the way down (0: not diving); from where */
     int32_t wl, wt, low, zw;                     /* the well: phase (CVW_...), ms in it, how far the bucket is down (0..256), the zoom */
     uint8_t wturned;                             /* a knob has been turned at the bucket: the helper goes */
-    uint8_t secrets, chimes, friend_awake;       /* secrets: bit 0 the sleeper, 1 the chimes, 2 the ring */
+    int32_t door, enter;                         /* the music room's door: how far open (0..256); ms into going in (0: not) */
+    uint8_t secrets, chimes, friend_awake;       /* secrets: bit 1 the chimes, 2 the ring, 3 the hollow behind the course's start
+                                                    (bit 0 was the sleeper on the high ledge: no secret any more, he keeps the shop) */
     uint8_t g, inited, met, near;                /* near: 0 nothing, 1 the Hat, 2 the jukebox, 3..5 a machine */
+    uint8_t hat_away;                            /* Rock has been away from the Hat since it last spoke */
     uint8_t at_juke, juke_ready;                 /* in front of the jukebox; it offers a new song (not until Rock has
                                                     left it once after the last one was kept) */
 } cv;
@@ -197,7 +210,7 @@ static uint8_t story;                            /* 0 the intro, 1 in the cave, 
 static void cave_enter(int fresh)
 {
     if (!cv.inited || fresh) { cv.x = Q8(134); cv.y = cave_floor_q8(Q8(134)) - Q8(9); cv.vx = 0; cv.vy = 0; cv.th = 0; cv.inited = 1; cv.camx = 0; cv.camy = Q8(CV_GROUND - 250); cv.psst = 0; }
-    cv.fade = 256; cv.drag = 0; cv.t = 0; cv.dive = 0; cv.wl = 0; cv.low = 0; cv.zw = 256;
+    cv.fade = 256; cv.drag = 0; cv.t = 0; cv.dive = 0; cv.wl = 0; cv.low = 0; cv.zw = 256; cv.enter = 0;
     if (story >= 2) cv.met = 1;                  /* the Hat has said its piece: no calling from off the screen */
     sy_drone_want = story >= 4 ? 0 : 150;
     sy_music_want = 256;
@@ -212,7 +225,7 @@ static void cave_secret(int bit)
 #ifdef DINGHY_HOST
     printf("%6u ms  cave secret %d found\n", fm1_ms, bit);
 #endif
-    n[0] = (char)('0' + (cv.secrets & 1u) + (cv.secrets >> 1 & 1u) + (cv.secrets >> 2 & 1u));
+    n[0] = (char)('0' + (cv.secrets >> 1 & 1u) + (cv.secrets >> 2 & 1u) + (cv.secrets >> 3 & 1u));
     banner_show(TR(T_SECRET), n, 0);
     snd_chime(1);
 }
@@ -236,6 +249,8 @@ static int cave_tick(int32_t dt)
     int act = CVA_NONE;
     cv.t += dt;
     if (in.kdown) snd_keys(in.kdown, 0);         /* the keyboard is an instrument here: every key its note, in the tune's key */
+    if (in.hikey >= 0) deco_key_fx(KEY_ZONE[in.hikey], cv.x, cv.y);   /* (and its colour's spark, if it wears one) */
+    pfx_tick(dt);
     cv.fade = imax(0, cv.fade - dt * 256 / 1200);
     if (cv.power_t > 0) cv.power_t = imax(0, cv.power_t - dt);
     if (dlg_tick(dt)) { sy_rumble_want = 0; return CVA_NONE; }
@@ -280,6 +295,16 @@ static int cave_tick(int32_t dt)
         if (cv.wt >= CVW_SNAP_MS) {              /* the rest is the dive, from the camera's last push on */
             cv.wl = 0; cv.dive = CV_DIVE_IN; cv.x = Q8(CV_WELL_X); cv.y = fy + Q8(30);
         }
+        return CVA_NONE;
+    }
+    if (cv.enter) {                              /* into the music room: a hop into the open door, the camera after it */
+        int32_t e = ease8(imin(256, cv.enter * 256 / 500)), ox = cv.x;
+        cv.enter += dt; cv.door = 256;
+        cv.x = cv.dive_x + (Q8(CV_TDOOR_X) - cv.dive_x) * e / 256;
+        cv.y = cv.dive_y + (Q8(236 - 22) - cv.dive_y) * e / 256 - ((isin(imin(256, cv.enter * 256 / 500) * 128) * 14) >> 6);
+        cv.th += (cv.x - ox) * 1372 / 256 + dt * 40;
+        sy_rumble_want = 0;
+        if (cv.enter >= CV_ENTER_MS) { cv.enter = 0; cv.x = Q8(CV_TDOOR_X - 34); cv.y = cave_tun_q8(cv.x) - rock_rad(cv.th); cv.vx = cv.vy = 0; cv.drag = 0; cv.g = 1; return CVA_ROOM; }
         return CVA_NONE;
     }
     if (cv.dive) {                               /* down the well: a hop over the rim, the drop, the camera after it */
@@ -335,9 +360,10 @@ static int cave_tick(int32_t dt)
         {   /* the dips in front of the jukebox, the machines and (mended) the well, all alike: they slow Rock and draw
                it to the middle, so only a firm roll goes by */
             int32_t dx, m, mx, my;
-            for (m = 0; m < (story >= 4 ? 5 : 4); m++) {   /* the jukebox, the three machines, the well */
-                mx = m == 0 ? CV_JUKE_X : m == 4 ? CV_WELL_X : CV_MACH[m - 1][0];
-                my = m == 0 || m == 4 ? CV_GROUND : CV_MACH[m - 1][1];
+            for (m = 0; m < 6; m++) {            /* the jukebox, the three machines, the well, the gift shop */
+                if (m == 4 && story < 4) continue;   /* (no well before the jukebox is mended) */
+                mx = m == 0 ? CV_JUKE_X : m == 4 ? CV_WELL_X : m == 5 ? CV_SHOP_X : CV_MACH[m - 1][0];
+                my = m == 0 || m == 4 ? CV_GROUND : m == 5 ? 190 : CV_MACH[m - 1][1];
                 dx = (cv.x >> 8) - mx;
                 if (cv.g && iabs(dx) < CV_DIP_W && iabs((cv.y >> 8) - my) < 30)
                     cv.vx -= ((GR * dx / 30 * (CV_DIP_W - iabs(dx)) / CV_DIP_W) >> 7) + cv.vx / 60;
@@ -346,21 +372,29 @@ static int cave_tick(int32_t dt)
         if (cv.g) cv.coy = 13; else if (cv.coy > 0) cv.coy--;
         if (first && jump >= 0 && cv.coy > 0) {
             cv.vy = -Q8(JMIN) - (345 - JMIN) * jump; cv.g = 0; cv.coy = 0;   /* (its sound: the key's own note, above) */
+            deco_jump(KEY_ZONE[imax(in.hikey, 0)], cv.x, cv.y);
         }
         first = 0;
         cv.x += cv.vx >> 7; cv.y += cv.vy >> 7;
         {   /* the left wall: below the high ledge it stands at the ramp's end, above it the room goes on to its own */
-            int32_t wl = cv.y + rad > Q8(190) + 256 ? Q8(14) : Q8(CV_XL + 12);
+            int32_t wl = cv.y + rad > Q8(190 + CV_MDIP_D) + 256 ? Q8(14) : Q8(CV_XL + 12);   /* (the ledge, down to the foot of the gift shop's dip) */
             if (cv.x < wl) { if (wl - cv.x > Q8(6)) cv.y = imin(cv.y, Q8(190) - rad); else cv.x = wl; cv.vx = imax(0, cv.vx); if (cv.x < Q8(CV_XL + 12)) cv.x = Q8(CV_XL + 12); }
         }
-        if (cv.x > Q8(CV_W - 14)) { cv.x = Q8(CV_W - 14); cv.vx = imin(0, cv.vx); }
+        if (cv.x > Q8(CV_W - 14)) {              /* the right wall; mended, the tunnel's mouth is open in it */
+            int32_t tf = cave_tun_q8(cv.x);
+            if (story >= 4 && cv.y + rad <= tf + Q8(3) && cv.y - rad >= tf - Q8(CV_TUN_H + 4)) {
+                if (cv.x > Q8(CV_TDOOR_X - 12)) { cv.x = Q8(CV_TDOOR_X - 12); cv.vx = imin(0, cv.vx); }
+                if (cv.x > Q8(CV_W - 4) && cv.y - rad < tf - Q8(CV_TUN_H)) { cv.y = tf - Q8(CV_TUN_H) + rad; cv.vy = imax(0, cv.vy); }
+            } else { cv.x = Q8(CV_W - 14); cv.vx = imin(0, cv.vx); }
+        }
         bot = cv.y + rad;
         cv.g = 0;
         for (k = 0; k < CV_NPLAT; k++) {
             const cv_plat_t *p = &CV_PLAT[k];
             int32_t top = cave_top_q8(k, cv.x);
             if (cv.vy < 0 || cv.x < Q8(p->x0 - 5) || cv.x > Q8(p->x1 + 5)) continue;
-            if (k == 0u ? bot >= top : (py + rad <= top + 256 && bot >= top)) {
+            if (p->kind == 2 && (story < 4 || cv.x <= Q8(CV_W - 14))) continue;
+            if (k == 0u ? bot >= top : (py + rad <= top + 256 && bot >= top - (p->kind == 2 ? Q8(2) : 0))) {
                 cv.y = top - rad;
                 if (p->kind) {                   /* a cap throws you up, and sings */
                     cv.vy = -Q8(368); cv.sq[k - 4u] = 250;
@@ -383,13 +417,14 @@ static int cave_tick(int32_t dt)
     }
     sy_rumble_want = cv.g ? imin(60, iabs(cv.vx) >> 9) : 0;
     sy_rumble_pitch = 70 + (iabs(cv.vx) >> 9);
+    deco_jump_tick(dt, cv.g, cv.x, cv.y);
+    if (cv.g) deco_trail(cv.x, cv.y + rock_rad(cv.th), cv.vx, dt);
     for (i = 0; i < 5; i++) if (cv.sq[i] > 0) cv.sq[i] = imax(0, cv.sq[i] - dt);
     if (cv.boost_t > 0) cv.boost_t -= dt;
     hx = cv.x >> 8; hy = cv.y >> 8;
-    /* high up, where only boosting and bouncing reach: a sleeper, a row of chimes, a ring */
-    if (iabs(hx - CV_FRIEND_X) < 34 && iabs(hy - 182) < 24) {
-        if (!cv.friend_awake) { cv.friend_awake = 1; sfx(67, 0, 300, W_TRI, 2800, 4, 200); sfx(72, 140, 300, W_TRI, 2800, 4, 200); sfx(76, 280, 600, W_TRI, 2800, 4, 200); }
-        cave_secret(0);
+    /* high up, where only boosting and bouncing reach: the gift shop, a row of chimes, a ring */
+    if (iabs(hx - CV_SHOP_X) < 44 && iabs(hy - 182) < 24 && !cv.friend_awake) {   /* the shop's keeper wakes as Rock comes */
+        cv.friend_awake = 1; sfx(67, 0, 300, W_TRI, 2800, 4, 200); sfx(72, 140, 300, W_TRI, 2800, 4, 200); sfx(76, 280, 600, W_TRI, 2800, 4, 200);
     }
     for (i = 0; i < CV_NCHIME; i++) {
         if (cv.chime_t[i] > 0) cv.chime_t[i] -= dt;
@@ -406,7 +441,7 @@ static int cave_tick(int32_t dt)
     }
     /* the camera keeps Rock a third of the way up, and never shows past the walls */
     {
-        int32_t tx = iclamp(cv.x - Q8(120) + cv.vx / 3, cv.y < Q8(200) ? Q8(CV_XL - 8) : 0, Q8(CV_W - 240)), ty = iclamp(cv.y - Q8(176), Q8(CV_GROUND - 372), Q8(CV_GROUND - 214));
+        int32_t tx = iclamp(cv.x - Q8(120) + cv.vx / 3, cv.y < Q8(200) ? Q8(CV_XL - 8) : 0, cv.x > Q8(CV_W - 14) ? Q8(CV_TUN_X1 + 30 - 240) : Q8(CV_W - 240)), ty = iclamp(cv.y - Q8(176), Q8(CV_GROUND - 372), Q8(CV_GROUND - 214));
         cv.camx += (tx - cv.camx) * imin(160, dt) / 160;
         cv.camy += (ty - cv.camy) * imin(240, dt) / 240;
     }
@@ -419,6 +454,18 @@ static int cave_tick(int32_t dt)
             if (story < 2) { story = 2; dlg_open(T_HAT, T_HAT_HELLO); }
         }
     }
+    /* later the Hat has more to say (the tickets, once a machine has been played; a name for Rock, once a second has):
+     * it calls as it did the first time, from whichever side it is on, and says it when Rock comes to it */
+    if (iabs(hx - CV_HAT_X) > 80) cv.hat_away = 1;
+    if (cv.met && story >= 4 && pf_hat_due()) {
+        cv.psst += dt;
+        if (cv.psst > 1500 && (cv.psst % 2600) < dt && iabs(hx - CV_HAT_X) > 130) { sfx(69, 0, 90, W_SQUARE, 1500, 2, 220); sfx(74, 110, 160, W_SQUARE, 1500, 2, 220); }
+        if (cv.hat_away && iabs(hx - CV_HAT_X) < 46 && cv.g && hy > CV_GROUND - 40) {
+            int due = pf_hat_due();
+            cv.vx = 0; cv.psst = 0; cv.hat_away = 0;
+            dlg_open(T_HAT, due == 1 ? T_HAT_TICKETS : T_HAT_NAME); pf_hat_told(due);
+        }
+    }
     /* what is in reach */
     cv.near = 0;
     if (iabs(hx - CV_HAT_X) < 40 && hy > CV_GROUND - 40) cv.near = 1;
@@ -427,14 +474,26 @@ static int cave_tick(int32_t dt)
     if (cv.at_juke && (story < 4 || cv.juke_ready)) cv.near = 2;
     if (iabs(hx - CV_BOARD_X) < 22 && iabs(hy - (CV_BOARD_Y - 8)) < 22) cv.near = 6;
     if (hx < CV_DOOR_X + 26 && hy > 190 - 40 && hy < 190) cv.near = 7;
+    if (iabs(hx - CV_SHOP_X) < 30 && hy > 190 - 40 && hy < 190) cv.near = 10;   /* the gift shop */
     if (story >= 4 && iabs(hx - CV_WELL_X) < 20 && hy > CV_GROUND - 40) cv.near = 8;   /* (no well before the jukebox is mended) */
     for (i = 0; i < 3; i++) if (iabs(hx - CV_MACH[i][0]) < 26 && iabs(hy - (CV_MACH[i][1] - 8)) < 22) cv.near = (uint8_t)(3 + i);
+    /* the music room's door opens as Rock comes down the tunnel to it, and shuts behind him as he leaves */
+    if (story >= 4 && hx > CV_TDOOR_X - 96 && cv.x > Q8(CV_W - 14)) {
+        if (cv.door == 0) { sfx(60, 0, 500, W_SINE, 2600, 30, 200); sfx(67, 150, 500, W_SINE, 2200, 30, 200); sfx(76, 300, 900, W_SINE, 2200, 30, 220); sfx(96, 0, 300, W_NOISE, 500, 60, 100); }
+        cv.door = imin(256, cv.door + dt * 256 / 900);
+        if (hx > CV_TDOOR_X - 44) cv.near = 9;
+    } else cv.door = imax(0, cv.door - dt * 256 / 600);
     if (cv.near) led_play_breathe = 1;
     if (BDOWN(BTN_PLAY) && cv.near) {
         if (cv.near == 1) dlg_open(T_HAT, story < 4 ? T_HAT_REMIND : T_HAT_FREE);
         else if (cv.near == 2) act = story < 4 ? CVA_LAMP : CVA_DISH;   /* mended: the dish again, for a new song */
         else if (cv.near == 6) act = CVA_SCORES;
         else if (cv.near == 7) act = CVA_EXIT;
+        else if (cv.near == 10 && story >= 4) act = CVA_SHOP;
+        else if (cv.near == 9) {                 /* into the music room */
+            cv.enter = 1; cv.dive_x = cv.x; cv.dive_y = cv.y; cv.near = 0; snd_whoosh();
+            sfx(72, 0, 700, W_SINE, 2400, 10, 220); sfx(79, 110, 700, W_SINE, 2400, 10, 220); sfx(84, 220, 700, W_SINE, 2400, 10, 220); sfx(91, 330, 1200, W_SINE, 2400, 10, 230);
+        }
         else if (cv.near == 8 && story >= 4) {   /* the well: Rock dives in, and the game begins when the dive is over */
             cv.wl = CVW_HOP; cv.wt = 0; cv.low = 0; cv.zw = 256; cv.wturned = 0; cv.dive_x = cv.x; cv.dive_y = cv.y; cv.near = 0;
             sfx(72, 0, 120, W_TRI, 2200, 2, 120); sfx(96, 0, 70, W_NOISE, 500, 1, 160);
@@ -587,7 +646,7 @@ static void cave_well_load(int32_t x, int32_t y, int32_t by, int32_t snap, int i
         }
     }
     if (inb && snap < CVW_SNAP_MS / 2)           /* Rock in it, his eyes just over its rim */
-        rock_draw(x, by - 3, 256, 0, (tm % 3100u) < 150u ? 30 : 256, th->rock, th->rock_rim, th->dark, th->moss, th->eye, th->pupil);
+        prock_draw(x, by - 3, 256, 0, (tm % 3100u) < 150u ? 30 : 256);
     xy[0] = x - 10; xy[1] = by; xy[2] = x + 10; xy[3] = by; xy[4] = x + 8; xy[5] = by + 10; xy[6] = x - 8; xy[7] = by + 10;
     gpoly(xy, 4, CVW_WOOD);                      /* the bucket: dark boards, */
     for (k = -1; k <= 1; k += 2) gline(x + k * 5, by + 1, x + k * 4, by + 9, CVW_SEAM);   /* the joins between them, */
@@ -642,11 +701,11 @@ static void cave_well(int32_t x, int32_t y, int on, uint32_t tm, int front)
 static void cave_well_help(uint32_t tm)
 {
     static int32_t fade = 256;
-    int32_t a, sc = ts(1, 2), h, ang = (int32_t)(tm % 1400u) * 46811 / 1000, k, cx = 120, cy = 186;
+    int32_t a, sc = ts(1, 3), h, ang = (int32_t)(tm % 1400u) * 46811 / 1000, k, cx = 120, cy = 186;   /* (the size every prompt in the cave has) */
     fade = cv.wturned ? imax(0, fade - 24) : imin(256, cv.wt * 256 / 300);
     if (fade <= 0) return;
     a = fade;
-    while (sc > 1 && gblock_h(212, TR(T_WELL_LOWER), sc) > 2 * TLH(sc)) sc--;
+    while (sc > 1 && gblock_h(212, TR(T_WELL_LOWER), sc) > 3 * TLH(sc)) sc--;
     h = gblock_h(212, TR(T_WELL_LOWER), sc);
     galpha(a);
     grect(8, 8, 224, h + 14, th->panel); gbox(8, 8, 224, h + 14, th->pad);
@@ -659,6 +718,63 @@ static void cave_well_help(uint32_t tm)
     {   int32_t ex = cx + ((25 * icos(62000)) >> 14), ey = cy + ((25 * isin(62000)) >> 14);
         gline2(ex, ey, ex - 6, ey - 1, th->pad); gline2(ex, ey, ex - 1, ey + 6, th->pad); }
     galpha(256);
+}
+
+/* the gift shop: a market stall in the room up on the left. A counter of boards with a ticket on its front, the keeper
+ * behind it (the rock who slept on this ledge: asleep until Rock comes), a shelf of hats, an awning striped in the
+ * five colours. (x, y): the middle of its foot on the screen */
+static void cave_shop(int32_t x, int32_t y, int on, uint32_t tm)
+{
+    static const uint8_t HATS[3] = {2, 10, 4};   /* (a party hat, a crown, a mushroom cap: ac_deco.h) */
+    int32_t i;
+    rk_t k;
+    if (x < -60 || x > 300) return;
+    galpha(imax(on ? 256 : 70, cave_light(CV_SHOP_X, 170)));
+    grect(x - 38, y - 64, 2, 46, th->stem); grect(x + 36, y - 64, 2, 46, th->stem);   /* its posts */
+    grect(x - 30, y - 41, 60, 2, th->stem);                                           /* the shelf, and what stands on it */
+    for (i = 0; i < 3; i++) { k.x = x - 20 + i * 20; k.y = y - 36; k.z = 200; k.c = 16384; k.s = 0; deco_hat(&k, HATS[i], th->dark ? th->rock_rim : 0, tm); }
+    rock_draw(x, y - 22, 210, 0, cv.friend_awake ? ((tm % 2900u) < 150u ? 30 : 256) : 0, th->rock, th->rock_rim, th->dark, th->caps[2], th->eye, th->pupil);
+    if (!cv.friend_awake) gtext(x + 12 + (int32_t)((tm / 500u) % 3u) * 3, y - 40 - (int32_t)((tm / 500u) % 3u) * 4, "Z", th->mute, 1);
+    grect(x - 38, y - 18, 76, 18, th->panel); gbox(x - 38, y - 18, 76, 18, th->rim);    /* the counter */
+    for (i = 1; i < 4; i++) grect(x - 38 + i * 19, y - 17, 1, 16, th->mute);
+    grect(x - 41, y - 20, 82, 3, th->rim);
+    tix_one(x - 9, y - 13, 18, 9, th->caps[0]);
+    for (i = 0; i < 8; i++) {                    /* the awning */
+        col_t c = th->caps[i % 5];
+        gdisc(x - 44 + i * 11 + 5, y - 66, 5, c); grect(x - 44 + i * 11, y - 78, 11, 12, c);
+    }
+    galpha(256);
+}
+
+/* the music room's door, in the end of the tunnel: the face of a geode, shut by an iris of crystal shards in the five
+ * colours. open 0..256: the shards turn and draw back into the rim, and the light of the room comes out */
+static void cave_tdoor(int32_t x, int32_t y, int32_t open, uint32_t tm)
+{
+    int32_t k, R = 21, e = ease8(open), spin = (int32_t)(tm * 5u) + e * 90, xy[8];
+    galpha(24 + e * 40 / 256 + (tsin(tm, 30, 0) >> 11)); gdisc(x, y, R + 9, th->caps[(tm / 500u) % 5u]); galpha(256);
+    gdisc(x, y, R, th->bg);
+    if (e > 0) {                                 /* inside: rings of the five colours going away */
+        for (k = 0; k < 5; k++) {
+            int32_t rr = (int32_t)((tm / 14u + (uint32_t)k * 20u) % 100u) * (R - 2) / 100;
+            galpha(e * (100 - rr * 100 / R) / 100); gcirc(x, y, rr, th->caps[k]);
+        }
+        galpha(e * 70 / 256); gdisc(x, y, (R - 4) * e / 256, th->caps[(tm / 300u) % 5u]); galpha(256);
+    }
+    for (k = 0; k < 8; k++) {                    /* the shards */
+        int32_t a = spin + k * 8192, tip = (R - 1) * (256 - e) / 256 + 0, in_ = R - 1 - tip, ux = icos(a), uy = isin(a), a1 = a + 5200, a0 = a - 2000;
+        if (tip < 3) continue;
+        xy[0] = x + ((R * icos(a0)) >> 14); xy[1] = y + ((R * isin(a0)) >> 14);
+        xy[2] = x + ((R * icos(a1)) >> 14); xy[3] = y + ((R * isin(a1)) >> 14);
+        xy[4] = x + ((in_ * ux) >> 14) + ((3 * uy) >> 14); xy[5] = y + ((in_ * uy) >> 14) - ((3 * ux) >> 14);
+        galpha(200); gpoly(xy, 3, th->panel); galpha(256);
+        gpolyline(xy, 3, 1, th->caps[k % 5]);
+        gline(xy[4], xy[5], (xy[0] + xy[2]) / 2, (xy[1] + xy[3]) / 2, th->caps[(k + 2) % 5]);
+    }
+    garc(x, y, R, R, 0, 65536, th->rim, 1);
+    for (k = 0; k < 7; k++) {                    /* crystals round its rim */
+        int32_t a = 30000 + k * 6200, l = 5 + (k * 5) % 6, bx = x + (((R + 1) * icos(a)) >> 14), by = y + (((R + 1) * isin(a)) >> 14);
+        gline(bx - 2, by, bx + ((l * icos(a)) >> 14), by + ((l * isin(a)) >> 14), th->caps[k % 5]); gline(bx + 2, by, bx + ((l * icos(a)) >> 14), by + ((l * isin(a)) >> 14), th->caps[k % 5]);
+    }
 }
 
 static void cave_draw(void)
@@ -694,6 +810,32 @@ static void cave_draw(void)
     for (i = 0; i < (int32_t)CV_NPLAT; i++) {
         const cv_plat_t *p = &CV_PLAT[i];
         int32_t x;
+        if (p->kind == 2) {                      /* the tunnel (mended): its floor and roof, its end, the door, notes drifting up it */
+            if (!on || SX(p->x1) < -40) continue;
+            for (x = imax(CV_W - 4, cx - 4) & ~3; x < imin(p->x1, cx + 244); x += 4) {
+                int32_t y0 = cave_tun_q8(x << 8) >> 8, y1 = cave_tun_q8((x + 4) << 8) >> 8;
+                galpha(256); gline(SX(x), SY(y0), SX(x + 4), SY(y1), th->rim);
+                galpha(150); gline(SX(x), SY(y0 - CV_TUN_H - 4 + (int32_t)(ihash((uint32_t)(x / 4)) * 4u >> 16)), SX(x + 4), SY(y1 - CV_TUN_H - 4 + (int32_t)(ihash((uint32_t)(x / 4 + 1)) * 4u >> 16)), th->rim);
+                for (k = 0; k < 3; k++)
+                    if (((x / 4 + k * 3) % (5 + k * 2)) < 3 + k) { galpha(150 - k * 40); gline(SX(x), SY(y0 + 3 + k * 4), SX(x + 4), SY(y1 + 3 + k * 4), th->bands[(k + 2) % 5]); }
+            }
+            galpha(256);
+            gline(SX(p->x1), SY(236 - CV_TUN_H - 4), SX(p->x1), SY(236), th->rim);
+            for (k = 0; k < 4; k++) {            /* notes drift up the tunnel and out of its mouth: something is down there */
+                int32_t q = (int32_t)((tm / 5u + (uint32_t)k * 250u) % 1000u), nx = CV_TDOOR_X - 20 - q * 230 / 1000;
+                galpha(q < 800 ? 200 : (1000 - q) * 200 / 200);
+                gtext(SX(nx), SY((cave_tun_q8(nx << 8) >> 8) - 24 + (tsin(tm, 22, k * 16000) >> 12)), "\xE2\x99\xAA", th->caps[(k * 2 + 1) % 5], 1);
+            }
+            galpha(256);
+            cave_tdoor(SX(CV_TDOOR_X), SY(236 - 22), cv.door, tm);
+            if (SX(CV_TDOOR_X) < 300) {          /* its name over it */
+                int32_t sc = ts(1, 2);
+                galpha(150 + ipulse(tm, 1500) * 106 / 256);
+                gfit(iclamp(SX(CV_TDOOR_X - 16), 60, 180), SY(236 - 56) - 5 * sc, 232, TR(T_MR_NAME), th->caps[(tm / 500u) % 5u], sc);
+                galpha(256);
+            }
+            continue;
+        }
         if (p->kind) {                           /* a springy cap on a thin stalk */
             int32_t q = cv.sq[i - 4] * 256 / 250, mx = (p->x0 + p->x1) / 2, ry = 9 * (256 - q * 4 / 10) / 256, base = i == 4 ? CV_GROUND : i == 5 ? 344 : 190;
             col_t c = th->caps[i == 4 ? 2 : i == 5 ? 0 : 3];
@@ -747,6 +889,7 @@ static void cave_draw(void)
                 int32_t nx = wx + (int32_t)(ihash((uint32_t)(y / 8 + i * 77 + 31)) * 5u >> 16) - 2, y1 = imin(yb, y + 8);
                 if (y1 == yb) nx = wx;
                 galpha(imax(on ? 140 : 40, cave_light(wx, y)));
+                if (i == 2 && on && y >= 176 - CV_TUN_H - 6 && y < 176) { px = nx; continue; }   /* (the tunnel's mouth) */
                 gline(SX(px), SY(y), SX(nx), SY(y1), th->rim);
                 px = nx;
             }
@@ -773,9 +916,8 @@ static void cave_draw(void)
                 galpha(70); gdisc(SX(x), SY(y), 4, c); galpha(256); grect(SX(x) - 1, SY(y) - 1, 2, 2, c);
             }
     }
-    /* high up: the sleeper, the chimes hanging from the roof, the ring */
-    rock_draw(SX(CV_FRIEND_X), SY(190 - 6), 210, 0, cv.friend_awake ? ((tm % 2900u) < 150u ? 30 : 256) : 0, th->rock, th->rock_rim, th->dark, th->caps[2], th->eye, th->pupil);
-    if (!cv.friend_awake) gtext(SX(CV_FRIEND_X + 8) + (int32_t)((tm / 500u) % 3u) * 3, SY(168) - (int32_t)((tm / 500u) % 3u) * 4, "Z", th->mute, 1);
+    /* high up: the gift shop, the chimes hanging from the roof, the ring */
+    cave_shop(SX(CV_SHOP_X), SY(190 + CV_MDIP_D), on, tm);
     for (i = 0; i < CV_NCHIME; i++) {
         int32_t x = SX(CHIME_X(i)), y = SY(CHIME_Y(i)), on_ = cv.chime_t[i] > 0, xy[8];
         col_t c = th->caps[i % 5];
@@ -851,34 +993,48 @@ static void cave_draw(void)
         galpha(34); gdisc(x, y - 6, 30, th->pad); galpha(256);
         hat_draw(x, y, 120, th->dark ? HEXC(0x0c1216) : th->hat, th->hat_eye, th->hat_pupil, bl, iclamp(((cv.x >> 8) - CV_HAT_X) * 256 / 70, -256, 256), th->dark, th->hat_rim, 256);
     }
-    if (cv.wl >= CVW_LOWER || cv.dive) cave_well(SX(CV_WELL_X), SY(CV_WELL_Y), on, tm, 1);   /* (Rock in the bucket: drawn with it) */
+    if (cv.enter) {                              /* into the door: smaller as he goes */
+        int32_t q = imin(256, cv.enter * 256 / 600);
+        if (cv.enter < 640) prock_draw(SX(cv.x >> 8), SY(cv.y >> 8), 256 - q * 150 / 256, cv.th, 256);
+    }
+    else if (cv.wl >= CVW_LOWER || cv.dive) cave_well(SX(CV_WELL_X), SY(CV_WELL_Y), on, tm, 1);   /* (Rock in the bucket: drawn with it) */
     else if (cv.dive >= CV_DIVE_HOP) {           /* into the well: smaller as it drops, and gone behind the near rim */
         int32_t q = imin(256, (cv.dive - CV_DIVE_HOP) * 256 / (CV_DIVE_IN - CV_DIVE_HOP));
         gclip_y1 = iclamp(SY(CV_WELL_Y) - 1, 0, AC_H);
-        rock_draw(SX(cv.x >> 8), SY(cv.y >> 8), 256 - q * 120 / 256, cv.th, 256, th->rock, th->rock_rim, th->dark, th->moss, th->eye, th->pupil);
+        prock_draw(SX(cv.x >> 8), SY(cv.y >> 8), 256 - q * 120 / 256, cv.th, 256);
         gclip_y1 = AC_H;
     } else
-    rock_draw(SX(cv.x >> 8), SY(cv.y >> 8), 256, cv.th, (tm % 3700u) < 160u ? iabs((int32_t)(tm % 3700u) - 80) * 256 / 80 : 256,
-              th->rock, th->rock_rim, th->dark, th->moss, th->eye, th->pupil);
+    {   /* (what his keys threw off and what he leaves behind, then him, in the jump he wears) */
+        pfx_draw(cv.camx & ~255, cv.camy & ~255, 256);
+        prock_live(SX(cv.x >> 8), SY(cv.y >> 8), 256, cv.th, (tm % 3700u) < 160u ? iabs((int32_t)(tm % 3700u) - 80) * 256 / 80 : 256);
+    }
     /* words */
-    if (!cv.met && cv.psst > 1200 && (cv.x >> 8) < CV_HAT_X - 130) {
-        int32_t a = 120 + ipulse(tm, 1300) / 2, sc = ts(1, 3), w, h;
+    if (!dlg.on && cv.psst > 1200 && ((!cv.met && (cv.x >> 8) < CV_HAT_X - 130) || (cv.met && on && pf_hat_due() && iabs((cv.x >> 8) - CV_HAT_X) > 130))) {
+        int32_t a = 120 + ipulse(tm, 1300) / 2, sc = ts(1, 3), w, h, left = (cv.x >> 8) > CV_HAT_X, x0;   /* (the Hat is to the left: the box and its arrow there) */
         while (sc > 1 && gtextw(TR(T_PSST), sc) + 12 + 8 * sc > 236) sc--;
-        w = gtextw(TR(T_PSST), sc) + 12 + 8 * sc; h = 5 * sc + 10;
+        w = gtextw(TR(T_PSST), sc) + 12 + 8 * sc; h = 5 * sc + 10; x0 = left ? 2 : 238 - w;
         galpha(a);
-        grect(238 - w, 150, w, h, th->panel); gbox(238 - w, 150, w, h, th->pad);
-        gtext(244 - w, 155, TR(T_PSST), th->text, sc);
-        gtext(238 - 7 * sc - 2 + (tsin(tm, 60, 0) >> 13), 155, "\xE2\x86\x92", th->pad, sc);
+        grect(x0, 150, w, h, th->panel); gbox(x0, 150, w, h, th->pad);
+        gtext(x0 + 6 + (left ? 8 * sc : 0), 155, TR(T_PSST), th->text, sc);
+        if (left) gtext(x0 + 4 - (tsin(tm, 60, 0) >> 13), 155, "\xE2\x86\x90", th->pad, sc);
+        else gtext(238 - 7 * sc - 2 + (tsin(tm, 60, 0) >> 13), 155, "\xE2\x86\x92", th->pad, sc);
         galpha(256);
     }
     if (cv.near && !dlg.on) {
-        const char *s = cv.near == 1 ? TR(T_TALK) : cv.near == 2 ? TR(on ? T_NEWSONG : T_FIX) : cv.near == 6 ? TR(T_SCORES_PROMPT) : cv.near == 7 ? TR(T_EXIT) : TR(T_START);
+        const char *s = cv.near == 1 ? TR(T_TALK) : cv.near == 2 ? TR(on ? T_NEWSONG : T_FIX) : cv.near == 6 ? TR(T_SCORES_PROMPT) : cv.near == 7 ? TR(T_EXIT) : cv.near == 9 || cv.near == 10 ? TR(T_MR_ENTER) : TR(T_START);
         int32_t px = SX(cv.x >> 8), py = SY(cv.y >> 8) - 30;
         if (cv.near >= 3 && cv.near <= 5) {      /* a machine: its name over it, and what PLAY does over that (clear of the machine) */
             int32_t ty = SY(CV_MACH[cv.near - 3][1]) - 76 - 5 * ts(1, 3);
             gfit(SX(CV_MACH[cv.near - 3][0]), ty, 232, MACH_NAME[cv.near - 3], on ? th->caps[(cv.near - 3) * 2 % 5] : th->mute, ts(1, 3));
             if (!on) s = TR(T_NOPOWER);
             px = SX(CV_MACH[cv.near - 3][0]); py = ty - TLH(ts(1, 3)) - 4 - 6 + 6 * ts(1, 3);
+        }
+        if (cv.near == 7) { px = iclamp(SX(CV_DOOR_X), 60, 180); py = SY(190) - 102 + ts(1, 3); }   /* the door outside: over the arch, clear of the gift shop beside it */
+        if (cv.near == 10) {                     /* the gift shop: its name over its awning, and what PLAY does over that */
+            int32_t ty = SY(190) - 86 - 5 * ts(1, 3);
+            gfit(iclamp(SX(CV_SHOP_X), 60, 180), ty, 232, TR(T_GIFT), on ? th->caps[(tm / 500u) % 5u] : th->mute, ts(1, 3));
+            if (!on) s = TR(T_NOPOWER);
+            px = iclamp(SX(CV_SHOP_X), 60, 180); py = ty - TLH(ts(1, 3)) - 4 - 6 + 6 * ts(1, 3);
         }
         if (cv.near == 8) {                      /* the well: its name, MULTIPLAYER under it, and what PLAY does over that */
             /* the name a size up, MULTIPLAYER (in every language) never wider than it: the name stands out */
@@ -891,6 +1047,7 @@ static void cave_draw(void)
             if (!on) s = TR(T_NOPOWER);
             px = SX(CV_WELL_X); py = ty - TLH(ts(1, 3)) - 4 - 6 + 6 * ts(1, 3);
         }
+        if (cv.near == 9) { px = iclamp(SX(CV_TDOOR_X - 16), 60, 180); py = SY(236 - 56) - 5 * ts(1, 2) - TLH(ts(1, 3)) - 2 + 6 * ts(1, 3) - 6; }   /* the door: over its name */
         if (cv.near == 2 && on) {                /* the mended jukebox: the same, over its name */
             px = SX(CV_JUKE_X); py = SY(CV_GROUND + CV_DIP_D) - 60 - 5 * ts(1, 3) - TLH(ts(1, 3)) - 4 - 6 + 6 * ts(1, 3);
         }
@@ -904,6 +1061,11 @@ static void cave_draw(void)
         int32_t sh = cv.wl == CVW_SNAP && cv.wt < 300 ? (tsin(tm, 40, 0) * (300 - cv.wt) / 300) >> 13 : 0;
         gzoom(SX(CV_WELL_X) + sh, SY(CV_WELL_Y) - 50 + (36 * ease8(cv.low) >> 8), cv.zw);
         if (cv.wl == CVW_LOWER) cave_well_help(tm);
+    }
+    if (cv.enter) {                              /* the camera goes in through the door after him, into its light */
+        int32_t d = cv.enter, q = imin(256, d * 256 / CV_ENTER_MS), z = 256 + (q * q >> 8) * q / 256 * 2600 / 256;
+        gzoom(SX(CV_TDOOR_X), SY(236 - 22), z);
+        if (d > 600) gveil(th->pad, (uint32_t)imin(32, (d - 600) * 32 / (CV_ENTER_MS - 660)));
     }
     if (cv.dive) {                               /* the camera goes on in, down the well into the dark */
         int32_t d = cv.dive, z;

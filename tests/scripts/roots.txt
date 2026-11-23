@@ -1,0 +1,120 @@
+# ROOTS: in the music room, open it (its lesson the first time), then play every control.
+# (a knob moves one click a frame however far it is turned: several clicks are several lines)
+300 shot
+1500 btn 2
+4000 shot
+6500 shot
+10500 shot
+12500 shot
+17500 shot
+20500 shot
+23500 shot
+25500 shot
+27500 shot
+31500 shot
+35000 shot
+38500 shot
+41500 shot
+45500 shot
+# the lesson is over: it plays by itself with what it starts with (the breeze and the beetle)
+50000 shot
+50130 shot
+50260 shot
+52000 shot
+# pluck roots 2 and 9; a puff from the top row
+53000 keys 0x4
+53100 keys 0
+53200 shot
+53400 keys 0x4000
+53500 keys 0
+53700 keys 0x400
+53800 keys 0
+53880 shot
+# the weather: PULSE, WAVE, STORM; then more wind
+55000 enc 6 1
+56500 shot
+57000 enc 6 1
+58300 shot
+59000 enc 6 1
+59500 enc 2 1
+59540 enc 2 1
+59580 enc 2 1
+59620 enc 2 1
+61000 shot
+# long roots, the wind hard left, loose roots, a gust every half bar
+61500 enc 4 1
+61540 enc 4 1
+61580 enc 4 1
+61620 enc 4 1
+61700 enc 0 -1
+61740 enc 0 -1
+61780 enc 0 -1
+61820 enc 0 -1
+61860 enc 0 -1
+61900 enc 0 -1
+62000 enc 5 -1
+62040 enc 5 -1
+62080 enc 5 -1
+62120 enc 5 -1
+62200 enc 3 -1
+64500 shot
+# LFO held: WIND swings by itself
+65000 btndown 5
+65100 enc 2 1
+65140 enc 2 1
+65180 enc 2 1
+65220 enc 2 1
+65500 shot
+65600 btnup 5
+# the beetle: held SEQ, a stride of 5, to and fro, eighths, full force
+66000 btndown 11
+66100 enc 5 1
+66140 enc 5 1
+66200 enc 3 1
+66240 enc 3 1
+66300 enc 2 -1
+66400 enc 4 1
+66440 enc 4 1
+66480 enc 4 1
+66700 shot
+66800 btnup 11
+68000 shot
+# calm weather and another layout
+68200 enc 6 1
+68300 enc 2 -1
+68340 enc 2 -1
+68380 enc 2 -1
+68420 enc 2 -1
+68500 enc 4 -1
+68540 enc 4 -1
+68580 enc 4 -1
+68620 enc 4 -1
+68700 enc 0 1
+68740 enc 0 1
+68780 enc 0 1
+68820 enc 0 1
+68860 enc 0 1
+68900 enc 0 1
+69000 enc 1 1
+69040 enc 1 1
+69080 enc 1 1
+69120 enc 1 1
+70500 shot
+# EDIT: root 3 in hand, what hangs there, its weight; then roots 8 and 10 in hand
+71000 btn 6
+71500 keys 0x10
+71700 keys 0
+72000 enc 2 1
+72040 enc 2 1
+72200 enc 3 1
+72240 enc 3 1
+72280 enc 3 1
+73000 shot
+73500 keys 0x11000
+73800 keys 0
+74300 shot
+74500 btn 6
+# PLAY off: the wind drops, the roots come to rest
+75000 btn 12
+78500 shot
+79000 end

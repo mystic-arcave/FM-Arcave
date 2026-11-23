@@ -166,8 +166,11 @@ with Felucca Salt's fix for the ring). Both land in one queue.
 
 | | |
 | --- | --- |
-| `midi_get(&status, &d1, &d2)` | the next message: **1** from USB, **2** from the TRS jack, 0 = none. Call it from the main loop until 0 |
-| `midi_send(status, d1, d2)` | send one message over USB (from the main loop only) |
+| `midi_get(&status, &d1, &d2)` | the next message: **1** from USB, **2** from the TRS jack, **3** from Bluetooth, 0 = none. Call it from the main loop until 0 |
+| `midi_send(status, d1, d2)` | send one message over USB, and over Bluetooth while a computer or phone is connected and listening (from the main loop only) |
+| `bt_set(on)` | (FM-ARCAVE, the FM-1) Bluetooth LE MIDI on or off, from the main loop. Off until you call it: keep the choice in your own settings (default off), call it once at your start with what you kept, and again when it changes. The first ON after a power-on that had it off **restarts the FM-1 by itself 3 s later** (the radio needs the supplies set at power-on): save your settings at once |
+| `bt_state()` | `BT_OFF`, `BT_STARTING` (asked for: the radio starts 3 s after power-on, or the restart is coming), `BT_ADV` (advertising), `BT_CONN` (connected), `BT_FAILED` (the radio hung, crashed or did not start: stays until `bt_set(0)`; turn your own setting off then), `BT_NONE` (no radio: the SMK-37, the host, the browser) |
+| `bt_name()` | the name it advertises, `FM-ARCAVE XXXX` (XXXX from its own address, made at the first ON; `FM-ARCAVE` until then) |
 
 `status` includes the channel: `0x90` note on channel 1, `0x93` channel 4; a note on with velocity 0 is a note off.
 Channel messages come through, and of the system messages the clock and transport ones: `0xF8` clock (24 a quarter
@@ -199,7 +202,7 @@ static int slot_save(uint32_t i, const void *p, uint32_t n);
 | | how much | where (FM-1) | where (SMK-37) |
 | --- | --- | --- | --- |
 | settings | up to `SECTOR_MAX` (4084 B) | 0xFC000 | 0x9D000 |
-| blobs 0..7 (presets, patterns) | up to 4084 B each | 0xF4000.. | 0x9E000.. |
+| blobs 0..7 (presets, patterns; on the FM-1 blob 7 is the platform's: Bluetooth's record, `bt.c`) | up to 4084 B each | 0xF4000.. | 0x9E000.. |
 | slots 0..7 (songs, samples) | up to `SLOT_MAX` (16372 B) each | 0x97000.. | 0xC2000.. |
 
 Each is kept with a magic, its length and a CRC32 ([store.h](../firmware/src/store.h)). A change of size, another
