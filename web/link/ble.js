@@ -119,7 +119,7 @@ export class BleDecoder {
 // what waits to go to one FM-1. A Bluetooth write takes until the next meeting of the two radios, and a second one
 // begun before it ends is refused: so they go one at a time, and what was said meanwhile goes together in the next
 // (whole sends kept whole). A link that takes nothing for a long time loses its oldest, never its order
-class Outbox {
+export class Outbox {
   constructor(write) { this.write = write; this.q = []; this.busy = false; this.due = false; this.sent = 0; this.dropped = 0; }
   send(bytes) {
     const g = midiMessages(bytes);

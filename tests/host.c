@@ -149,6 +149,7 @@ static int bt_state(void) { return BT_NONE; }
 static void bt_set(int on) { (void)on; }
 static const char *bt_name(void) { return ""; }
 #endif
+static uint32_t bt_tx_room(void) { return 64u; }   /* (no radio: never full) */
 
 static uint8_t mq[64][4];                       /* status, data 1, data 2, source (1 USB, 2 TRS) */
 static uint32_t mq_w, mq_r;

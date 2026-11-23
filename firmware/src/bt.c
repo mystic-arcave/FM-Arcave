@@ -48,6 +48,7 @@ enum { BT_OFF, BT_STARTING, BT_ADV, BT_CONN, BT_FAILED, BT_NONE };
 static int bt_state(void) { return BT_NONE; }
 static void bt_set(int on) { (void)on; }
 static const char *bt_name(void) { return ""; }
+static uint32_t bt_tx_room(void) { return 64u; }
 #else
 #ifndef BT_HOST_TEST                            /* (tests/bt_guard_test.c: this file on a computer, the FM-1 stood in for) */
 #include "fm1_power.h"
@@ -111,6 +112,8 @@ void bt_midi_rx(uint32_t pkt)
         fm1_irq_on();
 }
 static void bt_midi_tx(uint32_t pkt) { bt_oq_put(&bt_oq, pkt); }   /* (midi_send; nobody listening: dropped) */
+/* how many more messages midi_send can give Bluetooth now (BT_OQ while nobody listens: they are dropped anyway) */
+static uint32_t bt_tx_room(void) { return bt_oq.on ? BT_OQ - (bt_oq.w - bt_oq.r) : BT_OQ; }
 
 /* power-on (fm1_cstart, before the screen, the sound and USB): the guard, then the supplies if Bluetooth was ON */
 static void bt_boot(void)

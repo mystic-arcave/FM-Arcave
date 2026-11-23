@@ -60,6 +60,8 @@ enum { BT_OFF, BT_STARTING, BT_ADV, BT_CONN, BT_FAILED, BT_NONE };
 static int bt_state(void) { return BT_NONE; }
 static void bt_set(int on) { (void)on; }
 static const char *bt_name(void) { return ""; }
+static uint32_t w_bt_room = 64u;                /* (tests/remote_ble_test.mjs plays a Bluetooth link: its room, set by web_bt_room) */
+static uint32_t bt_tx_room(void) { return w_bt_room; }
 static int midi_get(uint8_t *st, uint8_t *d1, uint8_t *d2)
 {
     if (w_mi_r == w_mi_w) return 0;
@@ -126,6 +128,7 @@ EXPORT void web_buttons(uint32_t mask)
 }
 EXPORT void web_keys(uint32_t mask) { w_note_edges |= mask & ~fm1_in.notes; fm1_in.notes = mask; }
 EXPORT void web_enc(uint32_t e, int32_t n) { w_enc[e & 7u] += n; }
+EXPORT void web_bt_room(uint32_t n) { w_bt_room = n; }
 EXPORT void web_midi(uint32_t st, uint32_t d1, uint32_t d2)
 {
     w_mi[w_mi_w & 255u][0] = (uint8_t)st; w_mi[w_mi_w & 255u][1] = (uint8_t)d1; w_mi[w_mi_w & 255u][2] = (uint8_t)d2; w_mi_w++;

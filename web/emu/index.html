@@ -38,6 +38,7 @@ main{padding:28px 0 0;display:grid;gap:22px}
   <div id="status" class="status" role="status">The same code that runs on the FM-1, version @VERSION@.</div>
   <div class="bar">
     <button class="btn" id="fm1" aria-pressed="false">PLAY WITH MY FM-1</button>
+    <button class="btn" id="fm1bt" aria-pressed="false">PLAY WITH MY FM-1 (BLUETOOTH)</button>
     <button class="btn" id="layout" aria-pressed="false">COMPUTER KEYS: OFF</button>
     <button class="btn" id="big" aria-pressed="false">BIG SCREEN</button>
     <button class="btn" id="midi" aria-pressed="false">MIDI: OFF</button>
@@ -52,7 +53,7 @@ main{padding:28px 0 0;display:grid;gap:22px}
     <div><b>The jukebox (ALGORITHM)</b><span><kbd>Shift</kbd> <kbd>←</kbd> <kbd>→</kbd></span></div>
     <div><b>SELECT, PRESETS</b><span><kbd>↑</kbd> <kbd>↓</kbd>, with <kbd>Shift</kbd></span></div>
     <div><b>Six keys of the bottom row</b><span>the mouse only: Z to / play ten of its sixteen, spread along it</span></div>
-    <div><b>Play with your FM-1</b><span>plug it in by USB, then PLAY WITH MY FM-1: its save, its keys and knobs</span></div>
+    <div><b>Play with your FM-1</b><span>plug it in by USB and press PLAY WITH MY FM-1, or switch its Bluetooth on (GLO, the settings) and press PLAY WITH MY FM-1 (BLUETOOTH): its save, its keys and knobs</span></div>
   </div>
   <div class="help" id="help-fm1" aria-label="Keys">
     <div><b>Roll</b><span><kbd>←</kbd> <kbd>→</kbd> turn the lit knob</span></div>
@@ -66,7 +67,7 @@ main{padding:28px 0 0;display:grid;gap:22px}
     <div><b>FX SCL ENV LFO EDIT</b><span><kbd>5</kbd> <kbd>6</kbd> <kbd>7</kbd> <kbd>8</kbd> <kbd>9</kbd></span></div>
     <div><b>SAVE ARP SEQ</b><span><kbd>0</kbd> <kbd>-</kbd> <kbd>=</kbd></span></div>
     <div><b>SELECT, PRESETS</b><span><kbd>↑</kbd> <kbd>↓</kbd>, with <kbd>Shift</kbd></span></div>
-    <div><b>Play with your FM-1</b><span>plug it in by USB, then PLAY WITH MY FM-1: its save, its keys and knobs</span></div>
+    <div><b>Play with your FM-1</b><span>plug it in by USB and press PLAY WITH MY FM-1, or switch its Bluetooth on (GLO, the settings) and press PLAY WITH MY FM-1 (BLUETOOTH): its save, its keys and knobs</span></div>
     <div><b>UNDERSONG, for two</b><span>open this page in a second window: the two are linked</span></div>
     <div><b>UNDERSONG, far away</b><span><a href="../link/online/">LINK, ONLINE</a>: a private lobby</span></div>
   </div>
@@ -75,7 +76,8 @@ main{padding:28px 0 0;display:grid;gap:22px}
 </div>
 <script type="module">
 import { mountFm1, FM1_CSS } from "./panel.js";
-import { Fm1Remote } from "./remote.js";
+import { Fm1Remote, bleAccess } from "./remote.js";
+import { BlePorts, bleSay } from "./ble.js";
 document.head.appendChild(Object.assign(document.createElement("style"), { textContent: FM1_CSS }));
 const $ = (id) => document.getElementById(id);
 const SAVE = "fm-arcave-emu-save";
@@ -192,38 +194,51 @@ $("midi").addEventListener("click", async () => {
 
 // PLAY WITH MY FM-1 (remote.js; the FM-1's side: firmware/src/arcave/ac_remote.h): the game here, the FM-1 its controller,
 // played from the FM-1's own save, which every save made here goes back to. This browser's own save is left alone.
-let remote = null;
-const fm1 = { on: false, game: false, len: 0, older: false, kept: "" };   // game: the game running is the FM-1's
-function fm1Button(label, on) { $("fm1").textContent = label; $("fm1").setAttribute("aria-pressed", on); }
+// By USB (Web MIDI, or an FM-1 the computer has connected as a Bluetooth MIDI device), or by Bluetooth from this page
+// (Web Bluetooth: web/link/ble.js, as the Link pages use it).
+let remote = null, ble = null, btPort = null, btAcc = null;
+const fm1 = { on: false, via: "", game: false, len: 0, older: false, kept: "" };   // game: the game running is the FM-1's
+const FM1_LABEL = { usb: "PLAY WITH MY FM-1", bt: "PLAY WITH MY FM-1 (BLUETOOTH)" }, FM1_ID = { usb: "fm1", bt: "fm1bt" };
+function fm1Button(label, on) {
+  for (const v of ["usb", "bt"]) {
+    const b = $(FM1_ID[v]), mine = v === fm1.via && on;
+    b.textContent = mine ? label : FM1_LABEL[v]; b.setAttribute("aria-pressed", mine); b.disabled = on && !mine;
+  }
+}
 function fm1Text() {
   const base = fm1.older ? "Playing with your FM-1's save. Its FM-ARCAVE is older than this page's, so what you play here is not kept on it: update it on the INSTALL page."
-    : "Playing with your FM-1's save: its keys, knobs and buttons play here, and your progress goes back to it.";
+    : "Playing with your FM-1's save" + (fm1.via === "bt" ? " by Bluetooth" : "") + ": its keys, knobs and buttons play here, and your progress goes back to it.";
   return base + (fm1.kept ? " Last kept on your FM-1 at " + fm1.kept + "." : "");
 }
 function fm1Status() { $("status").textContent = fm1Text(); }
+function btLetGo() {                              // (after the goodbye has had time to go out)
+  const p = btPort; btPort = null; btAcc = null;
+  if (p) setTimeout(() => ble.remove(p), 600);
+}
 function fm1Off(text) {
-  fm1.on = false; held.fb = 0; held.fk = 0; fm1Button("PLAY WITH MY FM-1", false);
+  fm1.on = false; held.fb = 0; held.fk = 0; fm1Button("", false);
+  if (fm1.via === "bt") btLetGo();
   if (text) $("status").textContent = text;
 }
-$("fm1").addEventListener("click", async () => {
-  if (fm1.on) {                                   // back to this browser's own game; the FM-1 is itself again
-    remote.stop(); fm1Off();
-    if (fm1.game) { fm1.game = false; boot(browserSave(), "Back to the game saved in this browser. Your FM-1 is playing its own game again."); }
-    else $("status").textContent = node ? ready() : "";
-    return;
-  }
-  audio();
-  if (!(await getMidi())) return;
-  await wasm();
-  fm1.on = true; fm1.len = 0; fm1.older = false; fm1.kept = "";
+function fm1Stop() {                              // back to this browser's own game; the FM-1 is itself again
+  remote.stop(); fm1Off();
+  if (fm1.game) { fm1.game = false; boot(browserSave(), "Back to the game saved in this browser. Your FM-1 is playing its own game again."); }
+  else $("status").textContent = node ? ready() : "";
+}
+function fm1Start(access, via) {
+  const say = (usb, bt) => (via === "bt" ? bt : usb);
+  fm1.on = true; fm1.via = via; fm1.len = 0; fm1.older = false; fm1.kept = "";
   fm1Button("LOOKING FOR YOUR FM-1...", true);
-  $("status").textContent = "Looking for your FM-1: plug it in by USB, switched on, with FM-ARCAVE running.";
-  remote = new Fm1Remote(midi, {
+  $("status").textContent = say("Looking for your FM-1: plug it in by USB, switched on, with FM-ARCAVE running.",
+    "Connected by Bluetooth to " + (btPort ? btPort.name : "your FM-1") + ". Asking it for its save...");
+  remote = new Fm1Remote(access, {
     onState: (s, detail) => {
       if (detail === "damaged") $("status").textContent = "The save came through damaged. Asking your FM-1 again...";
-      else if (s === "loading") $("status").textContent = "Found your FM-1. Reading its save...";
-      else if (s === "absent") fm1Off("No FM-1 answered. Is it plugged in by USB and switched on? It needs this version of FM-ARCAVE (@VERSION@): see INSTALL.");
-      else if (s === "lost") fm1Off("Your FM-1 went quiet (unplugged?). Press PLAY WITH MY FM-1 to carry on with it: what you play meanwhile is not kept.");
+      else if (s === "loading") $("status").textContent = say("Found your FM-1. Reading its save...", "Found your FM-1. Reading its save by Bluetooth: a few seconds...");
+      else if (s === "absent") fm1Off(say("No FM-1 answered. Is it plugged in by USB and switched on? It needs this version of FM-ARCAVE (@VERSION@): see INSTALL.",
+        "Your FM-1 is connected by Bluetooth but did not answer. It needs this version of FM-ARCAVE (@VERSION@): see INSTALL."));
+      else if (s === "lost") fm1Off(say("Your FM-1 went quiet (unplugged?). Press PLAY WITH MY FM-1 to carry on with it: what you play meanwhile is not kept.",
+        "The Bluetooth link to your FM-1 broke (out of range, or switched off?). Press PLAY WITH MY FM-1 (BLUETOOTH) to carry on with it: what you play meanwhile is not kept."));
     },
     onSave: (bytes) => {
       if (bytes.length > saveSize) {
@@ -231,7 +246,7 @@ $("fm1").addEventListener("click", async () => {
         return;
       }
       fm1.len = bytes.length; fm1.older = bytes.length < saveSize;
-      fm1Button("FM-1: ON", true);
+      fm1Button(say("FM-1: ON", "FM-1: ON (BLUETOOTH)"), true);
       fm1.game = true; boot(bytes, fm1Text());
     },
     onInput: (b, k) => { held.fb = b; held.fk = k; sendHeld(); },
@@ -242,8 +257,41 @@ $("fm1").addEventListener("click", async () => {
     },
   });
   remote.start();
+}
+$("fm1").addEventListener("click", async () => {
+  if (fm1.on) { fm1Stop(); return; }
+  audio();
+  if (!(await getMidi())) return;
+  await wasm();
+  fm1Start(midi, "usb");
 });
-setInterval(() => { if (remote) remote.tick(); }, 50);
+$("fm1bt").addEventListener("click", async () => {
+  if (fm1.on) { fm1Stop(); return; }
+  audio();
+  ble = ble || new BlePorts({ message: (p, d, t) => { if (btAcc && p === btPort) btAcc.heard(d, t); } });
+  const no = await bleSay(ble);
+  if (no) {
+    $("status").textContent = !ble.supported ? "This browser has no Web Bluetooth: use Chrome or Edge. An FM-1 the computer itself has connected as a Bluetooth MIDI device comes in by PLAY WITH MY FM-1."
+      : "Bluetooth is off on this computer, or it has none.";
+    return;
+  }
+  $("status").textContent = "Pick your FM-1 in the browser's list (FM-ARCAVE and four letters of its own).";
+  let p = null;
+  try { p = await ble.add(); }
+  catch (e) {
+    $("status").textContent = e && e.name === "SecurityError" ? "The browser did not allow Bluetooth on this page."
+      : "Could not connect. Is Bluetooth on in the FM-1's settings, and is it free? An FM-1 holds one Bluetooth link at a time: close any other page or app that has it.";
+    return;
+  }
+  if (!p) {
+    $("status").textContent = "Nothing chosen. Not in the list? Switch Bluetooth on in the FM-1's settings (GLO): the first time, the FM-1 restarts once. Close any other app or phone that holds it.";
+    return;
+  }
+  await wasm();
+  btPort = p; btAcc = bleAccess(p);
+  fm1Start(btAcc, "bt");
+});
+setInterval(() => { if (remote) remote.tick(); }, 20);
 addEventListener("pagehide", () => { if (remote) remote.stop(); });
 </script>
 </body>

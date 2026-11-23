@@ -310,3 +310,29 @@ page's `remote.js` between them on a made-up MIDI port that keeps to Web MIDI's 
 show: that its USB port is the one that answers (the page takes the first port to answer and the output of the same
 name), that the flash write of a 2616-byte save while the page goes on sending lights loses nothing, and how quick the
 keys feel through the computer.
+
+### By Bluetooth
+
+PLAY WITH MY FM-1 (BLUETOOTH), beside it, does the same over Bluetooth LE MIDI, straight from the page (Web
+Bluetooth, Chrome or Edge, through `web/link/ble.js` as the Link pages use it). Bluetooth must be ON in the FM-1's
+settings (GLO; the first time, the FM-1 restarts once). The button opens the browser's list of FM-1s (`FM-ARCAVE` and
+four characters of the FM-1's own); the one chosen is connected and then asked for its save, exactly as by USB.
+`remote.js`'s `bleAccess` makes the Bluetooth FM-1 look like Web MIDI to the rest. An FM-1 the computer itself has
+connected as a Bluetooth MIDI device (Audio MIDI Setup on a Mac) is a MIDI port, and the plain PLAY WITH MY FM-1 finds
+it like a USB one.
+
+The messages are the same; only the pace differs. Bluetooth passes MIDI once a connection event (7.5 to 15 ms, more
+on some computers), a dozen or so messages each way, so:
+
+- the FM-1 sends its save only as fast as its Bluetooth queue of 64 empties (`bt_tx_room`), sixteen places always
+  kept for the answers to hellos, the panel and a save's result: the queue never overflows, whatever the computer's
+  interval. On a slow link the save takes about four seconds;
+- the page sends its saves seven packets (42 messages) at a time, the next only once the last is written, so a hello
+  or the lights never wait more than a few events behind a save and the page's write queue never drops anything. A
+  newer save takes the place of one not yet all out. On a slow link a save takes about eight seconds; the FM-1 shows
+  SAVED when it is in.
+
+`tests/remote_ble_test.mjs` plays a slow link (15 ms events, 20-octet packets, two notifications an event from the
+FM-1, one write from the page) through the real packet code on both sides: both saves arrive whole, nothing is
+dropped, no hello is missed. Not yet tried with an FM-1: the radio itself has not run on one yet (the first checks:
+the Bluetooth section above).

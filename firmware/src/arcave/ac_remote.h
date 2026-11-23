@@ -21,8 +21,10 @@
  *                 CC 77 h, l  its end: the sum of its bytes (14 bits), high, then low
  * A hello with a new number (another page, or the page reloaded) has the save sent again. No hello for 3 s, or a
  * goodbye: the FM-1 is itself again, as after a power-on, with the save it now holds.
- * The save goes out four messages a millisecond at most: the USB ring holds 64 and is emptied at 2 kHz. The page
- * sends its own at two a millisecond, and while one comes in this FM-1 draws nothing, so the ring of 64 coming in is
+ * The save goes out four messages a millisecond at most: the USB ring holds 64 and is emptied at 2 kHz. Over
+ * Bluetooth (bt_tx_room) it goes no faster than the radio empties its queue of 64, which a connection event takes a
+ * dozen or so of. The page sends its own at two a millisecond by USB, and by Bluetooth a few packets at a time as
+ * its writes are taken (remote.js); while one comes in this FM-1 draws nothing, so the ring of 64 coming in is
  * read often enough (a picture can take a while). */
 
 #define FMR_PROTO 1u
@@ -134,6 +136,11 @@ static void fmr_poll(void)
     }
     if (!fmr.tx_st || fm1_ms == fmr.tx_ms) return;
     fmr.tx_ms = fm1_ms;
+    {   /* Bluetooth takes a dozen or so a connection event: only what its queue has room for, sixteen places kept free
+         * for the answers to hellos, the panel and a save's result (a full queue drops) */
+        uint32_t room = bt_tx_room();
+        if (room < 16u + 4u) budget = (int32_t)room - 16;
+    }
     while (budget > 0 && fmr.tx_st) {
         if (fmr.tx_st == 1u) {
             midi_send(0xBFu, 74u, (uint32_t)fmr.tx_len >> 7 & 127u); midi_send(0xBFu, 75u, fmr.tx_len & 127u);
