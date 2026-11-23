@@ -21,6 +21,7 @@ main{padding:28px 0 0;display:grid;gap:22px}
 .help div{display:flex;justify-content:space-between;gap:16px;border-bottom:1px solid var(--line);padding:9px 0;font-size:15px;color:var(--mute)}
 .help div b{font-weight:400;color:var(--text)}
 #status{text-align:center}
+.help[hidden]{display:none}
 </style>
 </head>
 <body>
@@ -36,11 +37,24 @@ main{padding:28px 0 0;display:grid;gap:22px}
   </div>
   <div id="status" class="status" role="status">The same code that runs on the FM-1, version @VERSION@.</div>
   <div class="bar">
+    <button class="btn" id="fm1" aria-pressed="false">PLAY WITH MY FM-1</button>
+    <button class="btn" id="layout" aria-pressed="false">COMPUTER KEYS: OFF</button>
+    <button class="btn" id="big" aria-pressed="false">BIG SCREEN</button>
     <button class="btn" id="midi" aria-pressed="false">MIDI: OFF</button>
     <button class="btn" id="mute" aria-pressed="false">SOUND: ON</button>
     <button class="btn" id="wipe">FORGET THE SAVE</button>
   </div>
-  <div class="help" aria-label="Keys">
+  <div class="help" id="help-kbd" aria-label="Keys" hidden>
+    <div><b>Keys, buttons</b><span>as written on the FM-1 above: the two bottom rows of letters are its two rows of keys</span></div>
+    <div><b>PLAY, GLO</b><span>also <kbd>Space</kbd>, <kbd>Esc</kbd></span></div>
+    <div><b>Roll</b><span><kbd>←</kbd> <kbd>→</kbd> turn the lit knob</span></div>
+    <div><b>Which knob</b><span><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>4</kbd>, or scroll over one</span></div>
+    <div><b>The jukebox (ALGORITHM)</b><span><kbd>Shift</kbd> <kbd>←</kbd> <kbd>→</kbd></span></div>
+    <div><b>SELECT, PRESETS</b><span><kbd>↑</kbd> <kbd>↓</kbd>, with <kbd>Shift</kbd></span></div>
+    <div><b>Six keys of the bottom row</b><span>the mouse only: Z to / play ten of its sixteen, spread along it</span></div>
+    <div><b>Play with your FM-1</b><span>plug it in by USB, then PLAY WITH MY FM-1: its save, its keys and knobs</span></div>
+  </div>
+  <div class="help" id="help-fm1" aria-label="Keys">
     <div><b>Roll</b><span><kbd>←</kbd> <kbd>→</kbd> turn the lit knob</span></div>
     <div><b>Which knob</b><span><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>4</kbd>, or scroll over one</span></div>
     <div><b>PLAY</b><span><kbd>Space</kbd></span></div>
@@ -52,24 +66,43 @@ main{padding:28px 0 0;display:grid;gap:22px}
     <div><b>FX SCL ENV LFO EDIT</b><span><kbd>5</kbd> <kbd>6</kbd> <kbd>7</kbd> <kbd>8</kbd> <kbd>9</kbd></span></div>
     <div><b>SAVE ARP SEQ</b><span><kbd>0</kbd> <kbd>-</kbd> <kbd>=</kbd></span></div>
     <div><b>SELECT, PRESETS</b><span><kbd>↑</kbd> <kbd>↓</kbd>, with <kbd>Shift</kbd></span></div>
+    <div><b>Play with your FM-1</b><span>plug it in by USB, then PLAY WITH MY FM-1: its save, its keys and knobs</span></div>
     <div><b>UNDERSONG, for two</b><span>open this page in a second window: the two are linked</span></div>
     <div><b>UNDERSONG, far away</b><span><a href="../link/online/">LINK, ONLINE</a>: a private lobby</span></div>
   </div>
 </main>
-<footer class="foot"><p>FM-ARCAVE is free software, GPL-3.0-only. The picture and the sound here come from the firmware's own code, built for the browser. Your progress is kept in this browser.</p></footer>
+<footer class="foot"><p>FM-ARCAVE is free software, GPL-3.0-only. The picture and the sound here come from the firmware's own code, built for the browser. Your progress is kept in this browser; with PLAY WITH MY FM-1, on your FM-1.</p></footer>
 </div>
 <script type="module">
 import { mountFm1, FM1_CSS } from "./panel.js";
+import { Fm1Remote } from "./remote.js";
 document.head.appendChild(Object.assign(document.createElement("style"), { textContent: FM1_CSS }));
 const $ = (id) => document.getElementById(id);
 const SAVE = "fm-arcave-emu-save";
-let node = null, ac = null, gain = null, midi = null, midiOn = false;
+let node = null, ac = null, gain = null, midi = null, midiOn = false, wasmBytes = null, saveSize = 0;
 const send = (m) => { if (node) node.port.postMessage(m); };
+// the panel on the page and (PLAY WITH MY FM-1) a real FM-1's panel: what either holds down is held
+const held = { pb: 0, pk: 0, fb: 0, fk: 0 };
+const sendHeld = () => { send({ type: "buttons", mask: held.pb | held.fb }); send({ type: "keys", mask: held.pk | held.fk }); };
 const fm = mountFm1($("fm"), {
-  buttons: (mask) => send({ type: "buttons", mask }),
-  keys: (mask) => send({ type: "keys", mask }),
+  buttons: (mask) => { held.pb = mask; sendHeld(); },
+  keys: (mask) => { held.pk = mask; sendHeld(); },
   enc: (id, n) => send({ type: "enc", id, n }),
+  bigOff: () => { $("big").setAttribute("aria-pressed", false); },
 });
+// COMPUTER KEYS: the computer's two bottom rows of letters are the FM-1's two rows of keys, every button and key says
+// its computer key (panel.js); kept for the next visit. BIG SCREEN: the screen as large as the window
+const LAYOUT = "fm-arcave-emu-layout";
+function setLayout(kc) {
+  fm.releaseAll(); fm.layout(kc ? "computer" : "fm1");
+  $("layout").setAttribute("aria-pressed", kc); $("layout").textContent = kc ? "COMPUTER KEYS: ON" : "COMPUTER KEYS: OFF";
+  $("help-kbd").hidden = !kc; $("help-fm1").hidden = kc;
+  try { localStorage.setItem(LAYOUT, kc ? "computer" : "fm1"); } catch (e) {}
+}
+try { if (localStorage.getItem(LAYOUT) === "computer") setLayout(true); } catch (e) {}
+// (each lets go of the keyboard's focus at once: Space is PLAY, not this button again)
+$("layout").addEventListener("click", (e) => { e.currentTarget.blur(); setLayout($("layout").getAttribute("aria-pressed") !== "true"); });
+$("big").addEventListener("click", (e) => { e.currentTarget.blur(); fm.big(true); $("big").setAttribute("aria-pressed", true); if (!node) start(); });
 addEventListener("keydown", (e) => { if (e.target.closest("button,a,input") && (e.code === "Space" || e.code === "Enter")) return; if (fm.key(e, true)) e.preventDefault(); });
 addEventListener("keyup", (e) => { if (fm.key(e, false)) e.preventDefault(); });
 addEventListener("blur", () => fm.releaseAll());
@@ -86,34 +119,53 @@ function midiOut(list) {
   const cc = list.filter((v) => (v & 255) === 0xBF);
   if (friends && cc.length) friends.postMessage(cc);
 }
-async function start() {
-  if (node) return;
+const browserSave = () => { try { const s = localStorage.getItem(SAVE); if (s) return Uint8Array.from(atob(s), (c) => c.charCodeAt(0)); } catch (e) {} return null; };
+const ready = () => "The same code that runs on the FM-1, version @VERSION@.";
+// the sound first, while the click still counts as one (a browser lets sound start only from a click)
+function audio() {
+  if (!ac) ac = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 44100, latencyHint: "interactive" });
+  if (ac.state !== "running") ac.resume();
+}
+async function wasm() {
+  if (!wasmBytes) {
+    wasmBytes = await (await fetch("fm-arcave.wasm")).arrayBuffer();
+    saveSize = (await WebAssembly.instantiate(wasmBytes, {})).instance.exports.web_save_size();
+  }
+  return wasmBytes.slice(0);
+}
+// the game, from a save: started, or started again (what was held is held again)
+async function boot(store, status) {
   $("status").textContent = "Starting...";
   try {
-    ac = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 44100, latencyHint: "interactive" });
-    await ac.audioWorklet.addModule("worklet.js");
-    const wasm = await (await fetch("fm-arcave.wasm")).arrayBuffer();
-    const n = new AudioWorkletNode(ac, "fm-arcave", { numberOfInputs: 0, outputChannelCount: [2] });
-    gain = ac.createGain(); n.connect(gain); gain.connect(ac.destination);
-    let store = null;
-    try { const s = localStorage.getItem(SAVE); if (s) store = Uint8Array.from(atob(s), (c) => c.charCodeAt(0)); } catch (e) {}
-    n.port.onmessage = (e) => {
-      const m = e.data;
-      if (m.type === "ready") { node = n; $("on").hidden = true; $("status").textContent = "The same code that runs on the FM-1, version @VERSION@."; window.__fm = { n, last: null }; }
-      else if (m.type === "error") $("status").textContent = "Could not start: " + m.text;
-      else if (m.type === "frame") {
-        if (m.fb) fm.screen(m.fb);
-        fm.leds(m.leds[0], m.leds[1], m.leds[2], m.leds[3]);
-        if (window.__fm) window.__fm.last = { state: m.state, clock: m.clock, bpm: m.bpm };
-        if (m.store) { try { localStorage.setItem(SAVE, btoa(String.fromCharCode(...m.store))); } catch (e) {} }
-        midiOut(m.midi);
-      }
-      else if (m.type === "midi") midiOut(m.midi);
-    };
-    n.port.postMessage({ type: "load", wasm, store }, [wasm]);
-    if (ac.state !== "running") await ac.resume();
+    const bytes = await wasm();
+    if (!node) {
+      await ac.audioWorklet.addModule("worklet.js");
+      const n = new AudioWorkletNode(ac, "fm-arcave", { numberOfInputs: 0, outputChannelCount: [2] });
+      gain = ac.createGain(); n.connect(gain); gain.connect(ac.destination);
+      if ($("mute").getAttribute("aria-pressed") === "true") gain.gain.value = 0;
+      n.port.onmessage = (e) => onWorklet(n, e.data);
+      node = n;
+    }
+    node.status = status || ready();
+    node.port.postMessage({ type: "load", wasm: bytes, store }, [bytes]);
   } catch (err) { $("status").textContent = "Could not start: " + err; }
 }
+function onWorklet(n, m) {
+  if (m.type === "ready") { $("on").hidden = true; $("status").textContent = n.status; window.__fm = { n, last: null }; sendHeld(); }
+  else if (m.type === "error") $("status").textContent = "Could not start: " + m.text;
+  else if (m.type === "frame") {
+    if (m.fb) fm.screen(m.fb);
+    fm.leds(m.leds[0], m.leds[1], m.leds[2], m.leds[3]);
+    if (window.__fm) window.__fm.last = { state: m.state, clock: m.clock, bpm: m.bpm };
+    if (remote && remote.state === "connected") {
+      remote.lights(m.leds);
+      if (m.store) { if (m.store.length === fm1.len) remote.sendSave(m.store); }
+    } else if (m.store && !fm1.game) { try { localStorage.setItem(SAVE, btoa(String.fromCharCode(...m.store))); } catch (e) {} }
+    midiOut(m.midi);
+  }
+  else if (m.type === "midi") midiOut(m.midi);
+}
+function start() { if (node) return; audio(); boot(browserSave()); }
 $("on").addEventListener("click", start);
 $("mute").addEventListener("click", () => {
   const off = $("mute").getAttribute("aria-pressed") !== "true";
@@ -122,15 +174,77 @@ $("mute").addEventListener("click", () => {
 });
 $("wipe").addEventListener("click", () => { try { localStorage.removeItem(SAVE); } catch (e) {} location.reload(); });
 // MIDI in and out: notes are not played, but ARCAVE LINK's messages and a MIDI clock are followed, as on the FM-1
+async function getMidi() {
+  if (midi) return midi;
+  try { midi = await navigator.requestMIDIAccess(); }
+  catch (e) { $("status").textContent = "This browser gave no MIDI access (Chrome and Edge have it; Safari does not)."; return null; }
+  return midi;
+}
 $("midi").addEventListener("click", async () => {
   if (!midi) {
-    try { midi = await navigator.requestMIDIAccess(); } catch (e) { $("status").textContent = "This browser gave no MIDI access."; return; }
+    if (!(await getMidi())) return;
     const hook = () => { for (const i of midi.inputs.values()) i.onmidimessage = (e) => { if (midiOn && e.data.length <= 3 && e.data[0] !== 0xF0) send({ type: "midi", st: e.data[0], d1: e.data[1] || 0, d2: e.data[2] || 0 }); }; };
     hook(); midi.onstatechange = hook;
   }
   midiOn = !midiOn;
   $("midi").setAttribute("aria-pressed", midiOn); $("midi").textContent = midiOn ? "MIDI: ON" : "MIDI: OFF";
 });
+
+// PLAY WITH MY FM-1 (remote.js; the FM-1's side: firmware/src/arcave/ac_remote.h): the game here, the FM-1 its controller,
+// played from the FM-1's own save, which every save made here goes back to. This browser's own save is left alone.
+let remote = null;
+const fm1 = { on: false, game: false, len: 0, older: false, kept: "" };   // game: the game running is the FM-1's
+function fm1Button(label, on) { $("fm1").textContent = label; $("fm1").setAttribute("aria-pressed", on); }
+function fm1Text() {
+  const base = fm1.older ? "Playing with your FM-1's save. Its FM-ARCAVE is older than this page's, so what you play here is not kept on it: update it on the INSTALL page."
+    : "Playing with your FM-1's save: its keys, knobs and buttons play here, and your progress goes back to it.";
+  return base + (fm1.kept ? " Last kept on your FM-1 at " + fm1.kept + "." : "");
+}
+function fm1Status() { $("status").textContent = fm1Text(); }
+function fm1Off(text) {
+  fm1.on = false; held.fb = 0; held.fk = 0; fm1Button("PLAY WITH MY FM-1", false);
+  if (text) $("status").textContent = text;
+}
+$("fm1").addEventListener("click", async () => {
+  if (fm1.on) {                                   // back to this browser's own game; the FM-1 is itself again
+    remote.stop(); fm1Off();
+    if (fm1.game) { fm1.game = false; boot(browserSave(), "Back to the game saved in this browser. Your FM-1 is playing its own game again."); }
+    else $("status").textContent = node ? ready() : "";
+    return;
+  }
+  audio();
+  if (!(await getMidi())) return;
+  await wasm();
+  fm1.on = true; fm1.len = 0; fm1.older = false; fm1.kept = "";
+  fm1Button("LOOKING FOR YOUR FM-1...", true);
+  $("status").textContent = "Looking for your FM-1: plug it in by USB, switched on, with FM-ARCAVE running.";
+  remote = new Fm1Remote(midi, {
+    onState: (s, detail) => {
+      if (detail === "damaged") $("status").textContent = "The save came through damaged. Asking your FM-1 again...";
+      else if (s === "loading") $("status").textContent = "Found your FM-1. Reading its save...";
+      else if (s === "absent") fm1Off("No FM-1 answered. Is it plugged in by USB and switched on? It needs this version of FM-ARCAVE (@VERSION@): see INSTALL.");
+      else if (s === "lost") fm1Off("Your FM-1 went quiet (unplugged?). Press PLAY WITH MY FM-1 to carry on with it: what you play meanwhile is not kept.");
+    },
+    onSave: (bytes) => {
+      if (bytes.length > saveSize) {
+        remote.stop(); fm1Off("Your FM-1's FM-ARCAVE is newer than this page's. Nothing was changed.");
+        return;
+      }
+      fm1.len = bytes.length; fm1.older = bytes.length < saveSize;
+      fm1Button("FM-1: ON", true);
+      fm1.game = true; boot(bytes, fm1Text());
+    },
+    onInput: (b, k) => { held.fb = b; held.fk = k; sendHeld(); },
+    onKnob: (id, n) => send({ type: "enc", id, n }),
+    onKept: (r) => {
+      if (r === 1) { fm1.kept = new Date().toLocaleTimeString(); fm1Status(); }
+      else if (r === 2) { fm1.older = true; fm1Status(); }
+    },
+  });
+  remote.start();
+});
+setInterval(() => { if (remote) remote.tick(); }, 50);
+addEventListener("pagehide", () => { if (remote) remote.stop(); });
 </script>
 </body>
 </html>

@@ -265,3 +265,48 @@ behind the Online page's own code, with 80 ms each way: a lobby made and joined,
 refused, TWIN ROAD and NOTE RALLY for two, a connection broken and back, ECHO STEPS for three, and one leaving the
 lobby mid-game. With `SERVER=wss://fm-arcave-lobby.mystic-arcave.workers.dev DELAY=0` it runs the same against the
 live server, over the real internet. No real FM-1 has played online yet.
+
+## PLAY WITH MY FM-1: the game in a browser, played on a real FM-1
+
+The PLAY page (`web/emu/`) has a PLAY WITH MY FM-1 button (not the Link page's USE MY FM-1 (USB), which adds an FM-1
+to the hub). With an FM-1 plugged in by USB, switched on and running this
+version of FM-ARCAVE, the page runs the game and shows it; the FM-1 becomes its controller:
+
+- the FM-1 sends the save it holds, and the page starts the game from it (this browser's own save is left alone);
+- every button, key and knob of the FM-1 plays the game on the page, together with the page's own panel and keyboard;
+- the game's lights light the FM-1's keys and buttons as they would on the FM-1 itself;
+- every save the game makes goes back to the FM-1 and is kept in its flash, so the FM-1 carries on from there.
+
+Meanwhile the FM-1 shows a screen of its own (ON THE COMPUTER, Rock under the computer, in its language) and makes no
+sound: the sound is the computer's. Press the button again (FM-1: ON), close the page or unplug the FM-1, and within
+three seconds the FM-1 is itself again, as after a power-on, with the last save the page sent. The page then goes back
+to the game saved in the browser.
+
+Like everything else here it is control changes on channel 16, so it would pass through anything that carries MIDI,
+and the browser build can play the FM-1's part in the tests. The firmware's side is `firmware/src/arcave/ac_remote.h`,
+the page's `web/emu/remote.js`:
+
+| CC | way | value |
+|----|-----|-------|
+| 78 | to the FM-1 | hello, every half second: the page's number, 1-127 (a new number: the save is sent again); 0 goodbye |
+| 70 | from it | here, the answer to every hello: the protocol's version (1) |
+| 71 | from it | a button (`BTN_...`), + 64 pressed |
+| 72 | from it | a key (0 the lowest), + 64 pressed |
+| 73 | from it | a knob: its number (`ENC_...`) × 16 + 8 + the detents turned (-8..7, never 0) |
+| 74, 75 | both ways | a save follows: its length in bytes, high 7 bits, then low |
+| 76 | both ways | its bytes, seven at a time: their top bits first (bit i: the group's byte i), then each byte's low 7 |
+| 77, 77 | both ways | its end: the sum of its bytes (14 bits), high, then low |
+| 79 | from it | what became of the page's save: 1 kept, 2 not this FM-1's size (it needs the page's version), 3 damaged |
+| 80-92 | to the FM-1 | the lights, 7 bits each: lit buttons (bit 14 PLAY lit, 15 PLAY breathing) in 3, lit keys in 4, glowing keys in 4, breathing buttons in 2 |
+
+The save is 2616 bytes (with the music room), about 3000 messages. The FM-1 sends four a millisecond at most (its USB
+ring holds 64 and is emptied at 2 kHz); the page sends two a millisecond by Web MIDI's own timestamps, and the FM-1
+draws nothing while one comes in, so its ring of 64 coming in is read often enough. A save of another length is
+refused (the FM-1 asks to be updated, on its screen; the page says the same), and a damaged one is never written.
+The page needs Web MIDI: Chrome and Edge have it, Safari does not.
+
+`tests/remote_test.mjs` runs all of it without an FM-1: one browser build is the FM-1, another the page's game, the
+page's `remote.js` between them on a made-up MIDI port that keeps to Web MIDI's timestamps. What only a real FM-1 can
+show: that its USB port is the one that answers (the page takes the first port to answer and the output of the same
+name), that the flash write of a 2616-byte save while the page goes on sending lights loses nothing, and how quick the
+keys feel through the computer.

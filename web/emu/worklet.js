@@ -20,7 +20,7 @@ class FmArcave extends AudioWorkletProcessor {
           ex.web_store_set(m.store.length);
         }
         ex.web_boot();
-        this.gen = ex.web_store_gen();
+        this.gen = ex.web_store_gen(); this.draws = -1;   // (started again from another save: the whole picture)
         this.ex = ex;
         this.port.postMessage({ type: "ready" });
       } catch (err) { this.port.postMessage({ type: "error", text: String(err) }); }

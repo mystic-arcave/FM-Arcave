@@ -12,7 +12,8 @@
  *                 lead". The message counts from the moment this last byte arrives.
  *   CC 108 n      a ping from the hub; the FM-1 answers CC 109 n at once (the hub measures the delay from it)
  * A plain MIDI clock (F8, FA) is followed too, when no hub speaks.
- * CC 110..118 are UNDERSONG's, the game for two (ac_duo.h); its leader speaks as sender 5 with "follow". */
+ * CC 110..118 are UNDERSONG's, the game for two (ac_duo.h); its leader speaks as sender 5 with "follow".
+ * CC 70..92 are the remote's: this FM-1 as the controller of the game in a browser (ac_remote.h). */
 
 enum { LK_ALONE, LK_FOLLOW, LK_LEAD, LK_CLOCK };
 static uint8_t link_id;                          /* 0: off; 1-4 */
@@ -37,7 +38,8 @@ static void link_poll(void)
     uint8_t st, d1, d2;
     uint32_t now = fm1_ms;
     while (midi_get(&st, &d1, &d2)) {
-        if (st == 0xBFu && d1 >= 110u && d1 <= 118u) duo_rx(d1, d2);   /* UNDERSONG's own messages (ac_duo.h) */
+        if (st == 0xBFu && d1 >= 74u && d1 <= 92u && fmr_rx(d1, d2)) ;   /* the page that plays with this FM-1 (ac_remote.h) */
+        else if (st == 0xBFu && d1 >= 110u && d1 <= 118u) duo_rx(d1, d2);   /* UNDERSONG's own messages (ac_duo.h) */
         else if (st == 0xBFu && (link_id || duo_follows())) {
             if (d1 == 102u) lk.tempo = (uint32_t)d2 << 7;
             else if (d1 == 103u) lk.tempo |= d2;

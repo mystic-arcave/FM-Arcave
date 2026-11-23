@@ -12,7 +12,8 @@
  *                LINK: several FM-1s on one clock, over USB or Bluetooth            ac_menu.h, ac_sync.h
  *                HOME: how to play; FX: an effect; the scores on the board in the cave     ac_sheet.h
  *                EDIT: the upgrades, bought with the tickets the machines pay out; the player's profile (the
- *                settings' first line): a name for Rock           ac_prof.h, ac_deco.h, ac_shop.h */
+ *                settings' first line): a name for Rock           ac_prof.h, ac_deco.h, ac_shop.h
+ *   the remote   this FM-1 as the controller of the game in a browser, its save shared   ac_remote.h */
 #include "ac_base.h"
 #include "ac_synth.h"
 #include "ac_prof.h"
@@ -33,6 +34,7 @@
 #include "ac_hall.h"
 #include "ac_shop.h"
 #include "ac_sheet.h"
+#include "ac_remote.h"
 #include "ac_sync.h"
 #include "ac_menu.h"
 
@@ -82,6 +84,7 @@ typedef struct {                                 /* (the same as save3_t as far 
 #define SAVE_MAGIC 0x41434156u                   /* "ACAV" */
 static struct { save_t g; room_save_t room; prof_save_t prof; } svr;   /* the game's save, then the music room's, then the profile's (0.21) */
 #define sv svr.g
+_Static_assert(sizeof svr <= FMR_BUF, "the save no longer fits the remote's buffer (ac_remote.h)");
 
 static void save_now(void)
 {
@@ -266,6 +269,39 @@ static void arcave_init(void)
 #endif
 }
 
+/* the remote (ac_remote.h): a page in a browser plays the game with this FM-1 as its controller. Its own game is set
+ * aside, with everything kept; afterwards it starts again as after a power-on, from the save the page sent back */
+static void fmr_game_enter(void)
+{
+    if (scene == SC_ROOM) room_leave();
+    if (du.on) duo_leave();
+    save_dirty = 0; save_now();
+    mus_set(MUS_OFF, 0); mus_solo = 0; mus_demo = 0; gh.playing = 0;
+    sy_drone_want = 0; sy_rumble_want = 0;
+#ifdef DINGHY_HOST
+    printf("%6u ms  remote: a page plays with this FM-1 (%u bytes of save sent)\n", fm1_ms, (unsigned)sizeof svr);
+#endif
+    fmr_start(&svr, sizeof svr);
+}
+static void fmr_game_leave(void)
+{
+    uint32_t i;
+    fmr.on = 0;
+    for (i = 0; i < sizeof cv; i++) ((uint8_t *)&cv)[i] = 0;
+    dlg.on = 0; mn.on = 0; sh.on = SH_NONE; pu.on = PU_OFF; tix.on = 0; banner.on = 0; pfx_clear();
+    replay = 0; thanks_due = 0; glo_used = 0; was_paused = 0;
+#ifdef DINGHY_HOST
+    printf("%6u ms  remote: the page is gone; the game again, from the save\n", fm1_ms);
+#endif
+    arcave_init();
+}
+static int fmr_game_keep(const uint8_t *p, uint32_t n)
+{
+    if (n != sizeof svr) return 2;               /* (another version's save: this FM-1 needs the page's version) */
+    if (((uint32_t)p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24) != SAVE_MAGIC) return 3;
+    return settings_save(p, n) == 0 ? 1 : 3;
+}
+
 static int lang_tip_up(void) { return scene == SC_INTRO && G.phase == IP_WIDE && G.t < 1800; }
 static void juke_change(int32_t d)
 {
@@ -282,7 +318,7 @@ static void juke_change(int32_t d)
 }
 
 /* every pass of the main loop (and while the screen is being sent): the link wants its messages read promptly */
-static void arcave_poll(void) { if (ac_started) { link_poll(); duo_poll(); } }
+static void arcave_poll(void) { if (ac_started) { link_poll(); duo_poll(); fmr_poll(); } }
 
 static void arcave_frame(void)
 {
@@ -292,6 +328,7 @@ static void arcave_frame(void)
     if (now - ac_last_ms < 40u) return;
     dt = imin((int32_t)(now - ac_last_ms), 60);
     ac_last_ms = now;
+    if (fmr.on) { fmr_frame(); return; }           /* a page plays with this FM-1: its own screen, the page's lights */
     ac_input();
     ac_leds_begin();
     mus_shared = link_id != 0;                   /* LINK on: every tune in the one shared key (ac_music.h) */

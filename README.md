@@ -8,7 +8,7 @@ Wake up Rock, roll down to the cave, and mend the jukebox with a song of your ow
 machines, free play, and a jukebox on the ALGORITHM knob.
 
 - **The page:** <https://mystic-arcave.github.io/FM-Arcave/>
-- **Play it in the browser:** [the emulator](https://mystic-arcave.github.io/FM-Arcave/emu/), the firmware's own code built for the web.
+- **Play it in the browser:** [the emulator](https://mystic-arcave.github.io/FM-Arcave/emu/), the firmware's own code built for the web. PLAY WITH MY FM-1 plays it on a real FM-1 plugged in by USB, from the FM-1's own save, which keeps what you play ([docs/LINK.md](docs/LINK.md)); COMPUTER KEYS makes the computer's two bottom rows of letters the FM-1's two rows of keys, each key and button labelled with its own; BIG SCREEN fills the window with the game.
 - **Install it on an FM-1:** [the installer](https://mystic-arcave.github.io/FM-Arcave/install/), over USB from Chrome or Edge.
 - **Several FM-1s in time:** [the Link page](https://mystic-arcave.github.io/FM-Arcave/link/), see [docs/LINK.md](docs/LINK.md).
 

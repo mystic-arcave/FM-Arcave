@@ -71,8 +71,8 @@ static void midi_send(uint32_t st, uint32_t d1, uint32_t d2)
     w_mo[w_mo_w & 255u][0] = (uint8_t)st; w_mo[w_mo_w & 255u][1] = (uint8_t)d1; w_mo[w_mo_w & 255u][2] = (uint8_t)d2; w_mo_w++;
 }
 
-/* the settings: a block the page keeps in the browser's storage */
-static uint8_t w_store[512];
+/* the settings: a block the page keeps in the browser's storage; as large as the FM-1's (one 4 KiB sector less its header) */
+static uint8_t w_store[4096];
 static uint32_t w_store_n, w_store_gen;
 static int settings_load(void *p, uint32_t n)
 {
@@ -152,4 +152,9 @@ EXPORT uint32_t web_bpm_q8(void) { return tr_bpm_q8; }
 EXPORT uint32_t web_duo(void) { return du.state | (uint32_t)(du.seat & 3u) << 4 | (uint32_t)(du_peer() ? 1 : 0) << 6 | (uint32_t)du.mission << 8 | (uint32_t)duo_prog << 12 | (uint32_t)du.latched << 16 | (uint32_t)du.stars << 17 | (uint32_t)du.np << 20; }
 EXPORT int32_t web_duo_score(int who) { du_score(); return who < 0 ? du.score : du.sc[who & 3]; }
 EXPORT uint32_t web_tick(void) { return tr_tick; }
+/* the remote (ac_remote.h): the size of this build's save, which the page compares with an FM-1's; and whether this
+ * build is itself playing an FM-1's part (the tests) */
+_Static_assert(sizeof svr <= sizeof w_store, "the game's save outgrew the page's store: raise w_store");
+EXPORT uint32_t web_save_size(void) { return sizeof svr; }
+EXPORT uint32_t web_remote(void) { return fmr.on | (uint32_t)fmr.msg << 1 | (uint32_t)fmr.tx_st << 4; }
 EXPORT uint32_t web_scene(void) { return scene | (uint32_t)story << 8 | (uint32_t)lang << 16 | (uint32_t)lk.state << 24; }
