@@ -38,6 +38,8 @@ run "a new song at the mended jukebox: a long slide, effects, their page, kept (
 run "the rings, stuck: a minute (the note, HOME breathing), the hint page and back, two minutes (HOME held three seconds: the rings glide into line, the light)" play hint 2 1
 run "the rings lock as they come into line (the foot shows which), a locked knob does nothing, the light" play lock 2 1
 run "the four rings, the dish, a song kept, the power back (and saved)" sh -c 'tests/run_arcave.sh mend 2 1 > build/host/mend.log 2>&1 && grep -q "settings 0 saved" build/host/mend.log'
+run "the light back: it swells into the dish, the two cards (PLAY breathing: it skips), then the hand brushing the keys" sh -c 'tests/run_arcave.sh welcome 2 1 > build/host/welcome.log 2>&1 && grep -q "  9800 ms  lights: breathing 0000, PLAY 2" build/host/welcome.log && grep -q " 12900 ms  lights: breathing 0000, PLAY 0" build/host/welcome.log'
+run "the welcome skipped by a key: the dish at once" sh -c 'tests/run_arcave.sh welcomeskip 2 1 > build/host/welcomeskip.log 2>&1 && grep -q "  6800 ms  lights: breathing 0000, PLAY 2" build/host/welcomeskip.log && grep -q "  7500 ms  lights: breathing 0000, PLAY 0" build/host/welcomeskip.log'
 run "the settings: skip to the Mystic Arcave, OCT+ confirms (and saved)" sh -c 'tests/run_arcave.sh skip > build/host/skip.log 2>&1 && grep -q "settings 0 saved" build/host/skip.log'
 run "the lit cave, a tune changed" play lit 4
 run "the mended jukebox: its name only in front of it, the offer of a new song only after Rock has left it once" env AT=522,380 sh -c 'tests/run_arcave.sh jukeback 4 9 > build/host/jukeback.log 2>&1 && grep -q "^sound" build/host/jukeback.log'

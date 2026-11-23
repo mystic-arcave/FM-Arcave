@@ -1,0 +1,11 @@
+# the welcome skipped: a key during the first card, and the dish is yours at once (that key counts toward the stirring)
+700 enc 5 -3
+900 enc 4 -4
+1100 enc 3 4
+1800 enc 2 3
+6800 shot
+7000 keys 4096
+7100 keys 0
+7500 shot
+9000 shot
+9500 end
