@@ -567,6 +567,11 @@ static void cave_well_stones(int32_t x, int32_t y)
     garc(x, y - 24, 24, 6, 0, 32768, th->rim, 0); garc(x, y - 24, 20, 4, 0, 32768, th->mute, 0);
     gline(x - 24, y - 24, x - 24, y, th->rim); gline(x + 24, y - 24, x + 24, y, th->rim);
 }
+#define CVW_WOOD AC_RGB(92, 58, 34)              /* the bucket's boards, */
+#define CVW_SEAM AC_RGB(44, 27, 15)              /* the dark joins between them, */
+#define CVW_EDGE AC_RGB(140, 96, 58)             /* their worn top ends, */
+#define CVW_HOOP AC_RGB(58, 58, 66)              /* its iron hoops */
+#define CVW_IRON AC_RGB(150, 150, 160)           /* and its handle */
 static void cave_well_load(int32_t x, int32_t y, int32_t by, int32_t snap, int inb, uint32_t tm, int32_t lit)
 {
     int32_t k, cut = y - 34, xy[8];
@@ -584,9 +589,13 @@ static void cave_well_load(int32_t x, int32_t y, int32_t by, int32_t snap, int i
     if (inb && snap < CVW_SNAP_MS / 2)           /* Rock in it, his eyes just over its rim */
         rock_draw(x, by - 3, 256, 0, (tm % 3100u) < 150u ? 30 : 256, th->rock, th->rock_rim, th->dark, th->moss, th->eye, th->pupil);
     xy[0] = x - 10; xy[1] = by; xy[2] = x + 10; xy[3] = by; xy[4] = x + 8; xy[5] = by + 10; xy[6] = x - 8; xy[7] = by + 10;
-    gpoly(xy, 4, th->stem); gpolyline(xy, 4, 1, th->rim);
-    ghl(x - 9, x + 10, by + 3, th->rim); ghl(x - 8, x + 9, by + 7, th->rim);
-    if (snap < 0) garc(x, by, 10, 14, 32768, 65536, th->rim, 0);   /* the handle, arched over Rock's head */
+    gpoly(xy, 4, CVW_WOOD);                      /* the bucket: dark boards, */
+    for (k = -1; k <= 1; k += 2) gline(x + k * 5, by + 1, x + k * 4, by + 9, CVW_SEAM);   /* the joins between them, */
+    gline(x, by + 1, x, by + 9, CVW_SEAM);
+    ghl(x - 9, x + 10, by, CVW_EDGE);            /* the boards' top ends, worn lighter, */
+    ghl(x - 10, x + 11, by + 2, CVW_HOOP); ghl(x - 8, x + 9, by + 8, CVW_HOOP);   /* two iron hoops round them */
+    gpolyline(xy, 4, 1, CVW_SEAM);
+    if (snap < 0) garc(x, by, 10, 14, 32768, 65536, CVW_IRON, 0);   /* the handle, arched over Rock's head */
 }
 static void cave_well(int32_t x, int32_t y, int on, uint32_t tm, int front)
 {
@@ -871,9 +880,14 @@ static void cave_draw(void)
             if (!on) s = TR(T_NOPOWER);
             px = SX(CV_MACH[cv.near - 3][0]); py = ty - TLH(ts(1, 3)) - 4 - 6 + 6 * ts(1, 3);
         }
-        if (cv.near == 8) {                      /* the well: its name, and what PLAY does over that */
-            int32_t ty = SY(CV_WELL_Y) - 106 - 5 * ts(1, 3);
-            gfit(SX(CV_WELL_X), ty, 232, "UNDERSONG", on ? th->caps[(tm / 500u) % 5u] : th->mute, ts(1, 3));
+        if (cv.near == 8) {                      /* the well: its name, MULTIPLAYER under it, and what PLAY does over that */
+            /* the name a size up, MULTIPLAYER (in every language) never wider than it: the name stands out */
+            int32_t a = ts(1, 3), b = a + 1, m = a, my, ty;
+            while (b > 1 && gtextw("UNDERSONG", b) > 232) b--;
+            while (m > 1 && gtextw(TR(T_WELL_MULTI), m) > gtextw("UNDERSONG", b)) m--;
+            my = SY(CV_WELL_Y) - 106 - 5 * m; ty = my - 5 * b - 3 * m;
+            gfit(SX(CV_WELL_X), ty, 232, "UNDERSONG", on ? th->caps[(tm / 500u) % 5u] : th->mute, b);
+            gfit(SX(CV_WELL_X), my, 232, TR(T_WELL_MULTI), on ? th->text : th->mute, m);
             if (!on) s = TR(T_NOPOWER);
             px = SX(CV_WELL_X); py = ty - TLH(ts(1, 3)) - 4 - 6 + 6 * ts(1, 3);
         }
