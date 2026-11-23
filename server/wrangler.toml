@@ -1,0 +1,12 @@
+# FM-ARCAVE's lobby server on Cloudflare Workers (the free plan is enough). From this folder: npx wrangler deploy
+name = "fm-arcave-lobby"
+main = "worker.mjs"
+compatibility_date = "2025-09-01"
+
+[[durable_objects.bindings]]
+name = "LOBBY"
+class_name = "LobbyRoom"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["LobbyRoom"]

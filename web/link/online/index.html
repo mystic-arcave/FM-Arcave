@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ARCAVE LINK ONLINE: UNDERSONG with friends far away</title>
+<meta name="description" content="Play UNDERSONG, FM-ARCAVE's game for two or three, with friends on other computers: a private lobby, a real FM-1 by USB or the emulator.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Silkscreen&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../site.css">
+<style>
+main{padding:clamp(36px,6vw,72px) 0 0;display:grid;gap:44px}
+.lead{font-size:19px;max-width:62ch}
+.panes{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:28px 56px;align-items:start}
+.pane{display:grid;gap:18px;align-content:start}
+.pane h2{font:400 13px/1 var(--pix);letter-spacing:.12em;color:var(--opal);display:flex;gap:12px;align-items:baseline}
+.pane h2 b{font-weight:400;color:var(--mute)}
+.row{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+.field{display:grid;gap:8px;font:400 11px/1 var(--pix);letter-spacing:.1em;color:var(--mute)}
+.field input{font:400 15px/1 var(--pix);letter-spacing:.12em;text-transform:uppercase;background:#000;color:var(--text);border:1px solid var(--line2);padding:13px 12px;border-radius:0;width:100%}
+.field input:focus{outline:none;border-color:var(--opal)}
+.or{font:400 11px/1 var(--pix);letter-spacing:.14em;color:var(--mute);display:flex;align-items:center;gap:14px}
+.or::before,.or::after{content:"";flex:1;border-top:1px solid var(--line)}
+.join{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:end}
+.list{display:grid}
+.who{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:4px 14px;align-items:center;padding:14px 0;border-top:1px solid var(--line)}
+.who .dot{width:10px;height:10px;background:var(--line2);justify-self:center}
+.who.well .dot{background:var(--opal);box-shadow:0 0 0 4px rgba(127,230,210,.15)}
+.who .nm{font:400 14px/1.2 var(--pix);letter-spacing:.06em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.who .nm i{font-style:normal;color:var(--amber);margin-left:8px;font-size:11px}
+.who .sub{grid-column:2/-1;color:var(--mute);font-size:14px}
+.who .ms{font:400 12px/1 var(--pix);color:var(--mute);font-variant-numeric:tabular-nums}
+.empty{color:var(--mute);padding:14px 0;border-top:1px solid var(--line)}
+.code{display:flex;flex-wrap:wrap;gap:16px 22px;align-items:center;padding:20px 22px;border:1px solid var(--line2);background:var(--rock)}
+.code .k{font:400 11px/1 var(--pix);letter-spacing:.14em;color:var(--mute);width:100%}
+.code output{font:400 clamp(30px,6vw,44px)/1 var(--pix);letter-spacing:.14em;color:var(--opal)}
+.code .btn{margin-left:auto}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));gap:28px 40px}
+.cols h3{margin-bottom:10px}
+.cols p{color:var(--mute)}
+[hidden]{display:none !important}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="top">
+  <a class="name" href="../../">FM-ARCAVE</a>
+  <nav><a href="../../emu/">PLAY</a><a href="../../install/">INSTALL</a><a href="../" aria-current="page">LINK</a><a href="https://github.com/mystic-arcave/FM-Arcave">SOURCE</a></nav>
+</header>
+<main>
+  <div>
+    <p class="kicker">Arcave Link</p>
+    <nav class="tabs" aria-label="Link"><a href="../">LOCAL</a><a href="./" aria-current="page">ONLINE</a></nav>
+    <h1 style="font-size:clamp(28px,5vw,48px);margin:22px 0 18px">Down the well, together from far away</h1>
+    <p class="lead">UNDERSONG over the internet. Make a private lobby, send its code to a friend, and both of you roll Rock down the well: on a real FM-1 by USB, or on the emulator in this browser. Up to three computers in a lobby.</p>
+  </div>
+
+  <div class="panes">
+    <section class="pane" aria-labelledby="h-here">
+      <h2 id="h-here"><b>1</b> ON THIS COMPUTER</h2>
+      <div class="row">
+        <button class="btn" id="usb">USE MY FM-1 (USB)</button>
+        <button class="btn" id="emu">OPEN THE EMULATOR</button>
+      </div>
+      <div class="list" id="here"></div>
+      <div class="empty" id="here-none">Plug your FM-1 in and press USE MY FM-1, or open the emulator. Then roll Rock to the well and go down: they show here once they are in it.</div>
+      <p class="status" id="ports"></p>
+    </section>
+
+    <section class="pane" aria-labelledby="h-lobby">
+      <h2 id="h-lobby"><b>2</b> THE LOBBY</h2>
+      <div id="out" class="pane">
+        <label class="field">YOUR NAME <input id="name" maxlength="12" autocomplete="nickname" spellcheck="false" placeholder="PLAYER"></label>
+        <button class="btn on" id="make">MAKE A PRIVATE LOBBY</button>
+        <p class="or">OR JOIN A FRIEND'S</p>
+        <div class="join">
+          <label class="field">LOBBY CODE <input id="code" maxlength="7" autocomplete="off" spellcheck="false" placeholder="ABC 123"></label>
+          <button class="btn" id="join">JOIN</button>
+        </div>
+      </div>
+      <div id="in" class="pane" hidden>
+        <div class="code">
+          <span class="k">LOBBY CODE: ONLY THOSE YOU GIVE IT TO CAN JOIN</span>
+          <output id="shown"></output>
+          <button class="btn" id="copy">COPY THE LINK</button>
+        </div>
+        <div class="list" id="who"></div>
+        <div class="row"><button class="btn" id="leave">LEAVE THE LOBBY</button></div>
+      </div>
+      <p class="status" id="status" role="status"></p>
+    </section>
+  </div>
+
+  <div class="cols">
+    <div><h3>WHAT PASSES</h3><p>Only UNDERSONG's own messages: who is in the well, the keys and dials of each player, and the clock of the one who leads. The lobby server passes them on and knows nothing of the game. No sound or picture is sent: each FM-1 plays the game itself.</p></div>
+    <div><h3>DISTANCE</h3><p>Each FM-1 judges its own player against its own clock, so the time messages take never costs you a note. It shows only as your friends' notes sounding a little late. The ping by each name is the round trip from that computer to the lobby server.</p></div>
+    <div><h3>REAL OR EMULATED</h3><p>Any mix works: an FM-1 against an emulator, two FM-1s at your end and one at your friend's. Every FM-1 on this computer and every emulator window in this browser goes into the lobby. Keep the emulator's own MIDI switched off here, or it is heard twice.</p></div>
+    <div><h3>PRIVATE</h3><p>Lobbies are not listed anywhere: a lobby is found by its code alone. It closes when it has been empty for half an hour. If the connection breaks, this page joins again by itself.</p></div>
+  </div>
+</main>
+<footer class="foot"><p>UNDERSONG's messages are control changes 102 to 118 on MIDI channel 16; <a href="https://github.com/mystic-arcave/FM-Arcave/blob/main/docs/LINK.md">docs/LINK.md</a> has them and the lobby's own protocol. The lobby server is <a href="https://github.com/mystic-arcave/FM-Arcave/tree/main/server">server/</a> in the source.</p></footer>
+</div>
+<script type="module">
+import { Gather, HELLO, outFor, holdTheLink } from "../undersong.js";
+import { LobbyClient, SERVER } from "../lobby.js";
+const $ = (id) => document.getElementById(id);
+const q = new URLSearchParams(location.search);
+const server = q.get("server") || SERVER;
+const NAME = "fm-arcave-online-name";
+const now = () => performance.now();
+
+// ---- this computer: FM-1s by USB (Web MIDI) and the emulator's windows in this browser (BroadcastChannel)
+const here = new Map();                                     // a MIDI input's id, or "emu" -> { kind, label, g, hello, heard, out }
+const emu = { kind: "emu", label: "EMULATOR, THIS BROWSER", g: new Gather(), hello: -1e9, heard: -1e9 };
+here.set("emu", emu);
+const bc = "BroadcastChannel" in window ? new BroadcastChannel("fm-arcave-link") : null;
+// an emulator window sends a plain list; what a Link page passes on comes as { relay, m }, and is not taken back
+if (bc) bc.onmessage = (e) => { if (Array.isArray(e.data)) for (const v of e.data) if ((v & 255) === 0xBF) fromHere(emu, v >> 8 & 127, v >> 16 & 127); };
+let midi = null, online = false, release = null;
+const pack = (d) => { const l = []; for (let i = 0; i + 1 < d.length; i += 2) l.push(0xBF | d[i] << 8 | d[i + 1] << 16); return l; };
+const bytes = (d) => { const b = []; for (let i = 0; i + 1 < d.length; i += 2) b.push(0xBF, d[i], d[i + 1]); return b; };
+const inWell = (s) => now() - s.hello < 1500;
+const live = (s) => now() - s.hello < 3000;
+
+function fromHere(s, cc, v) {
+  s.heard = now();
+  if (cc === HELLO) { if (!inWell(s)) setTimeout(paintHere); s.hello = now(); }
+  const d = s.g.take(cc, v);
+  if (!d || !online) return;
+  lobby.send(d);
+  for (const x of here.values()) if (x !== s && x.out && live(x)) try { x.out.send(bytes(d)); } catch (e) {}
+  if (s !== emu && bc) bc.postMessage({ relay: 1, m: pack(d) });
+}
+function fromLobby(f, d) {
+  if (!online) return;
+  for (const x of here.values()) if (x.out && live(x)) try { x.out.send(bytes(d)); } catch (e) {}
+  if (bc) bc.postMessage({ relay: 1, m: pack(d) });
+}
+function hookMidi() {
+  for (const i of midi.inputs.values()) i.onmidimessage = (e) => {
+    if (e.data[0] !== 0xBF || e.data.length < 3) return;
+    let s = here.get(i.id);
+    if (!s) { s = { kind: "usb", label: i.name, g: new Gather(), hello: -1e9, heard: -1e9, out: outFor(midi, i) }; here.set(i.id, s); }
+    fromHere(s, e.data[1], e.data[2]);
+  };
+  for (const [id, s] of here) if (s.kind === "usb") { const i = midi.inputs.get(id); s.out = i ? outFor(midi, i) : null; }
+  const names = [...midi.inputs.values()].map((i) => i.name);
+  $("ports").textContent = names.length ? "MIDI PORTS: " + names.join(", ") : "NO MIDI PORTS: is the FM-1 plugged in?";
+}
+$("usb").addEventListener("click", async () => {
+  if (midi) { hookMidi(); return; }
+  if (!navigator.requestMIDIAccess) { $("ports").textContent = "THIS BROWSER HAS NO WEB MIDI: USE CHROME OR EDGE, OR THE EMULATOR."; return; }
+  try { midi = await navigator.requestMIDIAccess(); } catch (e) { $("ports").textContent = "THE BROWSER GAVE NO MIDI ACCESS."; return; }
+  hookMidi(); midi.onstatechange = hookMidi;
+  $("usb").textContent = "FM-1 BY USB: ON"; $("usb").classList.add("on");
+});
+$("emu").addEventListener("click", () => { window.open("../../emu/", "fm-arcave-emu"); });
+
+function paintHere() {
+  const list = [...here.values()].filter((s) => now() - s.heard < 10000);
+  $("here-none").hidden = list.length > 0;
+  $("here").innerHTML = "";
+  for (const s of list) {
+    const r = document.createElement("div"); r.className = "who" + (inWell(s) ? " well" : "");
+    r.innerHTML = '<span class="dot"></span><span class="nm"></span><span class="ms"></span><span class="sub"></span>';
+    r.querySelector(".nm").textContent = s.kind === "emu" ? "EMULATOR" : "FM-1";
+    r.querySelector(".sub").textContent = (s.kind === "emu" ? "This browser" : "USB: " + s.label) + (inWell(s) ? ", down the well" : ", not in the well");
+    $("here").appendChild(r);
+  }
+}
+function whatPlays() {
+  const l = [...here.values()].filter((s) => now() - s.heard < 10000);
+  const usb = l.some((s) => s.kind === "usb"), em = l.some((s) => s.kind === "emu");
+  return { kind: usb && em ? "usb+emu" : usb ? "usb" : em ? "emu" : "", well: l.some(inWell) };
+}
+setInterval(() => { paintHere(); if (online) paintWho(); }, 1000);
+
+// ---- the lobby
+const lobby = new LobbyClient(server, {
+  state: (s, why) => {
+    const wasOnline = online;
+    online = s === "in" || s === "again";
+    $("out").hidden = online; $("in").hidden = !online;
+    if (online && !wasOnline) location.hash = lobby.code || "";
+    if ((s === "out" || s === "error") && release) { release(); release = null; }
+    if (s === "in") { $("shown").textContent = spaced(lobby.code); paintWho(); say(lobby.members.length > 1 ? "" : "In the lobby. Send the code or the link to your friends."); }
+    else if (s === "connecting") say("Reaching the lobby server...");
+    else if (s === "again") say("The connection broke. Joining the lobby again...");
+    else if (s === "out") { say("Out of the lobby."); history.replaceState(null, "", location.pathname + location.search); }
+    else if (s === "error") say(WHY[why] || "Something went wrong (" + why + ").");
+  },
+  roster: () => paintWho(),
+  message: fromLobby,
+});
+lobby.info = whatPlays;
+const WHY = {
+  "no-lobby": "There is no lobby with that code. Check it with your friend: an empty lobby closes after half an hour.",
+  full: "That lobby already has three computers in it.",
+  "bad-code": "A lobby code is six letters and numbers.",
+  busy: "The lobby server is busy. Try again in a moment.",
+  server: "The lobby server could not be reached.",
+  lost: "The connection to the lobby was lost, and joining again did not work.",
+};
+const KIND = { usb: "FM-1 by USB", emu: "the emulator", "usb+emu": "FM-1 and emulator", "": "nothing in the well yet" };
+const say = (t) => { $("status").textContent = t; };
+const spaced = (c) => c ? c.slice(0, 3) + " " + c.slice(3) : "";
+function paintWho() {
+  $("who").innerHTML = "";
+  for (const m of lobby.members) {
+    const me = m.id === lobby.you, w = me ? whatPlays() : m, ms = me ? Math.round(lobby.rtt) : m.rtt;
+    const r = document.createElement("div"); r.className = "who" + (w.well ? " well" : "");
+    r.innerHTML = '<span class="dot"></span><span class="nm"></span><span class="ms"></span><span class="sub"></span>';
+    r.querySelector(".nm").textContent = m.name; if (me) r.querySelector(".nm").insertAdjacentHTML("beforeend", "<i>YOU</i>");
+    r.querySelector(".ms").textContent = ms > 0 ? ms + " MS" : "";
+    r.querySelector(".sub").textContent = (w.kind ? "Plays on " + KIND[w.kind] : "Nothing playing yet") + (w.well ? ", down the well" : "");
+    $("who").appendChild(r);
+  }
+  const n = lobby.members.length, wells = lobby.members.filter((m) => (m.id === lobby.you ? whatPlays() : m).well).length;
+  if (lobby.status === "in") say(n < 2 ? "Waiting for a friend. Send them the code or the link." : wells >= n ? "Everyone is down the well." : n + " in the lobby. Roll Rock to the well and go down.");
+}
+function go(join) {
+  if (!server) { say("This site has no lobby server set up yet."); return; }
+  const name = $("name").value.trim().toUpperCase() || "PLAYER";
+  try { localStorage.setItem(NAME, name); } catch (e) {}
+  const code = $("code").value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  if (join && code.length !== 6) { say(WHY["bad-code"]); $("code").focus(); return; }
+  release = holdTheLink((ok) => {
+    if (!ok) { release = null; say("Another Link tab in this browser is already passing UNDERSONG on (the LOCAL hub, or ONLINE in another tab). Stop it first."); return; }
+    if (join) lobby.join(code, name); else lobby.create(name);
+  });
+}
+$("make").addEventListener("click", () => go(false));
+$("join").addEventListener("click", () => go(true));
+$("code").addEventListener("keydown", (e) => { if (e.key === "Enter") go(true); });
+$("leave").addEventListener("click", () => lobby.leave());
+$("copy").addEventListener("click", async () => {
+  const link = location.origin + location.pathname + (q.get("server") ? "?server=" + encodeURIComponent(server) : "") + "#" + lobby.code;
+  try { await navigator.clipboard.writeText(link); $("copy").textContent = "COPIED"; } catch (e) { prompt("The link to this lobby:", link); }
+  setTimeout(() => { $("copy").textContent = "COPY THE LINK"; }, 1600);
+});
+try { $("name").value = localStorage.getItem(NAME) || ""; } catch (e) {}
+// a link that ends in #CODE: the code is filled in, JOIN is the button to press (also when the link is opened on this
+// page already, which changes only the #)
+function fromLink() {
+  const c = location.hash.slice(1).toUpperCase().replace(/[^A-Z0-9]/g, "");
+  if (c.length !== 6 || online) return false;
+  $("code").value = spaced(c); say("A friend's lobby: " + spaced(c) + ". Press JOIN."); $("join").classList.add("on"); $("make").classList.remove("on");
+  return true;
+}
+addEventListener("hashchange", fromLink);
+if (!fromLink() && !server) say("This site has no lobby server set up yet.");
+paintHere();
+window.__online = { here, lobby, emu };
+</script>
+</body>
+</html>

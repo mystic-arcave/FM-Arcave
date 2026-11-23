@@ -67,6 +67,7 @@ run "UNDERSONG, the story told: TWIN ROAD's card turned to another song, and tha
 run "POTION CHOIR by hand: the friend pours, a knob and a key pour yours (the wrong rock), one round runs out of time" env DUO=0 sh -c 'tests/run_arcave.sh duopot 4 10 > build/host/duopot.log 2>&1 && grep -q "UNDERSONG POTION CHOIR: 600 of 1200, 0 stars, chapters 0" build/host/duopot.log'
 run "NOTE RALLY by hand: a key serves, the note falls where Rock is not, it is served again" env DUO=3 sh -c 'tests/run_arcave.sh duorally 4 10 > build/host/duorally.log 2>&1 && grep -q "UNDERSONG NOTE RALLY: 400 of 3600, 0 stars, chapters 3" build/host/duorally.log'
 if [ -f build/emu-catch/fm-arcave.wasm ]; then run "UNDERSONG between browser builds wired to each other: seats, one clock, the story, ROCK-OFF, REC, a friend leaving; then three: all five games for three, one going dark" node tests/duo_test.mjs; fi
+if [ -f build/emu-catch/fm-arcave.wasm ]; then run "UNDERSONG online: three browser builds through the lobby server (server/node.mjs) and the Online page's code, 80 ms each way: a lobby made, joined, refused; two games for two, a broken connection, ECHO STEPS for three, one leaving" node tests/online_test.mjs; fi
 if [ -f build/emu/fm-arcave.wasm ]; then run "the browser build in Node" node tests/emu_test.mjs; else echo "-- no build/emu: web/emu/build.sh first for the browser test"; fi
 if [ -f build/fm-arcave.fwsc ]; then
     CC="${CC:-cc} -O1 -Wall -Wno-unused-function"

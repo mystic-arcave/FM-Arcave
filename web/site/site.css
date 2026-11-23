@@ -45,3 +45,7 @@ table{border-collapse:collapse;width:100%}
 th,td{text-align:left;padding:10px 14px 10px 0;border-bottom:1px solid var(--line);vertical-align:top;font-size:15px}
 th{font:400 11px/1.2 var(--pix);letter-spacing:.1em;color:var(--mute)}
 @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+.tabs{display:inline-flex;margin-top:16px;border:1px solid var(--line2)}
+.tabs a{font:400 12px/1 var(--pix);letter-spacing:.1em;color:var(--mute);text-decoration:none;padding:12px 20px}
+.tabs a:hover{color:var(--opal)}
+.tabs a[aria-current]{background:var(--opal);color:#000}

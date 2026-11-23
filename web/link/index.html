@@ -44,7 +44,8 @@ input[type=number]{width:84px}
 <main>
   <div>
     <p class="kicker">Arcave Link</p>
-    <h1 style="font-size:clamp(28px,5vw,48px);margin:14px 0 18px">Several FM-1s, one clock</h1>
+    <nav class="tabs" aria-label="Link"><a href="./" aria-current="page">LOCAL</a><a href="online/">ONLINE</a></nav>
+    <h1 style="font-size:clamp(28px,5vw,48px);margin:22px 0 18px">Several FM-1s, one clock</h1>
     <p class="lead">Each FM-1 keeps its own scene and its own tune. This page keeps their bars and beats together: it listens to every FM-1 that has LINK on, takes one as the leader, and tells the others where the leader's clock is.</p>
   </div>
   <div class="bar">
@@ -62,13 +63,14 @@ input[type=number]{width:84px}
     <div><h3>HOW TO CONNECT</h3><p>By USB: plug each FM-1 into this computer (a USB hub is fine). A browser tab running the emulator with MIDI on counts as an FM-1 too, through a virtual MIDI port. Bluetooth is not in this version of the firmware yet: the messages are made to pass over Bluetooth MIDI, but the FM-1's radio code is still to be brought over.</p></div>
     <div><h3>WHAT STAYS IN TIME</h3><p>Tempo, beat and bar. A follower slides into place over a beat or two, never jumps mid-note. Change the tune on the leader (ALGORITHM) and every FM-1 takes its tempo. With LINK on, all of FM-ARCAVE's tunes play in one shared key, so different tunes on different machines still agree.</p></div>
     <div><h3>HOW CLOSE</h3><p>The page measures each FM-1's delay with a ping and sends each one the clock moved ahead by that much. "OFF BY" shows how far each FM-1 is from the leader. These numbers come from the emulator so far, not from four FM-1s on a table.</p></div>
-    <div><h3>UNDERSONG, FOR TWO OR THREE</h3><p>The game for two or three FM-1s, down the well in the Arcave's floor. Plug them all into this computer, start the hub, and roll each Rock to the well: this page passes what each player does to the others, and the clock of the one that leads. With three in the well, every game is played for three. LINK does not have to be on for it.</p></div>
+    <div><h3>UNDERSONG, FOR TWO OR THREE</h3><p>The game for two or three FM-1s, down the well in the Arcave's floor. Plug them all into this computer, start the hub, and roll each Rock to the well: this page passes what each player does to the others, and the clock of the one that leads. With three in the well, every game is played for three. LINK does not have to be on for it. Friends on other computers: the <a href="online/">ONLINE</a> tab.</p></div>
     <div><h3>WITHOUT THIS PAGE</h3><p>An FM-1 with LINK on also follows a plain MIDI clock (USB or the TRS jack) from a DAW or a drum machine, and START sets it to bar one.</p></div>
   </div>
 </main>
 <footer class="foot"><p>The messages are control changes 102 to 118 on MIDI channel 16; <a href="https://github.com/mystic-arcave/FM-Arcave/blob/main/docs/LINK.md">docs/LINK.md</a> has the whole protocol. Nothing leaves this computer.</p></footer>
 </div>
 <script type="module">
+import { Gather, outFor as pairOf, holdTheLink } from "./undersong.js";
 // The hub. Time is performance.now() milliseconds; the clock is in quarter ticks (384 to a beat), modulo 2^21, as on the wire.
 const $ = (id) => document.getElementById(id);
 const MOD = 1 << 21, wrap = (d) => ((d % MOD) + MOD + MOD / 2) % MOD - MOD / 2;
@@ -93,36 +95,26 @@ function leaderPos(t) {
 }
 function out(d, cc, v) { try { d.out.send([0xBF, cc, v & 127]); } catch (e) {} }
 
-// the output that belongs to an input. Two FM-1s carry the same port name: the n-th input of a name goes with the n-th
-// output of that name
-function outFor(input) {
-  const ins = [...midi.inputs.values()].filter((x) => x.name === input.name), outs = [...midi.outputs.values()].filter((x) => x.name === input.name);
-  return outs[Math.max(0, ins.indexOf(input))] || outs[0] || null;
-}
+const outFor = (input) => pairOf(midi, input);
 // UNDERSONG, the game for two or three: its messages (control changes 110 to 118, and the clock of the FM-1 that leads
-// the game, 102 to 107 with sender 5) are passed from each FM-1 in the game to the others, as they come. A message with
-// numbers (115, 116, 118, then its op 117) goes on in one piece: with three FM-1s, two players' messages must not mix on
-// the way to the third
+// the game, 102 to 107 with sender 5) are passed from each FM-1 in the game to the others, as they come, gathered by
+// undersong.js: a message with numbers (115, 116, 118, then its op 117) goes on in one piece, so with three FM-1s two
+// players' messages never mix on the way to the third
 const duo = new Map();                                      // input id -> { out, seen }
-function relay(input, bytes) {
-  for (const [id, d] of duo) if (id !== input.id && performance.now() - d.seen < 3000) { try { d.out.send(bytes); } catch (e) {} }
+function relay(input, d) {
+  const bytes = []; for (let i = 0; i + 1 < d.length; i += 2) bytes.push(0xBF, d[i], d[i + 1]);
+  for (const [id, x] of duo) if (id !== input.id && performance.now() - x.seen < 3000) { try { x.out.send(bytes); } catch (e) {} }
 }
 function onMidi(input, e) {
   const [st, d1, d2] = e.data, t = e.timeStamp || performance.now();
   if (st !== 0xBF || !running) return;
-  const p = (input.acc ||= { tempo: 0, pos: 0 });
-  if (d1 >= 110 && d1 <= 118) {
+  const p = (input.acc ||= { tempo: 0, pos: 0 }), g = (input.gather ||= new Gather());
+  if ((d1 >= 110 && d1 <= 118) || (d1 === 107 && d2 === 13)) {   // UNDERSONG's, and its leader's clock: on to the friends
     if (d1 === 110) { const o = duo.get(input.id)?.out || outFor(input); if (o) duo.set(input.id, { out: o, seen: performance.now() }); }
-    if (d1 === 115 || d1 === 116 || d1 === 118) { (p.held ||= []).push([0xBF, d1, d2]); if (p.held.length > 8) p.held.shift(); return; }
-    if (d1 === 117 && p.held) { for (const m of p.held) relay(input, m); p.held = null; }
-    relay(input, [0xBF, d1, d2]);
+    const d = g.take(d1, d2); if (d) relay(input, d);
     return;
   }
-  if (d1 === 107 && d2 === 13) {                             // the game's leader says where its clock is: on to its friend
-    const tq = p.tempo, pq = p.pos;
-    for (const m of [[102, tq >> 7 & 127], [103, tq & 127], [104, pq >> 14 & 127], [105, pq >> 7 & 127], [106, pq & 127], [107, 13]]) relay(input, [0xBF, m[0], m[1]]);
-    return;
-  }
+  if (d1 >= 102 && d1 <= 106) g.take(d1, d2);
   if (d1 === 102) p.tempo = d2 << 7;
   else if (d1 === 103) p.tempo |= d2;
   else if (d1 === 104) p.pos = d2 << 14;
@@ -201,11 +193,16 @@ $("bpm").addEventListener("change", () => {
   const now = performance.now(); page.pos0 = pagePos(now); page.t0 = now;
   page.bpm = Math.min(240, Math.max(40, +$("bpm").value || 100));
 });
+let release = null;
 $("go").addEventListener("click", async () => {
-  if (running) { running = false; clearInterval(timer); $("go").textContent = "START THE HUB"; $("status").textContent = "Stopped."; return; }
+  if (running) { running = false; clearInterval(timer); if (release) { release(); release = null; } $("go").textContent = "START THE HUB"; $("status").textContent = "Stopped."; return; }
+  // one hub in a browser: the ONLINE tab, in another tab, passes UNDERSONG on too
+  const mine = await new Promise((ok) => { release = holdTheLink(ok); });
+  if (!mine) { release = null; $("status").textContent = "The ONLINE tab is running in this browser: leave its lobby first."; return; }
   if (!midi) {
-    if (!navigator.requestMIDIAccess) { $("status").textContent = "This browser has no Web MIDI. Use Chrome or Edge."; return; }
-    try { midi = await navigator.requestMIDIAccess(); } catch (e) { $("status").textContent = "The browser gave no MIDI access."; return; }
+    const no = (t) => { release(); release = null; $("status").textContent = t; };
+    if (!navigator.requestMIDIAccess) { no("This browser has no Web MIDI. Use Chrome or Edge."); return; }
+    try { midi = await navigator.requestMIDIAccess(); } catch (e) { no("The browser gave no MIDI access."); return; }
     const hook = () => { for (const i of midi.inputs.values()) i.onmidimessage = (e) => onMidi(i, e); };
     hook(); midi.onstatechange = hook;
   }

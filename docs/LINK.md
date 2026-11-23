@@ -119,3 +119,53 @@ shows as the friends' notes sounding that much late.
 `tests/duo_test.mjs` plays the whole of it between two browser builds wired to each other, then all five games for
 three between three, and one of the three going dark in the middle of a game. Two real FM-1s have played it on the
 Link page; three real FM-1s have not been tried yet.
+
+## Online: UNDERSONG between computers
+
+The Link page has two tabs. **LOCAL** (`web/link/`) is the hub above, for FM-1s on one computer. **ONLINE**
+(`web/link/online/`) puts this computer into a private lobby with up to two others, anywhere:
+
+- **What plays here:** every FM-1 plugged in by USB (USE MY FM-1, Web MIDI) and every emulator window open in the same
+  browser (OPEN THE EMULATOR; they speak on the BroadcastChannel `fm-arcave-link`). Any mix at either end.
+- **The lobby:** MAKE A PRIVATE LOBBY gives a code of six letters and numbers (no I, O, 0 or 1); JOIN takes one, or a
+  link that ends in `#CODE`. Lobbies are never listed. Three computers at most; an empty lobby closes after half an
+  hour; a page whose connection breaks joins again by itself and keeps its place.
+- **What passes:** UNDERSONG's messages only, gathered as the LOCAL hub gathers them (`web/link/undersong.js`: 118, 115
+  and 116 held for their 117; the leader's clock in one piece). From an FM-1 here they go to the lobby and to the
+  others here; from the lobby to every FM-1 here that is down the well, and to the emulator windows. What the page
+  passes to the windows is marked (`{ relay, m }`), so another Link tab never sends it back out.
+- **One Link tab at a time** passes UNDERSONG on in a browser (a Web Lock, `fm-arcave-link-hub`): the LOCAL hub and
+  an ONLINE lobby together would pass every message twice.
+
+Nothing is corrected for the distance: the leader's clock goes on as the local relay passes it, so a follower runs
+behind the leader by the time a message takes, and each FM-1 still judges its own player against its own clock.
+Games start five or six beats after the leader's "go", NOTE RALLY's note lands four beats after it is hit, and a
+player is only given up after 2.5 s of silence, so a few hundred milliseconds cost nothing but late-sounding friends.
+
+### The lobby server
+
+`server/lobby.mjs` holds the rules; two hosts run them:
+
+- `server/worker.mjs` with `server/wrangler.toml`: a Cloudflare Worker, one Durable Object per lobby
+  (`cd server && npx wrangler deploy`), live at `wss://fm-arcave-lobby.mystic-arcave.workers.dev` on the project's
+  Cloudflare account (free plan). That address is `SERVER` in `web/link/lobby.js`.
+- `server/node.mjs`: the same on Node with nothing to install (`node server/node.mjs 8787`), for trying it on one
+  computer and for the tests. The Online page takes `?server=ws://localhost:8787`, and a link it copies carries that on.
+
+JSON text frames over a WebSocket at `/new` (make a lobby) or `/join/CODE`:
+
+| from | message | |
+| --- | --- | --- |
+| page | `{t:"hi", name, token}` | first; the token is the same when the page comes back after a break |
+| server | `{t:"lobby", code, you}` | in; `you` is this page's number in the lobby |
+| server | `{t:"err", why}` | `no-lobby`, `full`, `bad-code` or `busy`; then the socket closes |
+| page | `{t:"m", d:[cc, v, ...]}` | control changes on channel 16 for everyone else |
+| server | `{t:"m", f, d}` | the same, from member `f` |
+| page | `{t:"ping", n, rtt, kind, well}` | every 2 s: the last round trip, what plays here (`usb`, `emu`, `usb+emu`), whether one is in the well |
+| server | `{t:"pong", n}`, `{t:"roster", code, members}` | the answer; who is in, whenever that changes |
+
+A member not heard from for 15 s is dropped. `tests/online_test.mjs` runs the Node server and three browser builds
+behind the Online page's own code, with 80 ms each way: a lobby made and joined, a wrong code and a fourth computer
+refused, TWIN ROAD and NOTE RALLY for two, a connection broken and back, ECHO STEPS for three, and one leaving the
+lobby mid-game. With `SERVER=wss://fm-arcave-lobby.mystic-arcave.workers.dev DELAY=0` it runs the same against the
+live server, over the real internet. No real FM-1 has played online yet.
