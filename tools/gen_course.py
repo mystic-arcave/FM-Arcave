@@ -107,38 +107,6 @@ def build(length):
             for k in range(5):
                 SKYOBJ.append((0, bx + 60 + k * 70, gy - 140 - k * 45, (i + k) % 5))
 
-    # the race back (out of the cave's upper door, to where the game began): the pads stand on the other side of each
-    # crest, the sky things hang to the left of them, and a booster waits at the foot of each of the four big steps
-    RPADS = []
-    x = XE - 320
-    while x > XS + 420:
-        if Y(x) < Y(x + 2) and Y(x) <= Y(x - 2) and Y(x + 40) - Y(x) > 5:
-            f = x - 20
-            while f > x - 400 and Y(f - 2) >= Y(f):
-                f -= 2
-            RPADS.append((x + 24, f))
-            x -= 120
-        x -= 2
-    RSKY = []
-    for i, (px, far) in enumerate(RPADS):
-        gy = Y(far)
-        for k in range(1, 5):
-            RSKY.append((0, px + k * (far - px - 60) / 5, Y(px) - 20 - 50 * math.sin(math.pi * k / 5) + k * 2, (i + k) % 5))
-        if i % 3 == 1:
-            bx = far - 10
-            for j, q in enumerate([[0, 95], [120, 175], [245, 250]]):
-                RSKY.append((1 if j < 2 else 2, bx - q[0], gy - q[1], (i + j) % 5))
-            for k in range(5):
-                RSKY.append((0, bx - 60 - k * 70, gy - 140 - k * 45, (i + k) % 5))
-    RPADS.sort(key=lambda p: p[0])
-    RSKY.sort(key=lambda o: o[1])
-    STEPS = []    # the foot, the throw (px/s leftward, px/s upward)
-    for a, wd in [(XS, 120), (L * .3, 170), (L * .58, 170), (L * .84, 190)]:
-        foot = a + wd + 16
-        top = min(Y(q) for q in range(int(a) - 40, int(foot)))
-        vy = math.sqrt(2 * 520 * (Y(foot) - top + 26))
-        STEPS.append((foot, (foot - (a - 24)) / (vy / 520), vy))
-
     # on the ground: 0 pal, 1 crystal, 2 gate, 3 lamp, 4 sign
     PROPS = []
     x, i = 900, 0
@@ -182,16 +150,45 @@ def build(length):
     assert max(ht) < 32767 and min(ht) > 0, (min(ht), max(ht))
 
     return dict(L=L, XE=XE, XSTOP=XSTOP, ht=ht, yend=round(Y(L) * 16), shrooms=SHROOMS, pads=PADS, sky=SKYOBJ, props=PROPS,
-                pools=POOLS, rpads=RPADS, rsky=RSKY, steps=STEPS)
+                pools=POOLS)
 
 
 SHORT = build(L_SHORT)
-LONG = build(L_LONG)
+LONG = build(L_LONG)    # (only to make the race from: its land, pads, sky and pools mirrored, its mushrooms and props kept)
+
+
+def build_race(c):
+    """The race back: out of the Arcave's upper door (on the right, at the top) downhill all the way to where the game
+    began. As long as the first build's course. Its land is the long course's turned round (what went down to the right
+    goes down to the left), with a flat stretch at the door for the start line; at its left end the opening area exactly
+    as it is, only lower. Over the finish (x = 74) the opening course comes back in its place, behind the
+    congratulations, so the two ends must look the same: they do, moved down by D."""
+    lm = XE                                     # (Y is the long course's still: L, XE are the long one's)
+    m = lm + XS                                 # the mirror: x on the race is m - x on the long course
+    d = Y(lm) - Y0                              # how much lower the opening area sits at the race's end
+
+    def R(x):
+        if x < XS:
+            return Y(x) + d                     # (left of XS the long course's land is the short one's)
+        if x <= lm:
+            return Y(m - x)
+        return Y0
+    ht = [round(R(x) * 16) for x in range(HX0, L + 61)]
+    assert max(ht) < 32767 and min(ht) > 0, (min(ht), max(ht))
+    pads = sorted(((m - px, m - far) for px, far in c["pads"]), key=lambda q: q[0])
+    sky = sorted(((t, m - x, y, col) for t, x, y, col in c["sky"]), key=lambda o: o[1])
+    pools = sorted(((m - b, m - a, lv, col) for a, b, lv, col in c["pools"]), key=lambda o: o[0])
+    return dict(L=L, XE=XE, XSTOP=XSTOP, ht=ht, yend=round(R(L) * 16), shrooms=c["shrooms"], pads=pads, sky=sky,
+                props=c["props"], pools=pools, d=d)
+
+
+RACE = build_race(LONG)
 
 out = []
 w = out.append
 w("/* SPDX-License-Identifier: GPL-3.0-only */")
-w("/* FM-ARCAVE's intro courses: the opening roll (short) and the race back (long, the first build's length).")
+w("/* FM-ARCAVE's intro courses: the opening roll (short) and the race back (the first build's length, downhill to the")
+w(" * left all the way, ending in the opening area set CO_RACE_D px lower).")
 w(" * Written by tools/gen_course.py: do not edit. */")
 w(f"#define CO_XS {XS}")
 w(f"#define CO_WALLX {WALLX}")
@@ -202,13 +199,14 @@ w(f"#define CO_LOOPR {LOOPR}")
 w(f"#define CO_CARDX {CARDX}")
 w(f"#define CO_CAMMIN {CAMMIN}")
 w(f"#define CO_HX0 ({HX0})")
+w(f"#define CO_RACE_D {round(RACE['d'])}")
 w("typedef struct { int16_t x; uint8_t s, c, ph; } co_shroom_t;   /* s: size * 256, ph: phase, 256 = a turn */")
 w("typedef struct { int16_t x, far; } co_pad_t;")
 w("typedef struct { int16_t x, y; uint8_t t, c; } co_sky_t;   /* t: 0 spore, 1 jelly, 2 ring */")
 w("typedef struct { int16_t x, vx, vy; } co_step_t;   /* a booster at the foot of a big step: where, and its throw */")
 w("typedef struct { int16_t x; uint8_t t, c; uint16_t n; } co_prop_t;   /* t: 0 pal (n: size*256), 1 crystal (n), 2 gate, 3 lamp, 4 sign (n: which) */")
 w("typedef struct { int16_t a, b, lv; uint8_t c; } co_pool_t;   /* lv in 1/16 px */")
-for sfx, c in (("S", SHORT), ("L", LONG)):
+for sfx, c in (("S", SHORT), ("R", RACE)):
     ht = c["ht"]
     w(f"static const int16_t CO_HT_{sfx}[{len(ht)}] = {{   /* the land's height at every pixel, in 1/16 px */")
     for k in range(0, len(ht), 16):
@@ -234,37 +232,22 @@ for sfx, c in (("S", SHORT), ("L", LONG)):
     for o in c["pools"]:
         w(f"    {{{round(o[0])},{round(o[1])},{round(o[2] * 16)},{o[3]}}},")
     w("};")
-c = LONG
-w(f"#define CO_NRPAD {len(c['rpads'])}")
-w("static const co_pad_t CO_RPAD[CO_NRPAD] = {   /* the race back (the long course): far is to the left */")
-for p in c["rpads"]:
-    w(f"    {{{round(p[0])},{round(p[1])}}},")
-w("};")
-w(f"#define CO_NRSKY {len(c['rsky'])}")
-w("static const co_sky_t CO_RSKY[CO_NRSKY] = {")
-for o in c["rsky"]:
-    w(f"    {{{round(o[1])},{round(o[2])},{o[0]},{o[3]}}},")
-w("};")
-w(f"#define CO_NSTEP {len(c['steps'])}")
-w("static const co_step_t CO_STEP[CO_NSTEP] = {")
-for o in c["steps"]:
-    w(f"    {{{round(o[0])},{round(o[1])},{round(o[2])}}},")
-w("};")
-w(f"#define CO_MAXPAD {max(len(SHORT['pads']), len(LONG['pads']), len(LONG['rpads']))}")
-w(f"#define CO_MAXSKY {max(len(SHORT['sky']), len(LONG['sky']), len(LONG['rsky']))}")
+w(f"#define CO_MAXPAD {max(len(SHORT['pads']), len(RACE['pads']))}")
+w(f"#define CO_MAXSKY {max(len(SHORT['sky']), len(RACE['sky']))}")
 w("typedef struct {")
 w("    int32_t l, xe, xstop, hn, yend_q4;")
 w("    const int16_t *ht;")
 w("    const co_shroom_t *shroom; const co_pad_t *pad; const co_sky_t *sky; const co_prop_t *prop; const co_pool_t *pool;")
 w("    int32_t nshroom, npad, nsky, nprop, npool;")
 w("} course_t;")
-for sfx, name, c in (("S", "CO_SHORT", SHORT), ("L", "CO_LONG", LONG)):
+for sfx, name, c in (("S", "CO_SHORT", SHORT), ("R", "CO_RACE", RACE)):
     w(f"static const course_t {name} = {{ {c['L']}, {c['XE']}, {c['XSTOP']}, {len(c['ht'])}, {c['yend']}, CO_HT_{sfx},")
     w(f"    CO_SHROOM_{sfx}, CO_PAD_{sfx}, CO_SKY_{sfx}, CO_PROP_{sfx}, CO_POOL_{sfx},")
     w(f"    {len(c['shrooms'])}, {len(c['pads'])}, {len(c['sky'])}, {len(c['props'])}, {len(c['pools'])} }};")
 
 dst = Path(__file__).resolve().parent.parent / "firmware" / "gen" / "arcave_course.h"
 dst.write_text("\n".join(out) + "\n")
-for name, c in (("short", SHORT), ("long", LONG)):
+for name, c in (("short", SHORT), ("race", RACE)):
     print(f"{name}: land {len(c['ht'])} px, {len(c['shrooms'])} mushrooms, {len(c['pads'])} pads, {len(c['sky'])} sky, {len(c['props'])} props, "
-          f"{len(c['pools'])} pools; back: {len(c['rpads'])} pads, {len(c['rsky'])} sky, {len(c['steps'])} steps")
+          f"{len(c['pools'])} pools")
+print(f"race: the opening area {RACE['d']:.0f} px lower; land {min(RACE['ht']) / 16:.0f}..{max(RACE['ht']) / 16:.0f}")

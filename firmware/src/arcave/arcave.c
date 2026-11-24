@@ -239,6 +239,9 @@ static void arcave_init(void)
 #ifdef AC_TEST_TSIZE                             /* (tests) the text size: 0 small, 1 medium, 2 large */
     tsize = AC_TEST_TSIZE;
 #endif
+#ifdef AC_TEST_BIG                               /* (tests) as on the browser emulator's BIG SCREEN: the text a size smaller */
+    tsize_down = 1;
+#endif
 #ifdef AC_TEST_STORY                             /* (tests) start further on in the story */
     story = AC_TEST_STORY;
     if (story >= 4u) { take_n = 3; take_ev[0][0] = 0; take_ev[0][1] = 5; take_ev[1][0] = 8; take_ev[1][1] = 12; take_ev[2][0] = 20; take_ev[2][1] = 9; }

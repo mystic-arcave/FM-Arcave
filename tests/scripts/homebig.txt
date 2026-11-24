@@ -1,0 +1,15 @@
+# the first visit to a machine (NIGHT BLOOM): its start card in colour, the game's own flower in the middle; HOME in a
+# box, the key pressing itself, and no HOME line at the foot while it is up; a knob touched sets it aside for three
+# seconds; HOME opens how it is played, HOME again closes it: the box is gone and the HOME line is back (and saved)
+300 shot
+800 shot
+2000 shot
+9000 shot
+9500 enc 2 1
+10000 shot
+13800 shot
+14000 btn 8
+14700 shot
+15500 btn 8
+16200 shot
+16500 end

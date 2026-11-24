@@ -1,0 +1,6 @@
+# as on the browser emulator's BIG SCREEN (BIG=1): the text one size smaller than the setting (medium shown as small):
+# JUICE WORKS' card, the HOME box, the lesson
+300 shot
+2000 btn 8
+2600 shot
+3000 end

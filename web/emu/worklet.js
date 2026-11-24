@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // FM-ARCAVE's emulator, the audio side: the WebAssembly FM-1 runs here, clocked by the sound the browser asks for.
-// It gets { type: "load", wasm, store } and answers "ready"; then "buttons", "keys", "enc", "midi" come in and
+// It gets { type: "load", wasm, store, big } and answers "ready"; then "buttons", "keys", "enc", "midi", "big" (BIG
+// SCREEN on or off: the text a size smaller) come in and
 // "frame" (the screen when it changed, the lights, MIDI out, the settings when they were saved) goes out, and "midi"
 // (MIDI out between two frames, so a link to another FM-1 is not held up by the picture).
 class FmArcave extends AudioWorkletProcessor {
@@ -20,6 +21,7 @@ class FmArcave extends AudioWorkletProcessor {
           ex.web_store_set(m.store.length);
         }
         ex.web_boot();
+        ex.web_big(m.big ? 1 : 0);
         this.gen = ex.web_store_gen(); this.draws = -1;   // (started again from another save: the whole picture)
         this.ex = ex;
         this.port.postMessage({ type: "ready" });
@@ -33,6 +35,7 @@ class FmArcave extends AudioWorkletProcessor {
     else if (m.type === "enc") ex.web_enc(m.id, m.n);
     else if (m.type === "midi") ex.web_midi(m.st, m.d1, m.d2);
     else if (m.type === "hidden") this.hidden = m.on;
+    else if (m.type === "big") ex.web_big(m.on ? 1 : 0);
     else if (m.type === "save") ex.web_save_now();             // (the next frame carries it)
   }
   process(_in, out) {

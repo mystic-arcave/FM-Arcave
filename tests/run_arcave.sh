@@ -20,6 +20,7 @@ D=; [ -n "$2" ] && D="-DAC_TEST_STORY=$2"
 [ -n "$DONE" ] && D="$D -DAC_TEST_DONE=$DONE"   # DONE=bits: machines a round has been finished on (1 CRYSTAL ROAD, 2 JUICE WORKS, 4 NIGHT BLOOM)
 [ -n "$WEAR" ] && D="$D -DAC_TEST_WEAR=$WEAR"   # WEAR=n: everything owned and a set of it on, trail n (1-6)
 [ -n "$BT" ] && D="$D -DAC_TEST_BT=1"           # BT=1: a pretend radio, so the settings show BLUETOOTH
+[ -n "$BIG" ] && D="$D -DAC_TEST_BIG=1"         # BIG=1: as on the emulator's BIG SCREEN (the text a size smaller)
 cc -O2 -Wall -Wno-unused-function -Wno-unused-variable -Wno-unused-const-variable -Wno-empty-body -DDINGHY_HOST \
    '-Dsection(x)=' -DAPP_VER='"dev"' $D -Ifirmware/hal -Ifirmware/src -Ifirmware/gen -o "build/host/$N" firmware/src/fm_arcave.c
 rm -f build/host/"$N"-*.ppm

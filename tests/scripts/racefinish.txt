@@ -1,0 +1,803 @@
+# the race back, its end: down the last slope into the opening area, over the finish; the congratulations close in,
+# cover the screen (the opening course swapped in under them), open on Rock at the start; then a roll back right:
+# the opening course, the short way down to the Arcave
+500 enc 2 -6
+520 keys 0x2000
+590 keys 0
+650 enc 2 -6
+800 enc 2 -6
+950 enc 2 -6
+970 keys 0x2000
+1040 keys 0
+1100 enc 2 -6
+1250 enc 2 -6
+1400 enc 2 -6
+1420 keys 0x2000
+1490 keys 0
+1550 enc 2 -6
+1700 enc 2 -6
+1850 enc 2 -6
+1870 keys 0x2000
+1940 keys 0
+2000 enc 2 -6
+2150 enc 2 -6
+2300 enc 2 -6
+2320 keys 0x2000
+2390 keys 0
+2450 enc 2 -6
+2600 enc 2 -6
+2750 enc 2 -6
+2770 keys 0x2000
+2840 keys 0
+2900 enc 2 -6
+3050 enc 2 -6
+3200 enc 2 -6
+3220 keys 0x2000
+3290 keys 0
+3350 enc 2 -6
+3500 enc 2 -6
+3650 enc 2 -6
+3670 keys 0x2000
+3740 keys 0
+3800 enc 2 -6
+3950 enc 2 -6
+4100 enc 2 -6
+4120 keys 0x2000
+4190 keys 0
+4250 enc 2 -6
+4400 enc 2 -6
+4550 enc 2 -6
+4570 keys 0x2000
+4640 keys 0
+4700 enc 2 -6
+4850 enc 2 -6
+5000 enc 2 -6
+5020 keys 0x2000
+5090 keys 0
+5150 enc 2 -6
+5300 enc 2 -6
+5450 enc 2 -6
+5470 keys 0x2000
+5540 keys 0
+5600 enc 2 -6
+5750 enc 2 -6
+5900 enc 2 -6
+5920 keys 0x2000
+5990 keys 0
+6050 enc 2 -6
+6200 enc 2 -6
+6350 enc 2 -6
+6370 keys 0x2000
+6440 keys 0
+6500 enc 2 -6
+6650 enc 2 -6
+6800 enc 2 -6
+6820 keys 0x2000
+6890 keys 0
+6950 enc 2 -6
+7100 enc 2 -6
+7250 enc 2 -6
+7270 keys 0x2000
+7340 keys 0
+7400 enc 2 -6
+7550 enc 2 -6
+7700 enc 2 -6
+7720 keys 0x2000
+7790 keys 0
+7850 enc 2 -6
+8000 enc 2 -6
+8150 enc 2 -6
+8170 keys 0x2000
+8240 keys 0
+8300 enc 2 -6
+8450 enc 2 -6
+8600 enc 2 -6
+8620 keys 0x2000
+8690 keys 0
+8750 enc 2 -6
+8900 enc 2 -6
+9050 enc 2 -6
+9070 keys 0x2000
+9140 keys 0
+9200 enc 2 -6
+9350 enc 2 -6
+9500 enc 2 -6
+9520 keys 0x2000
+9590 keys 0
+9650 enc 2 -6
+9800 enc 2 -6
+9950 enc 2 -6
+9970 keys 0x2000
+10040 keys 0
+10100 enc 2 -6
+10250 enc 2 -6
+10400 enc 2 -6
+10420 keys 0x2000
+10490 keys 0
+10550 enc 2 -6
+10700 enc 2 -6
+10850 enc 2 -6
+10870 keys 0x2000
+10940 keys 0
+11000 enc 2 -6
+11150 enc 2 -6
+11300 enc 2 -6
+11320 keys 0x2000
+11390 keys 0
+11450 enc 2 -6
+11600 enc 2 -6
+11750 enc 2 -6
+11770 keys 0x2000
+11840 keys 0
+11900 enc 2 -6
+12050 enc 2 -6
+12200 enc 2 -6
+12220 keys 0x2000
+12290 keys 0
+12350 enc 2 -6
+12500 enc 2 -6
+12650 enc 2 -6
+12670 keys 0x2000
+12740 keys 0
+12800 enc 2 -6
+12950 enc 2 -6
+13100 enc 2 -6
+13120 keys 0x2000
+13190 keys 0
+13250 enc 2 -6
+13400 enc 2 -6
+13550 enc 2 -6
+13570 keys 0x2000
+13640 keys 0
+13700 enc 2 -6
+13850 enc 2 -6
+14000 enc 2 -6
+14020 keys 0x2000
+14090 keys 0
+14150 enc 2 -6
+14300 enc 2 -6
+14450 enc 2 -6
+14470 keys 0x2000
+14540 keys 0
+14600 enc 2 -6
+14750 enc 2 -6
+14900 enc 2 -6
+14920 keys 0x2000
+14990 keys 0
+15050 enc 2 -6
+15200 enc 2 -6
+15350 enc 2 -6
+15370 keys 0x2000
+15440 keys 0
+15500 enc 2 -6
+15650 enc 2 -6
+15800 enc 2 -6
+15820 keys 0x2000
+15890 keys 0
+15950 enc 2 -6
+16100 enc 2 -6
+16250 enc 2 -6
+16270 keys 0x2000
+16340 keys 0
+16400 enc 2 -6
+16550 enc 2 -6
+16700 enc 2 -6
+16720 keys 0x2000
+16790 keys 0
+16850 enc 2 -6
+17000 enc 2 -6
+17150 enc 2 -6
+17170 keys 0x2000
+17240 keys 0
+17300 enc 2 -6
+17450 enc 2 -6
+17600 enc 2 -6
+17620 keys 0x2000
+17690 keys 0
+17750 enc 2 -6
+17900 enc 2 -6
+18050 enc 2 -6
+18070 keys 0x2000
+18140 keys 0
+18200 enc 2 -6
+18350 enc 2 -6
+18500 enc 2 -6
+18520 keys 0x2000
+18590 keys 0
+18650 enc 2 -6
+18800 enc 2 -6
+18950 enc 2 -6
+18970 keys 0x2000
+19040 keys 0
+19100 enc 2 -6
+19250 enc 2 -6
+19400 enc 2 -6
+19420 keys 0x2000
+19490 keys 0
+19550 enc 2 -6
+19700 enc 2 -6
+19850 enc 2 -6
+19870 keys 0x2000
+19940 keys 0
+20000 enc 2 -6
+20150 enc 2 -6
+20300 enc 2 -6
+20320 keys 0x2000
+20390 keys 0
+20450 enc 2 -6
+20600 enc 2 -6
+20750 enc 2 -6
+20770 keys 0x2000
+20840 keys 0
+20900 enc 2 -6
+21050 enc 2 -6
+21200 enc 2 -6
+21220 keys 0x2000
+21290 keys 0
+21350 enc 2 -6
+21500 enc 2 -6
+21650 enc 2 -6
+21670 keys 0x2000
+21740 keys 0
+21800 enc 2 -6
+21950 enc 2 -6
+22100 enc 2 -6
+22120 keys 0x2000
+22190 keys 0
+22250 enc 2 -6
+22400 enc 2 -6
+22550 enc 2 -6
+22570 keys 0x2000
+22640 keys 0
+22700 enc 2 -6
+22850 enc 2 -6
+23000 enc 2 -6
+23020 keys 0x2000
+23090 keys 0
+23150 enc 2 -6
+23300 enc 2 -6
+23450 enc 2 -6
+23470 keys 0x2000
+23540 keys 0
+23600 enc 2 -6
+23750 enc 2 -6
+23900 enc 2 -6
+23920 keys 0x2000
+23990 keys 0
+24050 enc 2 -6
+24200 enc 2 -6
+24350 enc 2 -6
+24370 keys 0x2000
+24440 keys 0
+24500 enc 2 -6
+24650 enc 2 -6
+24800 enc 2 -6
+24820 keys 0x2000
+24890 keys 0
+24950 enc 2 -6
+25100 enc 2 -6
+25250 enc 2 -6
+25270 keys 0x2000
+25340 keys 0
+25400 enc 2 -6
+25550 enc 2 -6
+25700 enc 2 -6
+25720 keys 0x2000
+25790 keys 0
+25850 enc 2 -6
+26000 enc 2 -6
+26150 enc 2 -6
+26170 keys 0x2000
+26240 keys 0
+26300 enc 2 -6
+26450 enc 2 -6
+26600 enc 2 -6
+26620 keys 0x2000
+26690 keys 0
+26750 enc 2 -6
+26900 enc 2 -6
+27050 enc 2 -6
+27070 keys 0x2000
+27140 keys 0
+27200 enc 2 -6
+27350 enc 2 -6
+27500 enc 2 -6
+27520 keys 0x2000
+27590 keys 0
+27650 enc 2 -6
+27800 enc 2 -6
+27950 enc 2 -6
+27970 keys 0x2000
+28040 keys 0
+28100 enc 2 -6
+28250 enc 2 -6
+28400 enc 2 -6
+28420 keys 0x2000
+28490 keys 0
+28550 enc 2 -6
+28700 enc 2 -6
+28850 enc 2 -6
+28870 keys 0x2000
+28940 keys 0
+29000 enc 2 -6
+29150 enc 2 -6
+29300 enc 2 -6
+29320 keys 0x2000
+29390 keys 0
+29450 enc 2 -6
+29600 enc 2 -6
+29750 enc 2 -6
+29770 keys 0x2000
+29840 keys 0
+29900 enc 2 -6
+30050 enc 2 -6
+30200 enc 2 -6
+30220 keys 0x2000
+30290 keys 0
+30350 enc 2 -6
+30500 enc 2 -6
+30650 enc 2 -6
+30670 keys 0x2000
+30740 keys 0
+30800 enc 2 -6
+30950 enc 2 -6
+31100 enc 2 -6
+31120 keys 0x2000
+31190 keys 0
+31250 enc 2 -6
+31400 enc 2 -6
+31550 enc 2 -6
+31570 keys 0x2000
+31640 keys 0
+31700 enc 2 -6
+31850 enc 2 -6
+32000 enc 2 -6
+32020 keys 0x2000
+32090 keys 0
+32150 enc 2 -6
+32300 enc 2 -6
+32450 enc 2 -6
+32470 keys 0x2000
+32540 keys 0
+32600 enc 2 -6
+32750 enc 2 -6
+32900 enc 2 -6
+32920 keys 0x2000
+32990 keys 0
+33050 enc 2 -6
+33200 enc 2 -6
+33350 enc 2 -6
+33370 keys 0x2000
+33440 keys 0
+33500 enc 2 -6
+33650 enc 2 -6
+33800 enc 2 -6
+33820 keys 0x2000
+33890 keys 0
+33950 enc 2 -6
+34100 enc 2 -6
+34250 enc 2 -6
+34270 keys 0x2000
+34340 keys 0
+34400 enc 2 -6
+34550 enc 2 -6
+34700 enc 2 -6
+34720 keys 0x2000
+34790 keys 0
+34850 enc 2 -6
+35000 enc 2 -6
+35150 enc 2 -6
+35170 keys 0x2000
+35240 keys 0
+35300 enc 2 -6
+35450 enc 2 -6
+35600 enc 2 -6
+35620 keys 0x2000
+35690 keys 0
+35750 enc 2 -6
+35900 enc 2 -6
+36050 enc 2 -6
+36070 keys 0x2000
+36140 keys 0
+36200 enc 2 -6
+36350 enc 2 -6
+36500 enc 2 -6
+36520 keys 0x2000
+36590 keys 0
+36650 enc 2 -6
+36800 enc 2 -6
+36950 enc 2 -6
+36970 keys 0x2000
+37040 keys 0
+37100 enc 2 -6
+37250 enc 2 -6
+37400 enc 2 -6
+37420 keys 0x2000
+37490 keys 0
+37550 enc 2 -6
+37700 enc 2 -6
+37850 enc 2 -6
+37870 keys 0x2000
+37940 keys 0
+38000 enc 2 -6
+38150 enc 2 -6
+38300 enc 2 -6
+38320 keys 0x2000
+38390 keys 0
+38450 enc 2 -6
+38600 enc 2 -6
+38750 enc 2 -6
+38770 keys 0x2000
+38840 keys 0
+38900 enc 2 -6
+39050 enc 2 -6
+39200 enc 2 -6
+39220 keys 0x2000
+39290 keys 0
+39350 enc 2 -6
+39500 enc 2 -6
+39650 enc 2 -6
+39670 keys 0x2000
+39740 keys 0
+39800 enc 2 -6
+39950 enc 2 -6
+40100 enc 2 -6
+40120 keys 0x2000
+40190 keys 0
+40250 enc 2 -6
+40400 enc 2 -6
+40550 enc 2 -6
+40570 keys 0x2000
+40640 keys 0
+40700 enc 2 -6
+40850 enc 2 -6
+41000 enc 2 -6
+41020 keys 0x2000
+41090 keys 0
+41150 enc 2 -6
+41300 enc 2 -6
+41450 enc 2 -6
+41470 keys 0x2000
+41540 keys 0
+41600 enc 2 -6
+41750 enc 2 -6
+41900 enc 2 -6
+41920 keys 0x2000
+41990 keys 0
+42050 enc 2 -6
+42200 enc 2 -6
+42350 enc 2 -6
+42370 keys 0x2000
+42440 keys 0
+42500 enc 2 -6
+42650 enc 2 -6
+42800 enc 2 -6
+42820 keys 0x2000
+42890 keys 0
+42950 enc 2 -6
+43100 enc 2 -6
+43250 enc 2 -6
+43270 keys 0x2000
+43340 keys 0
+43400 enc 2 -6
+43550 enc 2 -6
+43700 enc 2 -6
+43720 keys 0x2000
+43790 keys 0
+43850 enc 2 -6
+44000 enc 2 -6
+44150 enc 2 -6
+44170 keys 0x2000
+44240 keys 0
+44300 enc 2 -6
+44450 enc 2 -6
+44600 enc 2 -6
+44620 keys 0x2000
+44690 keys 0
+44750 enc 2 -6
+44900 enc 2 -6
+45050 enc 2 -6
+45070 keys 0x2000
+45140 keys 0
+45200 enc 2 -6
+45350 enc 2 -6
+45500 enc 2 -6
+45520 keys 0x2000
+45590 keys 0
+45650 enc 2 -6
+45800 enc 2 -6
+45950 enc 2 -6
+45970 keys 0x2000
+46040 keys 0
+46100 enc 2 -6
+46250 enc 2 -6
+46400 enc 2 -6
+46420 keys 0x2000
+46490 keys 0
+46550 enc 2 -6
+46700 enc 2 -6
+46850 enc 2 -6
+46870 keys 0x2000
+46940 keys 0
+47000 enc 2 -6
+47150 enc 2 -6
+47300 enc 2 -6
+47320 keys 0x2000
+47390 keys 0
+47450 enc 2 -6
+47600 enc 2 -6
+47750 enc 2 -6
+47770 keys 0x2000
+47840 keys 0
+47900 enc 2 -6
+48050 enc 2 -6
+48200 enc 2 -6
+48220 keys 0x2000
+48290 keys 0
+48350 enc 2 -6
+48500 enc 2 -6
+48650 enc 2 -6
+48670 keys 0x2000
+48740 keys 0
+48800 enc 2 -6
+48950 enc 2 -6
+49100 enc 2 -6
+49120 keys 0x2000
+49190 keys 0
+49250 enc 2 -6
+49400 enc 2 -6
+49550 enc 2 -6
+49570 keys 0x2000
+49640 keys 0
+49700 enc 2 -6
+49850 enc 2 -6
+50000 enc 2 -6
+50020 keys 0x2000
+50090 keys 0
+50150 enc 2 -6
+50300 enc 2 -6
+50450 enc 2 -6
+50470 keys 0x2000
+50540 keys 0
+50600 enc 2 -6
+50750 enc 2 -6
+50900 enc 2 -6
+50920 keys 0x2000
+50990 keys 0
+51050 enc 2 -6
+51200 enc 2 -6
+51350 enc 2 -6
+51370 keys 0x2000
+51440 keys 0
+51500 enc 2 -6
+51650 enc 2 -6
+51800 enc 2 -6
+51820 keys 0x2000
+51890 keys 0
+51950 enc 2 -6
+52100 enc 2 -6
+52250 enc 2 -6
+52270 keys 0x2000
+52340 keys 0
+52400 enc 2 -6
+52550 enc 2 -6
+52700 enc 2 -6
+52720 keys 0x2000
+52790 keys 0
+52850 enc 2 -6
+53000 enc 2 -6
+53150 enc 2 -6
+53170 keys 0x2000
+53240 keys 0
+53300 enc 2 -6
+53450 enc 2 -6
+53600 enc 2 -6
+53620 keys 0x2000
+53690 keys 0
+53750 enc 2 -6
+53900 enc 2 -6
+54050 enc 2 -6
+54070 keys 0x2000
+54140 keys 0
+54200 enc 2 -6
+54350 enc 2 -6
+54500 enc 2 -6
+54520 keys 0x2000
+54590 keys 0
+54650 enc 2 -6
+54800 enc 2 -6
+54950 enc 2 -6
+54970 keys 0x2000
+55040 keys 0
+55100 enc 2 -6
+55250 enc 2 -6
+55400 enc 2 -6
+55420 keys 0x2000
+55490 keys 0
+55550 enc 2 -6
+55700 enc 2 -6
+55850 enc 2 -6
+55870 keys 0x2000
+55940 keys 0
+56000 enc 2 -6
+56150 enc 2 -6
+56300 enc 2 -6
+56320 keys 0x2000
+56390 keys 0
+56450 enc 2 -6
+56600 enc 2 -6
+56750 enc 2 -6
+56770 keys 0x2000
+56840 keys 0
+56900 enc 2 -6
+57050 enc 2 -6
+57200 enc 2 -6
+57220 keys 0x2000
+57290 keys 0
+57350 enc 2 -6
+57500 enc 2 -6
+57650 enc 2 -6
+57670 keys 0x2000
+57740 keys 0
+57800 enc 2 -6
+57950 enc 2 -6
+58100 enc 2 -6
+58120 keys 0x2000
+58190 keys 0
+58250 enc 2 -6
+58400 enc 2 -6
+58550 enc 2 -6
+58570 keys 0x2000
+58640 keys 0
+58700 enc 2 -6
+58850 enc 2 -6
+59000 enc 2 -6
+59020 keys 0x2000
+59090 keys 0
+59150 enc 2 -6
+59300 enc 2 -6
+59450 enc 2 -6
+59470 keys 0x2000
+59540 keys 0
+59600 enc 2 -6
+59750 enc 2 -6
+59900 enc 2 -6
+59920 keys 0x2000
+59990 keys 0
+60050 enc 2 -6
+60200 enc 2 -6
+60350 enc 2 -6
+60370 keys 0x2000
+60440 keys 0
+60500 enc 2 -6
+60650 enc 2 -6
+60800 enc 2 -6
+60820 keys 0x2000
+60890 keys 0
+60950 enc 2 -6
+61100 enc 2 -6
+61250 enc 2 -6
+61270 keys 0x2000
+61340 keys 0
+61400 enc 2 -6
+61550 enc 2 -6
+61700 enc 2 -6
+61720 keys 0x2000
+61790 keys 0
+61850 enc 2 -6
+62000 enc 2 -6
+62000 shot
+62150 enc 2 -6
+62170 keys 0x2000
+62240 keys 0
+62250 shot
+62300 enc 2 -6
+62450 enc 2 -6
+62500 shot
+62600 enc 2 -6
+62620 keys 0x2000
+62690 keys 0
+62750 enc 2 -6
+62750 shot
+62900 enc 2 -6
+63000 shot
+63050 enc 2 -6
+63070 keys 0x2000
+63140 keys 0
+63200 enc 2 -6
+63250 shot
+63350 enc 2 -6
+63500 enc 2 -6
+63500 shot
+63520 keys 0x2000
+63590 keys 0
+63650 enc 2 -6
+63750 shot
+63800 enc 2 -6
+63950 enc 2 -6
+63970 keys 0x2000
+64000 shot
+64250 shot
+64500 shot
+64750 shot
+65000 shot
+65250 shot
+65500 shot
+65750 shot
+66000 shot
+66250 shot
+66500 shot
+66750 shot
+67000 shot
+67250 shot
+67500 shot
+67750 shot
+68000 shot
+68250 shot
+68500 shot
+68750 shot
+69000 shot
+69250 shot
+69500 shot
+69750 shot
+70000 shot
+70250 shot
+70500 shot
+70750 shot
+71000 shot
+71250 shot
+71500 shot
+71750 shot
+72000 shot
+73000 enc 2 6
+73150 enc 2 6
+73300 enc 2 6
+73450 enc 2 6
+73600 enc 2 6
+73750 enc 2 6
+73900 enc 2 6
+74000 shot
+74050 enc 2 6
+74200 enc 2 6
+74350 enc 2 6
+74500 enc 2 6
+74650 enc 2 6
+74800 enc 2 6
+74950 enc 2 6
+75100 enc 2 6
+75250 enc 2 6
+75400 enc 2 6
+75550 enc 2 6
+75700 enc 2 6
+75850 enc 2 6
+76000 enc 2 6
+76000 shot
+76150 enc 2 6
+76300 enc 2 6
+76450 enc 2 6
+76600 enc 2 6
+76750 enc 2 6
+76900 enc 2 6
+77050 enc 2 6
+77200 enc 2 6
+77350 enc 2 6
+77500 enc 2 6
+77650 enc 2 6
+77800 enc 2 6
+77950 enc 2 6
+78000 shot
+78100 enc 2 6
+78250 enc 2 6
+78400 enc 2 6
+78550 enc 2 6
+78700 enc 2 6
+78850 enc 2 6
+79000 enc 2 6
+79150 enc 2 6
+79300 enc 2 6
+79450 enc 2 6
+79600 enc 2 6
+79750 enc 2 6
+79900 enc 2 6
+80000 shot
+81000 end

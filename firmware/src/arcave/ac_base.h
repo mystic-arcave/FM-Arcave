@@ -357,10 +357,15 @@ static int32_t gtext_wrap(int32_t x, int32_t y, int32_t w, const char *s, col_t 
  * The game asks for text by kind (1 small print, 2 what is said, 3 names) and gets a scale; where a line must
  * stay one line it is shrunk until it fits, and a block is wrapped and measured, so every size lays out. */
 static uint8_t tsize = 1;
+/* the screen shown large (the browser emulator's BIG SCREEN): the text one size smaller than the setting says (small
+ * stays small). The setting itself is unchanged: the settings show it, the save keeps it, and leaving BIG SCREEN gives
+ * it back. Text is laid out with tsz(), never tsize */
+static uint8_t tsize_down;
+static uint32_t tsz(void) { return tsize > tsize_down ? (uint32_t)(tsize - tsize_down) : 0u; }
 static int32_t ts(int32_t kind, int32_t cap)
 {
     static const uint8_t M[3][3] = {{1, 2, 3}, {2, 3, 4}, {3, 4, 4}};
-    int32_t a = M[tsize % 3u][iclamp(kind, 1, 3) - 1];
+    int32_t a = M[tsz() % 3u][iclamp(kind, 1, 3) - 1];
     return cap && a > cap ? cap : a;
 }
 #define TLH(a) ((a) * 8)                         /* a line's height at scale a: accents, capitals, a gap */

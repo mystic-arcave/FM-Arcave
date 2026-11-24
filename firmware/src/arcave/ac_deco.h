@@ -177,8 +177,15 @@ static void deco_hat(const rk_t *k0, int kind, col_t line, uint32_t tm)   /* lin
 /* round his eyes (they are at (-34, -10) and (34, -10), about 23 wide) */
 static void deco_face(const rk_t *k, int kind, col_t ink, col_t line)   /* ink: his eyes' colour */
 {
-    static const int16_t TACHE[10] = {-48, 40, -26, 26, 0, 34, 26, 26, 48, 40};
+    /* MOUSTACHE: the left half, bushy (the lower edge in tufts, the end drooping); the right is the same mirrored */
+    static const int16_t TACHE[24] = {0, 20, -30, 12, -56, 16, -74, 28, -86, 46, -70, 46, -60, 56, -48, 48, -36, 57, -24, 49,
+                                      -12, 55, 0, 46};
     static const int16_t SH_L[8] = {-66, -30, -6, -30, -12, 8, -58, 8}, SH_R[8] = {6, -30, 66, -30, 58, 8, 12, 8};
+    /* SUNGLASSES: a round lens over each eye, a sunset in it (plum, pink, orange: the two lower bands are the lens cut
+     * across), in a white frame. The left lens; the right is the same moved 68 along */
+    static const int16_t SUN[24] = {-62, -18, -58, -30, -48, -38, -34, -40, -20, -38, -10, -30, -6, -18, -8, -4, -18, 8, -34, 12,
+                                    -50, 8, -60, -4};
+    static const int16_t SUN_MID[12] = {-7, -14, -8, -4, -11, 0, -57, 0, -60, -4, -61, -14}, SUN_LOW[10] = {-11, 0, -18, 8, -34, 12, -50, 8, -57, 0};
     uint32_t a0 = ga;
     int32_t x, y, e;
     switch (kind) {
@@ -192,10 +199,23 @@ static void deco_face(const rk_t *k, int kind, col_t ink, col_t line)   /* ink: 
         for (e = -1; e <= 1; e += 2) { rk_pt(k, e * 34, -10, &x, &y); garc(x, y, rk_len(k, 30), rk_len(k, 30), 0, 65536, HEXC(0xffd040), k->z >= 420); }
         rk_line(k, -6, -12, 6, -12, HEXC(0xffd040));
         break;
-    case 4:                                      /* MOUSTACHE (and still no mouth) */
-        rk_path(k, TACHE, 5, HEXC(0x6a3a18)); rk_line(k, -48, 44, -26, 30, HEXC(0x6a3a18)); rk_line(k, 48, 44, 26, 30, HEXC(0x6a3a18));
-        if (line) { rk_line(k, -26, 22, 0, 30, line); rk_line(k, 0, 30, 26, 22, line); }
+    case 4: {                                    /* MOUSTACHE: big and bushy, and no mouth under it */
+        int16_t p[24];
+        int32_t j;
+        for (e = -1; e <= 1; e += 2) {
+            for (j = 0; j < 12; j++) { p[2 * j] = (int16_t)(TACHE[2 * j] * e); p[2 * j + 1] = TACHE[2 * j + 1]; }
+            rk_poly(k, p, 12, HEXC(0x6a3a18), 0);   /* no outline: drawn round, it read as a mouth */
+            rk_disc(k, e * -16, 24, 11, HEXC(0x6a3a18));   /* tufts along the top, to make it bushy */
+            rk_disc(k, e * -40, 22, 12, HEXC(0x6a3a18));
+            rk_disc(k, e * -64, 30, 11, HEXC(0x6a3a18));
+            rk_line(k, e * -10, 20, e * -14, 34, HEXC(0x9a6234));   /* a few lighter hairs, fanning out */
+            rk_line(k, e * -34, 16, e * -42, 32, HEXC(0x9a6234));
+            rk_line(k, e * -58, 24, e * -70, 38, HEXC(0x9a6234));
+            rk_line(k, e * -24, 36, e * -30, 48, HEXC(0x4a2610));   /* and darker ones lower down */
+            rk_line(k, e * -50, 38, e * -58, 50, HEXC(0x4a2610));
+        }
         break;
+    }
     case 5:                                      /* MONOCLE */
         rk_pt(k, 34, -10, &x, &y); garc(x, y, rk_len(k, 32), rk_len(k, 32), 0, 65536, HEXC(0xffd040), k->z >= 420);
         rk_line(k, 56, 14, 74, 62, HEXC(0xffd040));
@@ -208,6 +228,24 @@ static void deco_face(const rk_t *k, int kind, col_t ink, col_t line)   /* ink: 
         rk_poly(k, SH_L, 4, HEXC(0x0c0c14), line); rk_poly(k, SH_R, 4, HEXC(0x0c0c14), line);
         rk_line(k, -6, -26, 6, -26, line ? line : HEXC(0x0c0c14));
         rk_line(k, -54, -22, -40, -8, HEXC(0xffffff)); rk_line(k, 18, -22, 32, -8, HEXC(0xffffff));
+        break;
+    case 8:                                      /* SUNGLASSES */
+        for (e = 0; e < 2; e++) {
+            int16_t p[26];
+            int32_t j, dx = e * 68;
+            for (j = 0; j < 12; j++) { p[2 * j] = (int16_t)(SUN[2 * j] + dx); p[2 * j + 1] = SUN[2 * j + 1]; }
+            rk_poly(k, p, 12, HEXC(0x3a1458), 0);
+            for (j = 0; j < 6; j++) { p[2 * j] = (int16_t)(SUN_MID[2 * j] + dx); p[2 * j + 1] = SUN_MID[2 * j + 1]; }
+            rk_poly(k, p, 6, HEXC(0xff3c8c), 0);
+            for (j = 0; j < 5; j++) { p[2 * j] = (int16_t)(SUN_LOW[2 * j] + dx); p[2 * j + 1] = SUN_LOW[2 * j + 1]; }
+            rk_poly(k, p, 5, HEXC(0xff9a2a), 0);
+            for (j = 0; j < 12; j++) { p[2 * j] = (int16_t)(SUN[2 * j] + dx); p[2 * j + 1] = SUN[2 * j + 1]; }
+            p[24] = p[0]; p[25] = p[1];
+            rk_path(k, p, 13, HEXC(0xffffff));   /* the frame, closed */
+            rk_line(k, -50 + dx, -30, -40 + dx, -34, HEXC(0xffffff));   /* a glint */
+        }
+        rk_line(k, -6, -24, 6, -24, HEXC(0xffffff));   /* the bridge, and the arms back over his sides */
+        rk_line(k, -62, -20, -84, -26, HEXC(0xffffff)); rk_line(k, 62, -20, 84, -26, HEXC(0xffffff));
         break;
     }
 }

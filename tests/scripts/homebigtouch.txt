@@ -1,0 +1,9 @@
+# the first visit to CRYSTAL ROAD: HOME in a box over the card, no HOME line at the foot; KNOB 1 (the mode) touched
+# sets it aside for three seconds, then it is back; PLAY starts a game (played once: the box is done with on this machine)
+1500 shot
+2000 enc 2 1
+2300 shot
+5600 shot
+6000 btn 12
+6800 shot
+7000 end

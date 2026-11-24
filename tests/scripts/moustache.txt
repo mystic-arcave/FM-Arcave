@@ -1,0 +1,19 @@
+# EDIT: the upgrades, with 600 tickets: the face shelf, four along to MOUSTACHE (tried on at once), PLAY buys it; EDIT
+# closes and Rock rolls in it
+1000 btn 6
+1500 enc 6 1
+1700 enc 6 1
+1900 enc 0 1
+2000 enc 0 1
+2100 enc 0 1
+2200 enc 0 1
+2800 shot
+3500 btn 12
+4200 shot
+6000 shot
+6500 btn 6
+7500 keys 1
+8500 shot
+9000 keys 0
+9500 shot
+10000 end

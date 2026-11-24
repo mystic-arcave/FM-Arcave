@@ -110,7 +110,7 @@ import { BlePorts, bleSay } from "./ble.js";
 document.head.appendChild(Object.assign(document.createElement("style"), { textContent: FM1_CSS }));
 const $ = (id) => document.getElementById(id);
 const SAVE = "fm-arcave-emu-save";
-let node = null, ac = null, gain = null, midi = null, midiOn = false, wasmBytes = null, saveSize = 0;
+let node = null, ac = null, gain = null, midi = null, midiOn = false, wasmBytes = null, saveSize = 0, bigOn = false;
 const send = (m) => { if (node) node.port.postMessage(m); };
 // the panel on the page and (PLAY WITH MY FM-1) a real FM-1's panel: what either holds down is held
 const held = { pb: 0, pk: 0, fb: 0, fk: 0 };
@@ -119,7 +119,7 @@ const fm = mountFm1($("fm"), {
   buttons: (mask) => { held.pb = mask; sendHeld(); },
   keys: (mask) => { held.pk = mask; sendHeld(); },
   enc: (id, n) => send({ type: "enc", id, n }),
-  bigOff: () => { $("big").setAttribute("aria-pressed", false); },
+  bigOff: () => { $("big").setAttribute("aria-pressed", false); bigOn = false; send({ type: "big", on: false }); },
 });
 // COMPUTER KEYS: the computer's two bottom rows of letters are the FM-1's two rows of keys, every button and key says
 // its computer key (panel.js); kept for the next visit. BIG SCREEN: the screen as large as the window
@@ -133,7 +133,8 @@ function setLayout(kc) {
 try { if (localStorage.getItem(LAYOUT) === "computer") setLayout(true); } catch (e) {}
 // (each lets go of the keyboard's focus at once: Space is PLAY, not this button again)
 $("layout").addEventListener("click", (e) => { e.currentTarget.blur(); setLayout($("layout").getAttribute("aria-pressed") !== "true"); });
-$("big").addEventListener("click", (e) => { e.currentTarget.blur(); fm.big(true); $("big").setAttribute("aria-pressed", true); if (!node) start(); });
+// (the text one size smaller on the big screen: the firmware's own setting stays as it is)
+$("big").addEventListener("click", (e) => { e.currentTarget.blur(); fm.big(true); $("big").setAttribute("aria-pressed", true); bigOn = true; send({ type: "big", on: true }); if (!node) start(); });
 addEventListener("keydown", (e) => { if (e.target.closest("button,a,input") && (e.code === "Space" || e.code === "Enter")) return; if (fm.key(e, true)) e.preventDefault(); });
 addEventListener("keyup", (e) => { if (fm.key(e, false)) e.preventDefault(); });
 addEventListener("blur", () => fm.releaseAll());
@@ -178,7 +179,7 @@ async function boot(store, status) {
       node = n;
     }
     node.status = status || ready();
-    node.port.postMessage({ type: "load", wasm: bytes, store }, [bytes]);
+    node.port.postMessage({ type: "load", wasm: bytes, store, big: bigOn }, [bytes]);
   } catch (err) { $("status").textContent = "Could not start: " + err; }
 }
 function onWorklet(n, m) {

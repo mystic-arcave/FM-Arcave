@@ -71,7 +71,7 @@ static void rtutor_draw(void)
 {
     const rdesc_t *d = RD[rt.who];
     const char *s = d->lesson[rt.step].tx[lang] ? d->lesson[rt.step].tx[lang] : d->lesson[rt.step].tx[L_EN];
-    int32_t sc = tsize >= 2 ? 2 : 1, tw = rt.icon ? 172 : 228, h = imax(rt.icon ? 40 : 20, gblock_h(tw, s, sc)) + 14, y = AC_H - h, k;
+    int32_t sc = tsz() >= 2 ? 2 : 1, tw = rt.icon ? 172 : 228, h = imax(rt.icon ? 40 : 20, gblock_h(tw, s, sc)) + 14, y = AC_H - h, k;
     char tag[20] = "HOW TO PLAY  1/8";
     col_t c = ri_col(rt.who);
     gclear(th->bg);

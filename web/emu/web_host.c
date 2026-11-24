@@ -128,6 +128,8 @@ EXPORT void web_buttons(uint32_t mask)
 }
 EXPORT void web_keys(uint32_t mask) { w_note_edges |= mask & ~fm1_in.notes; fm1_in.notes = mask; }
 EXPORT void web_enc(uint32_t e, int32_t n) { w_enc[e & 7u] += n; }
+/* BIG SCREEN on or off: the text one size smaller while it is on (ac_base.h, tsize_down) */
+EXPORT void web_big(uint32_t on) { tsize_down = on ? 1u : 0u; fb_all = 1; }
 EXPORT void web_bt_room(uint32_t n) { w_bt_room = n; }
 EXPORT void web_midi(uint32_t st, uint32_t d1, uint32_t d2)
 {

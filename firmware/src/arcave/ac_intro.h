@@ -4,8 +4,9 @@
  * the land comes from a table (tools/gen_course.py), the physics steps 128 times a second. */
 #include "arcave_course.h"
 
-/* two courses: the opening roll is the short one; out of the Arcave's upper door it is the long one (twice the
- * length, the first build's), raced back. Everything below reads the one in use through these names */
+/* two courses: the opening roll is the short one; out of the Arcave's upper door it is the race, twice as long and
+ * downhill all the way to the left, ending in the opening area (CO_RACE_D px lower). Over the finish the short one comes
+ * back in its place, behind the congratulations. Everything below reads the one in use through these names */
 static const course_t *co = &CO_SHORT;
 #define CO_L (co->l)
 #define CO_XE (co->xe)
@@ -49,24 +50,31 @@ static struct {
     uint8_t pad_used[CO_MAXPAD], sky_used[CO_MAXSKY];
     int16_t sky_sq[CO_MAXSKY];
     int32_t veil;                                /* the rock face that hides the hollow behind the start: 256 solid .. 0 gone */
-    uint8_t race;                                /* the race back: 0 not, 1 out of the door (before the line), 2 on the clock */
-    int32_t race_ms, race_show, step_cd;
+    uint8_t race;                                /* the race back: 0 not, 1 out of the door (before the line), 2 on the clock,
+                                                    3 over the finish: the congratulations, the opening course back behind them */
+    int32_t race_ms, race_show, cheer_t;
     uint8_t oct;                                 /* OCT- and OCT+ breathing three times from "change language": 1 on, 2 done */
     uint8_t tutored;                             /* back from the controls' lesson: the box by the start is a ROLL sign now */
 } G;
-/* the race back: out of the Arcave's upper door, over the start line, to where the game began. The pads and the
- * sky things are the mirrored set (CO_RPAD, CO_RSKY), a booster throws Rock up each of the four big steps, and
- * Rock pushes harder (it is uphill all the way). The best time is kept with the scores. */
+/* the race back: out of the Arcave's upper door, over the start line, downhill to where the game began (the race
+ * course, CO_RACE: its pads face left). Over the finish: the congratulations close in on Rock and cover the screen;
+ * under them the course becomes the opening one (Rock, the camera moved up CO_RACE_D with it: the same place on it), so
+ * rolling back to the Arcave is the short way down it was. The best time is kept with the scores. */
 #define RACE_X0 (CO_L - 96)                      /* where Rock comes out */
 #define RACE_START (CO_L - 196)
 #define RACE_END 74
 static uint32_t race_best_cs, race_last_cs;      /* hundredths of a second; 0: never run */
 static uint8_t race_new, race_save_due;
-#define I_PAD (G.race ? CO_RPAD : CO_PAD)
-#define I_NPAD (G.race ? CO_NRPAD : CO_NPAD)
-#define I_SKY (G.race ? CO_RSKY : CO_SKY)
-#define I_NSKY (G.race ? CO_NRSKY : CO_NSKY)
+#define CH_IN 420                                /* the congratulations: closing in on Rock; covered (the course swapped at
+                                                    CH_IN); opening again on him at CH_OUT, gone at CH_END */
+#define CH_OUT 3200
+#define CH_END 3700
+#define I_PAD CO_PAD
+#define I_NPAD CO_NPAD
+#define I_SKY CO_SKY
+#define I_NSKY CO_NSKY
 #define I_DIR (G.race ? -1 : 1)
+#define RACING (G.race == 1 || G.race == 2)     /* on the race course, rolling (not yet over the finish) */
 static uint32_t in_time;                         /* ms since the intro began: what its little animations run on */
 
 static int32_t land_y(int32_t x)
@@ -90,8 +98,8 @@ static void rock_phys(rock_t *s, int32_t knob, int32_t jump)
 {
     int32_t sl = land_sl(s->x), n = (int32_t)isqrt((uint32_t)(65536 + sl * sl)), tx = 65536 / n, ty = sl * 256 / n, gy;
     if (s->g) {
-        int32_t vt = (s->vx * tx + s->vy * ty) >> 8, push = knob * (G.race ? TQ * 8 / 5 : TQ), lump, fr, a;
-        if ((knob > 0 && vt > 0) || (knob < 0 && vt < 0)) push = (push * imax(0, 256 - iabs(vt) * 256 / (G.race ? Q8(300) : VK))) >> 8;
+        int32_t vt = (s->vx * tx + s->vy * ty) >> 8, push = knob * TQ, lump, fr, a;
+        if ((knob > 0 && vt > 0) || (knob < 0 && vt < 0)) push = (push * imax(0, 256 - iabs(vt) * 256 / VK)) >> 8;
         lump = -513 * (rock_rad(s->th + 209) - rock_rad(s->th - 209));
         fr = -vt / 5 - (iabs(vt) > 512 ? (vt > 0 ? Q8(5) : -Q8(5)) : 0);
         a = push + lump + fr;
@@ -188,7 +196,7 @@ static void intro_race_start(void)               /* out of the Arcave's upper do
 {
     uint32_t i;
     for (i = 0; i < sizeof G; i++) ((uint8_t *)&G)[i] = 0;
-    co = &CO_LONG; G.veil = 256;
+    co = &CO_RACE; G.veil = 256;
     G.phase = IP_PLAY; G.eyes = 256; G.turned = 1; G.race = 1; G.fade = 256; G.c_off = Q8(156);
     G.r.x = Q8(RACE_X0); G.r.y = land_y(G.r.x) - rock_rad(0); G.r.g = 1; G.cam_y = G.r.y - Q8(130);
     G.camz = 256; G.camx = iclamp(G.r.x - G.c_off, Q8(CO_CAMMIN), CAMMAX); G.camy = G.cam_y;
@@ -275,16 +283,16 @@ static int intro_tick(int32_t dt)
         const co_pad_t *pads = I_PAD;
         if (live && G.fade > 0) G.fade = imax(0, G.fade - dt * 256 / 900);   /* (out of the door: in from black) */
         if (live && in.any_knob) G.drag = iclamp(G.drag + in.any_knob * 115, -384, 384);
-        knob = live ? iclamp(G.drag, -256, 256) : 0;
+        knob = live && G.race != 3 ? iclamp(G.drag, -256, 256) : 0;   /* (not while the congratulations are up) */
         if (iabs(knob) > 13) G.turned = 1;
         G.drag -= G.drag * imin(dt, 100) / 250;
-        if (live) jump = in.hop;
+        if (live && G.race != 3) jump = in.hop;
         r->jumped = 0; r->touch = 0; r->thud = 0;
         if (live && d > 0) {
             for (i = 0; i < CO_NPAD; i++)
                 if (Q8(pads[i].x) > r->x - Q8(28) - iabs(r->vx) * 12 / 100) { pad = i; break; }
         } else if (live) {                       /* the race back: the next pad is to the left */
-            for (i = CO_NRPAD - 1; i >= 0; i--)
+            for (i = CO_NPAD - 1; i >= 0; i--)
                 if (Q8(pads[i].x) < r->x + Q8(28) + iabs(r->vx) * 12 / 100) { pad = i; break; }
         }
         if (pad >= 0) ahead = d * (Q8(pads[pad].x) - r->x);
@@ -316,14 +324,6 @@ static int intro_tick(int32_t dt)
             deco_jump_tick(dt, r->g, r->x, r->y);
             if (r->g) deco_trail(r->x, r->y + rock_rad(r->th), r->vx, dt);
         }
-        if (G.step_cd > 0) G.step_cd -= dt;
-        if (live && G.race && G.step_cd <= 0 && (r->g || r->coy > 0) && r->vx < -Q8(20))
-            for (i = 0; i < CO_NSTEP; i++)       /* a booster at the foot of a big step throws Rock up it */
-                if (iabs((r->x >> 8) - CO_STEP[i].x) < 13) {
-                    r->vx = -Q8(CO_STEP[i].vx); r->vy = -Q8(CO_STEP[i].vy); r->g = 0; r->coy = 0; G.step_cd = 1500; G.rocket = 900;
-                    snd_whoosh(); sfx_ex(50, 0, 500, W_SAW, 2600, 3, 200, 0, 0, 65750); intro_burst(r->x, r->y, i, 1, T_WHEEE);
-                    break;
-                }
         if (live) intro_sky_hits(dt);
         if (live && G.race == 1 && r->x < Q8(RACE_START)) {   /* over the line: the clock runs */
             G.race = 2; G.race_ms = 0;
@@ -331,16 +331,38 @@ static int intro_tick(int32_t dt)
         }
         if (live && G.race == 2) {
             G.race_ms += dt;
-            if (r->x < Q8(RACE_END)) {           /* home: the time, and the best one kept */
-                uint32_t k2;
+            if (r->x < Q8(RACE_END)) {           /* home: the time, and the best one kept; the congratulations */
+                int32_t j;
                 race_last_cs = (uint32_t)G.race_ms / 10u; if (!race_last_cs) race_last_cs = 1;
                 race_new = !race_best_cs || race_last_cs < race_best_cs;
                 if (race_new) { race_best_cs = race_last_cs; race_save_due = 1; }
-                G.race = 0; G.race_show = 7000;   /* the course is the game's own again */
+                G.race = 3; G.cheer_t = 0; G.drag = 0;
+#ifdef DINGHY_HOST
+                printf("%6u ms  race back: over the finish in %u.%02u s\n", fm1_ms, race_last_cs / 100u, race_last_cs % 100u);
+#endif
+                snd_jingle();
+                for (j = 0; j < 4; j++) sfx(72 + j * 4 - (j == 3), 200u + (uint32_t)j * 70u, 260, W_SQUARE, 1500, 2, 110);
+                sfx(96, 200, 700, W_NOISE, 2400, 40, 90);
+            }
+        } else if (live && G.race == 3) {        /* over the finish: Rock slows to a stop under the congratulations */
+            int32_t was = G.cheer_t;
+            G.cheer_t += dt;
+            r->vx -= r->vx * imin(dt, 60) / 60;
+            if (was < CH_IN && G.cheer_t >= CH_IN) {   /* covered: the opening course back in the race's place */
+                uint32_t k2;
+                int32_t dy = Q8(CO_RACE_D);
+                co = &CO_SHORT;
+#ifdef DINGHY_HOST
+                printf("%6u ms  race back: the opening course back (Rock at x %d)\n", fm1_ms, (int)(r->x >> 8));
+#endif
+                r->y -= dy; G.cam_y -= dy; G.camy -= dy; G.burst.on = 0; G.ntrail = 0; G.rocket = 0; pfx_clear();
+                if (r->x > Q8(RACE_END)) r->x = Q8(RACE_END);
                 for (k2 = 0; k2 < sizeof G.pad_used; k2++) G.pad_used[k2] = 0;
                 for (k2 = 0; k2 < sizeof G.sky_used; k2++) { G.sky_used[k2] = 0; G.sky_sq[k2] = 0; }
-                snd_jingle(); intro_burst(r->x, r->y, 2, 1, T_FINISH);
             }
+            if (G.cheer_t >= CH_IN && G.cheer_t < CH_OUT && (G.cheer_t / 450) != ((G.cheer_t - dt) / 450))   /* fireworks */
+                sfx(84 + (int32_t)(ihash((uint32_t)G.cheer_t) % 12u), 0, 300, W_TRI, 2200, 3, 90);
+            if (G.cheer_t >= CH_END) { G.race = 0; G.race_show = 5000; }   /* the course is the game's own again */
         }
         if (G.race_show > 0) G.race_show -= dt;
         /* the hollow behind the start is hidden by a rock face until Rock is up on the ledge and rolls into it */
@@ -371,7 +393,7 @@ static int intro_tick(int32_t dt)
         if (G.burst.on) { G.burst.t += dt; if (G.burst.t > 600) G.burst.on = 0; }
         bt = (G.t + (int32_t)(ihash((uint32_t)(G.t / 3700)) * 2000u >> 16)) % 3700;
         G.eyes = bt < 160 ? iabs(bt - 80) * 256 / 80 : 256;
-        G.c_off += (((G.race ? r->vx < Q8(25) : r->vx < -Q8(25)) ? (G.race ? Q8(156) : Q8(150)) : Q8(84)) - G.c_off) * imin(400, dt * 5 / 2) / 400;
+        G.c_off += (((RACING ? r->vx < Q8(25) : r->vx < -Q8(25)) ? (RACING ? Q8(156) : Q8(150)) : Q8(84)) - G.c_off) * imin(400, dt * 5 / 2) / 400;
         G.cam_y += (r->y - Q8(130) - G.cam_y) * imin(200, dt) / 200;
         G.camz = 256; G.camx = iclamp(r->x - G.c_off, Q8(CO_CAMMIN), CAMMAX); G.camy = G.cam_y;
         if (live) {
@@ -386,7 +408,7 @@ static int intro_tick(int32_t dt)
             if (G.t > 1600) { G.phase = IP_DONE; sy_rumble_want = 0; return 1; }
         }
     }
-    if (G.race && G.phase == IP_PLAY) {           /* the race back: a cheer from each crowd as Rock rolls by */
+    if (RACING && G.phase == IP_PLAY) {          /* the race back: a cheer from each crowd as Rock rolls by */
         static int32_t cheered = -1;
         uint32_t ci;
         for (ci = 0; ci < CO_NPROP; ci++) {
@@ -510,6 +532,59 @@ static void intro_draw_title(void)
     gfade(G.fade);
 }
 
+/* over the finish: the congratulations. A curtain closes in on Rock (a hole round him, ringed in the five colours,
+ * growing smaller); then the screen is theirs: rays turning, confetti falling, Rock in the middle hopping for joy in what
+ * he wears, CONGRATULATIONS! and the time; then the curtain opens on him again, on the opening course now (intro_tick
+ * swaps it while nothing of the land can be seen) */
+static void race_cheer_draw(int32_t rx, int32_t ry, uint32_t tm)
+{
+    int32_t t = G.cheer_t, R = 0, y, k;
+    if (t < CH_IN) R = 340 - 340 * ease8(t * 256 / CH_IN) / 256;
+    else if (t >= CH_OUT) R = 340 * ease8(imin(256, (t - CH_OUT) * 256 / (CH_END - CH_OUT))) / 256;
+    if (R > 0) {
+        for (y = 0; y < AC_H; y++) {
+            int32_t d = y - ry, w, a, b;
+            if (iabs(d) >= R) { grect(0, y, AC_W, 1, th->bg); continue; }
+            w = (int32_t)isqrt((uint32_t)(R * R - d * d)); a = iclamp(rx - w, 0, AC_W); b = iclamp(rx + w, 0, AC_W);
+            if (a > 0) grect(0, y, a, 1, th->bg);
+            if (b < AC_W) grect(b, y, AC_W - b, 1, th->bg);
+        }
+        for (k = 0; k < 5; k++) garc(rx, ry, R + 2 + k * 3, R + 2 + k * 3, 0, 65536, th->caps[k], 1);
+        return;
+    }
+    {
+        int32_t al = imin(256, imin((t - CH_IN) * 256 / 200, (CH_OUT - t) * 256 / 250)), hop, cx = 120, cy = 116, i, sc;
+        char b[12];
+        uint8_t eq[4];
+        grect(0, 0, AC_W, AC_H, th->bg);
+        galpha(al * 60 / 256);
+        for (k = 0; k < 12; k++) {               /* the rays, turning */
+            int32_t a = (int32_t)(tm * 9u) + k * 5461, xy[6];
+            xy[0] = cx; xy[1] = cy;
+            xy[2] = cx + ((400 * icos(a)) >> 14); xy[3] = cy + ((400 * isin(a)) >> 14);
+            xy[4] = cx + ((400 * icos(a + 2600)) >> 14); xy[5] = cy + ((400 * isin(a + 2600)) >> 14);
+            gpoly(xy, 3, th->caps[k % 5]);
+        }
+        galpha(al);
+        for (i = 0; i < 40; i++) {               /* confetti, each piece its own speed and sway */
+            uint32_t h = ihash((uint32_t)i * 13u + 5u);
+            int32_t fall = 40 + (int32_t)(h % 70u), x = (int32_t)((h >> 8) % 240u) + ((tsin(tm, 30 + h % 20u, (int32_t)h) * 6) >> 14);
+            int32_t yy = (int32_t)(((uint32_t)(t - CH_IN) * (uint32_t)fall / 1000u + (h >> 16) % 240u) % 260u) - 10;
+            grect(x, yy, (h & 1u) ? 3 : 2, (h & 1u) ? 2 : 3, th->caps[i % 5]);
+        }
+        for (k = 0; k < 4; k++) eq[k] = pf.eq[k];
+        hop = (iabs(tsin(tm, 100, 0)) * 18) >> 14;
+        galpha(al);
+        deco_rock(cx, cy + 14 - hop, 900, tsin(tm, 100, 0) >> 3, (tm % 2200u) < 120u ? 40 : 256, eq, tm);
+        sc = 3;
+        while (sc > 1 && gtextw(TR(T_CONGRATS), sc) > 232) sc--;
+        gtextc(cx, 26 + ((tsin(tm, 60, 0) * 2) >> 14), TR(T_CONGRATS), th->caps[3], sc);
+        race_str(b, race_last_cs);
+        gtextc(cx, 176, b, th->text, 3);
+        if (race_new) gfit(cx, 204, 232, TR(T_NEWBEST), th->pad, ts(2, 3));
+        galpha(256);
+    }
+}
 static void intro_draw(void)
 {
     int32_t z = G.camz, tlx = G.camx >> 8, tly = G.camy >> 8, sx, i, k, x0, x1, ca = 0, prog;
@@ -640,7 +715,7 @@ static void intro_draw(void)
         if (o->x < x0 || o->x > x1) continue;
         px = WX(o->x << 8); py = WY(land_y(o->x << 8));
         near = iabs((r->x >> 8) - o->x) < 70 && G.phase == IP_PLAY;
-        if (o->t == 0 && G.race) {               /* the race back: every rock friend is up, hopping, cheering you on */
+        if (o->t == 0 && RACING) {               /* the race back: every rock friend is up, hopping, cheering you on */
             int32_t s = (int32_t)o->n, hop = (iabs(tsin(tm, 140, o->x * 2900)) * ZS(7)) >> 14;
             rock_draw(px, py - ((66 * s / 10) * z >> 16) - hop, (z * s) >> 8, tsin(tm, 140, o->x * 2900) >> 4, (tm + (uint32_t)o->x * 37u) % 2600u < 120u ? 40 : 256,
                       th->rock, th->rock_rim, th->dark, th->caps[o->c], th->eye, th->pupil);
@@ -648,7 +723,7 @@ static void intro_draw(void)
             int32_t s = (int32_t)o->n, e = near ? (tsin(tm, 30, o->x * 10430) > 15700 ? 26 : 256) : 0;
             rock_draw(px, py - ((66 * s / 10) * z >> 16), (z * s) >> 8, (land_sl(o->x << 8) * 6 / 10 * 10430) >> 8, e,
                       th->rock, th->rock_rim, th->dark, th->caps[o->c], th->eye, th->pupil);
-        } else if (o->t == 4 && G.race) {        /* the race back: where a sign stood going out, a crowd of rock friends
+        } else if (o->t == 4 && RACING) {        /* the race back: where a sign stood going out, a crowd of rock friends
                                                     cheering (the signs' words were for the way in), confetti over them */
             for (k = 0; k < 3; k++) {             /* three friends, hopping out of step, arms waving over their heads */
                 static const int16_t SZ[3] = {300, 360, 280};
@@ -725,17 +800,6 @@ static void intro_draw(void)
         if (x0 < RACE_START + 40 && x1 > RACE_START - 40) race_post(WX(Q8(RACE_START)), WY(land_y(Q8(RACE_START))), TR(T_RACE_START), th->pad);
         if (x0 < RACE_END + 40 && x1 > RACE_END - 40) race_post(WX(Q8(RACE_END)), WY(land_y(Q8(RACE_END))), TR(T_FINISH), th->caps[3]);
     }
-    if (G.race)
-        for (i = 0; i < CO_NSTEP; i++) {         /* the boosters: chevrons running up and to the left */
-            int32_t j;
-            if (CO_STEP[i].x < x0 || CO_STEP[i].x > x1) continue;
-            for (j = 0; j < 3; j++) {
-                int32_t bx = CO_STEP[i].x + 9 - j * 9, by = WY(land_y(Q8(bx))) - 4;
-                galpha(G.step_cd > 0 ? 256 : 90 + ((((int32_t)(tm / 120u) + 3 - j) % 3) == 0 ? 166 : 0));
-                gline2(WX(Q8(bx)) + 3, by - 4, WX(Q8(bx)), by, th->pad); gline2(WX(Q8(bx)), by, WX(Q8(bx)) + 3, by + 3, th->pad);
-            }
-            galpha(256);
-        }
     if ((G.phase == IP_PLAY || G.phase == IP_OUT) && !G.race && G.race_show <= 0 && z == 256 && x0 < CTRL_X + 118 && x1 > CTRL_X - 118) {
       if (G.tutored) {                           /* the lesson seen: a signpost, an arrow pointing on with ROLL on it */
         int32_t a = ts(2, 3), tw = gtextw(TR(T_SIGN_ROLL), a), h = 5 * a + 10, w = tw + 14, px = WX(Q8(CTRL_X)), py = WY(land_y(Q8(CTRL_X)));
@@ -923,6 +987,7 @@ static void intro_draw(void)
             }
         }
     }
+    if (G.race == 3) race_cheer_draw(WX(r->x), WY(r->y), tm);
     gfade(G.fade);
 #undef WX
 #undef WY

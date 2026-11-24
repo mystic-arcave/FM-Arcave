@@ -31,6 +31,7 @@ static const pf_item_t PF_ITEMS[] = {
     {PC_HAT, 8, 180, "HALO"}, {PC_HAT, 9, 250, "WIZARD HAT"}, {PC_HAT, 10, 500, "CROWN"},
     {PC_FACE, 0, 0, "JUST EYES"}, {PC_FACE, 1, 10, "BLUSH"}, {PC_FACE, 2, 20, "BROWS"}, {PC_FACE, 3, 40, "GLASSES"},
     {PC_FACE, 4, 60, "MOUSTACHE"}, {PC_FACE, 5, 90, "MONOCLE"}, {PC_FACE, 6, 110, "EYEPATCH"}, {PC_FACE, 7, 150, "SHADES"},
+    {PC_FACE, 8, 180, "SUNGLASSES"},
     {PC_TRAIL, 0, 0, "NO TRAIL"}, {PC_TRAIL, 1, 15, "DUST"}, {PC_TRAIL, 2, 40, "BUBBLES"}, {PC_TRAIL, 3, 70, "NOTES"},
     {PC_TRAIL, 4, 100, "SPARKLES"}, {PC_TRAIL, 5, 160, "FLAMES"}, {PC_TRAIL, 6, 250, "RAINBOW"},
     {PC_KCOL, 0, 0, "ITS OWN"}, {PC_KCOL, 1, 20, "PINK"}, {PC_KCOL, 2, 20, "ORANGE"}, {PC_KCOL, 3, 20, "PURPLE"},
@@ -53,10 +54,11 @@ static const col_t PF_KCOL[8] = {0, AC_RGB(255, 96, 190), AC_RGB(255, 140, 40), 
 /* ---------------------------------------------------------------- what is kept */
 #define PF_NAME_MAX 12
 enum { PF_NAMED = 1, PF_TOLD_TIX = 2, PF_TOLD_NAME = 4, PF_BT = 8 };
-enum { PF_ONCE_BT = 1 };
+enum { PF_ONCE_BT = 1, PF_ONCE_HOME = 2 };   /* PF_ONCE_HOME << m: machine m's HOME (how it is played) opened */
 typedef struct {
     uint8_t ver, flags, mach_done, once;         /* mach_done: a bit for each machine a round has been finished on; once:
-                                                    PF_ONCE_BT, Bluetooth turned on the first time this firmware ran */
+                                                    PF_ONCE_BT, Bluetooth turned on the first time this firmware ran;
+                                                    PF_ONCE_HOME << m, machine m's HOME read or a game started on it */
     char name[PF_NAME_MAX + 4];
     uint32_t tickets, won;                       /* in the pocket; won since the start */
     uint8_t own[16];                             /* a bit an item: shelf * 16 + kind */
@@ -154,6 +156,10 @@ static void tix_pay(int32_t n, col_t col)
 }
 /* a round on machine `which` is over: the Hat has something to say after the first, and after the second machine */
 static void pf_round_done(int which) { if (!(pf.mach_done >> which & 1u)) { pf.mach_done |= (uint8_t)(1u << which); pf_dirty = 1; } }
+/* machine m is new to the player: nothing finished on it, no game started on it and its HOME never opened (its card
+ * shows HOME in a box); pf_home_read: its HOME opened, or a game started on it */
+static int pf_home_new(int m) { return !(pf.mach_done >> m & 1u) && !(pf.once & (PF_ONCE_HOME << m)); }
+static void pf_home_read(int m) { if (!(pf.once & (PF_ONCE_HOME << m))) { pf.once |= (uint8_t)(PF_ONCE_HOME << m); pf_dirty = 1; } }
 /* what the Hat is waiting to say: 1 the tickets and EDIT, 2 the settings and a name for Rock; 0 nothing */
 static int pf_hat_due(void)
 {

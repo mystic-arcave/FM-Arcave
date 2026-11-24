@@ -6,10 +6,14 @@
  *                     keys, tickets that say what to pour: many things to keep going at once.
  *   NIGHT BLOOM       new here: four knobs turn four petals round a flower, one to a ring, a click a twenty-fourth
  *                     of a turn, as the knob itself. Spores drift in slowly from beyond the screen; catch each on the
- *                     petal of its own colour. An arrow points off the screen to each knob as it joins. */
+ *                     petal of its own colour. An arrow points off the screen to each knob as it joins, and that
+ *                     ring's first spore comes in alone, ringed. Its start card is the garden in full colour.
+ * The first visit to any of them (no game started there, its HOME never opened): HOME in a box over the card. */
 
 enum { MS_TITLE, MS_PLAY, MS_OVER };
-static struct { uint8_t which, state; int32_t t, score, lives, combo, msg_t, flash, ask; uint8_t msg; } mc;   /* ask: REC once in a game, the box up */
+static struct { uint8_t which, state; int32_t t, score, lives, combo, msg_t, flash, ask; uint8_t msg, hb; int32_t hb_t, hb_rest, hb_al; } mc;
+/* ask: REC once in a game, the box up; hb: a machine new to the player (pf_home_new), its HOME shown in a box: hb_t how
+ * long, hb_rest set aside for so long yet, hb_al how much of it shows */
 static uint32_t best[3];
 static uint8_t save_dirty;
 
@@ -63,8 +67,12 @@ static void mach_card(const char *name, col_t c)
 {
     char b[40]; const char *p;
     int32_t y, a = ts(1, 3), used, n = 0;
-    gveil(th->bg, 24);
-    used = gfit(120, 14 + 2 * ts(3, 4), 232, name, c, tsize ? 3 : 2);
+    if (mc.which == 2 && mc.state == MS_TITLE) {   /* (NIGHT BLOOM's start: its garden in colour, a shade behind the words only) */
+        int32_t sh = 14 + 2 * ts(3, 4) + 5 * (tsz() ? 3 : 2) + 4 + 2 * TLH(ts(1, 3)), yy;
+        for (yy = 0; yy < sh + 24; yy++) { galpha(yy < sh ? 150 : 150 * (sh + 24 - yy) / 24); grect(0, yy, AC_W, 1, th->bg); }
+        galpha(256);
+    } else gveil(th->bg, 24);
+    used = gfit(120, 14 + 2 * ts(3, 4), 232, name, c, tsz() ? 3 : 2);
     y = 14 + 2 * ts(3, 4) + 5 * used + 10;
     if (mc.state == MS_OVER) {                   /* how it went */
         y += gblock(4, y, 232, TR(T_GAMEOVER), th->caps[0], ts(2, 3), 1);
@@ -81,7 +89,41 @@ static void mach_card(const char *name, col_t c)
         gfit(120, y + 2 * a, 232, b, th->mute, a);
     }
     y = gfoot(238, TR(T_REC_BACK), th->mute, th->bg, ts(1, 2));   /* at the foot: HOME, and under it REC */
-    gfoot(y - 2, TR(T_HOME_CONTROLS), th->text, th->bg, a);
+    if (!mc.hb) gfoot(y - 2, TR(T_HOME_CONTROLS), th->text, th->bg, a);   /* (not while the HOME box is up) */
+}
+/* The first visit to a machine (no game started on it, its HOME never opened): HOME in the middle of the card, the
+ * button as it is on the panel, pressing itself now and then, and what it is for under it; the HOME line at the foot is
+ * not drawn while it is there. It stays until HOME is opened or a game is started (then the line is back for good);
+ * touching a knob or a key sets it aside for three seconds, so the card can be used under it. */
+#define HB_IN 400
+#define HB_REST 3000
+static void home_big_draw(uint32_t tm)
+{
+    const char *s = TR(T_HOME_CONTROLS), *r = s;
+    int32_t al = mc.hb_al, a = ts(1, 2), u = 3, bw, bh, w = 154, tw = 138, h, th_, x, y, kx, ky, rise, down;
+    if (!mc.hb || al <= 0 || mc.state != MS_TITLE || tix.on) return;
+    rise = (256 - al) * 18 / 256;
+    while (*r && *r != ':') r++;                 /* the words after "HOME:" (every language writes it so) */
+    if (*r) r++; else r = s;
+    while (*r == ' ') r++;
+    while (a > 1 && gblock_h(tw, r, a) > 2 * TLH(a)) a--;
+    bw = gtextw("HOME", u) + 6 * u; bh = 9 * u; th_ = gblock_h(tw, r, a);
+    h = 12 + bh + 8 + th_ + 8;
+    x = 120 - w / 2; y = 120 - h / 2 + rise;
+    galpha(al * 110 / 256); grect(0, 0, AC_W, AC_H, th->bg);   /* the card stays, dimmed under it */
+    galpha(al);
+    grect(x, y, w, h, th->panel);
+    galpha(al * (150 + ipulse(tm, 900) * 106 / 256) / 256);
+    { col_t mcol = th->caps[mc.which ? mc.which * 2 % 5 : 0]; gbox(x, y, w, h, mcol); gbox(x + 1, y + 1, w - 2, h - 2, mcol); }
+    galpha(al);
+    down = (tm % 1400u) < 200u;                  /* the key pressing itself: down, lit */
+    kx = 120 - bw / 2; ky = y + 12 + (down ? 2 : 0) + (tsin(tm, 70, 0) + 16384) * 2 / 32768;
+    if (!down) grect(kx + 2, ky + 2, bw, bh, th->bg);   /* (its shadow, gone as it goes down) */
+    grect(kx, ky, bw, bh, down ? th->pad : th->bg);
+    gbox(kx, ky, bw, bh, th->pad); gbox(kx + 1, ky + 1, bw - 2, bh - 2, th->pad);
+    gtext(kx + 3 * u, ky + 2 * u, "HOME", down ? th->bg : th->pad, u);
+    gblock(x + (w - tw) / 2, y + 12 + bh + 8, tw, r, th->text, a, 1);
+    galpha(256);
 }
 static void mach_over(void)
 {
@@ -567,7 +609,7 @@ static void gh_card(void)
     int32_t yf;
     gveil(th->bg, 25);
     yf = gfoot(238, TR(T_REC_BACK), th->mute, th->bg, ts(1, 2));   /* at the foot: HOME, and under it REC; the rest above */
-    yf = gfoot(yf - 2, TR(T_HOME_CONTROLS), th->text, th->bg, a);
+    if (!mc.hb) yf = gfoot(yf - 2, TR(T_HOME_CONTROLS), th->text, th->bg, a);   /* (not while the HOME box is up) */
     yf -= 5 * a + 6;                             /* (the PLAY line's top) */
     if (mc.state == MS_OVER) {
         int32_t n;
@@ -1016,7 +1058,7 @@ static const int16_t NB_TAG[4][5] = {{226, 28, -8192, 172, 46}, {14, 28, -24576,
 #define NB_TAG_MS 4200                           /* how long a joining knob's arrow stays */
 static struct {
     int32_t ang[4], hit[4];
-    struct { uint32_t born; int16_t a, curl; uint8_t c, on, past; } sp[NB_MAX];
+    struct { uint32_t born; int16_t a, curl; uint8_t c, on, past, lead; } sp[NB_MAX];   /* lead: the first of a new ring's colour */
     struct { int16_t x, y; uint8_t c; } fl[48];
     uint32_t nfl, last_beat, t0;
     int32_t rings, caught, ring_t;
@@ -1061,8 +1103,21 @@ static void bloom_spawn(uint32_t now, uint32_t seed)
     uint32_t i;
     for (i = 0; i < NB_MAX; i++)
         if (!nb.sp[i].on) {
-            nb.sp[i].on = 1; nb.sp[i].past = 0; nb.sp[i].born = now; nb.sp[i].c = (uint8_t)(ihash(seed) % (uint32_t)nb.rings);
+            nb.sp[i].on = 1; nb.sp[i].past = 0; nb.sp[i].lead = 0; nb.sp[i].born = now; nb.sp[i].c = (uint8_t)(ihash(seed) % (uint32_t)nb.rings);
             nb.sp[i].a = (int16_t)ihash(seed + 1u); nb.sp[i].curl = (int16_t)((int32_t)(ihash(seed + 2u) & 0x3FFFu) - 0x2000);
+            return;
+        }
+}
+/* a new ring has joined: at once, alone (the others wait while its arrow shows), a spore of its colour, ringed so it
+ * cannot be missed, on its way to where the new petal is not yet: a few clicks of the new knob away */
+static void bloom_lead(uint32_t now, int c)
+{
+    uint32_t i;
+    for (i = 0; i < NB_MAX; i++)
+        if (!nb.sp[i].on) {
+            int32_t curl = 0x1000, to = nb.ang[c] + 4 * 2731;
+            nb.sp[i].on = 1; nb.sp[i].past = 0; nb.sp[i].lead = 1; nb.sp[i].born = (now / 96u) * 96u; nb.sp[i].c = (uint8_t)c;
+            nb.sp[i].curl = (int16_t)curl; nb.sp[i].a = (int16_t)(to - curl);
             return;
         }
 }
@@ -1131,6 +1186,7 @@ static void bloom_tick(int32_t dt)
                 }
                 if (nb.rings < 4 && nb.caught >= NB_JOIN[nb.rings]) {   /* enough caught: the next ring, and its knob, join in */
                     nb.rings++; nb.ring_t = NB_TAG_MS; snd_chime(1);
+                    bloom_lead(now, (int)nb.rings - 1);
                 }
                 continue;
             }
@@ -1145,10 +1201,52 @@ static void bloom_tick(int32_t dt)
     led_btn_want |= (now % 96u < 14u) ? 1u << BTN_PLAY : 0u;
     led_key_want |= in.keys;
 }
+/* NIGHT BLOOM's start card: the garden at night in all its colours (the game itself stays dark, so the spores stand
+ * out). A sky from deep blue to plum, four soft lights drifting in the rings' colours, the four rings with their petals
+ * turning, spores of every colour curling in to them and bursting, and the game's own flower in the middle. */
+static void bloom_title_bg(uint32_t tm, int32_t beat)
+{
+    static const col_t GLOW[4] = {AC_RGB(255, 214, 40), AC_RGB(255, 80, 170), AC_RGB(40, 224, 96), AC_RGB(48, 112, 255)};
+    static const int16_t GL[4][3] = {{36, 74, 70}, {206, 70, 66}, {40, 196, 70}, {204, 190, 74}};
+    int32_t y, k, i, cx = 120, cy = 126;
+    col_t top = th->dark ? HEXC(0x0c0630) : HEXC(0xfff2d4), bot = th->dark ? HEXC(0x52125a) : HEXC(0xffc4e4);
+    for (y = 0; y < AC_H; y++) grect(0, y, AC_W, 1, mix565(top, bot, (uint32_t)(y * 32 / AC_H)));
+    for (k = 0; k < 4; k++) {                    /* the four lights */
+        int32_t gx = GL[k][0] + ((tsin(tm, 3 + k, k * 16000) * 12) >> 14), gy = GL[k][1] + ((tsin(tm, 4 + k, k * 9000) * 10) >> 14);
+        for (i = 0; i < 6; i++) { galpha(th->dark ? 18 : 26); gdisc(gx, gy, GL[k][2] * (6 - i) / 6, GLOW[k]); }   /* (soft: six discs, each a little) */
+    }
+    for (i = 0; i < 40; i++) {                   /* stars, twinkling */
+        uint32_t h = ihash((uint32_t)i * 7u + 3u);
+        galpha(90 + ((tsin(tm, 20 + (h & 15u), (int32_t)h) + 16384) >> 8));
+        gp((int32_t)(h % 240u), (int32_t)((h >> 8) % 240u), th->dark ? HEXC(0xffffff) : HEXC(0x8a5aa0));
+    }
+    for (k = 0; k < 4; k++) {                    /* the rings and their petals, turning slowly, each its own way */
+        int32_t r = NB_R[k], pa = (int32_t)(tm * (uint32_t)(3 + k * 2)) * (k & 1 ? -1 : 1);
+        galpha(140); garc(cx, cy, r, r, 0, 65536, NB_COL[k], 1);
+        galpha(256);
+        garc(cx, cy, r - 1, r - 1, pa - NB_ARC, pa + NB_ARC, NB_COL[k], 1);
+        garc(cx, cy, r + 1, r + 1, pa - NB_ARC, pa + NB_ARC, NB_COL[k], 1);
+        garc(cx, cy, r + 3, r + 3, pa - NB_ARC + 900, pa + NB_ARC - 900, NB_COL[k], 1);
+    }
+    for (i = 0; i < 10; i++) {                   /* spores curling in to their rings, a burst as each arrives */
+        uint32_t per = 2600u + (uint32_t)i * 170u, ph = (tm + (uint32_t)i * 977u) % per, c = (uint32_t)i % 4u;
+        int32_t q = (int32_t)(ph * 256u / per), rad = NB_R[c] + (150 - NB_R[c]) * (256 - q) / 256, ang = i * 6554 + q * 40;
+        int32_t x = cx + ((rad * icos(ang)) >> 14), yy = cy + ((rad * isin(ang)) >> 14);
+        if (q < 236) { galpha(150); gdisc(x, yy, 6, NB_COL[c]); galpha(256); gdisc(x, yy, 3, NB_COL[c]); gp(x, yy, HEXC(0xffffff)); }
+        else { galpha((256 - q) * 12); garc(x, yy, 6 + (q - 236), 6 + (q - 236), 0, 65536, NB_COL[c], 1); galpha(256); }
+    }
+    for (k = 0; k < 5; k++) {                    /* the flower in the middle, as in the game: five petals (its lives) */
+        int32_t a = k * 13107 + (int32_t)(tm * 2u);
+        gdisc(cx + (((7 + beat / 64) * icos(a)) >> 14), cy + (((7 + beat / 64) * isin(a)) >> 14), 4, th->caps[0]);
+    }
+    gdisc(cx, cy, 4 + beat / 100, th->pad);
+    galpha(256);
+}
 static void bloom_draw(void)
 {
     uint32_t now = (tr_now_q8() >> 8) - nb.t0, i, tm = (uint32_t)mc.t;
     int32_t cx = 120, cy = 126, k, beat = 256 - imin(256, (int32_t)(now % 96u) * 256 / 50);
+    if (mc.state == MS_TITLE) { bloom_title_bg((uint32_t)fm1_ms, 256 - imin(256, (int32_t)((tr_now_q8() >> 8) % 96u) * 256 / 50)); return; }
     sky_draw();
     for (i = 0; i < nb.nfl; i++) {               /* the garden so far: faint, flat little flowers (nothing like a spore's glow) */
         col_t c = NB_COL[nb.fl[i].c];
@@ -1174,6 +1272,11 @@ static void bloom_draw(void)
         bloom_pos(i, now, &rad, &ang);
         c = NB_COL[nb.sp[i].c];
         x = cx + ((rad * icos(ang)) >> 14); y = cy + ((rad * isin(ang)) >> 14);
+        if (nb.sp[i].lead && !nb.sp[i].past) {   /* the new colour's first: a ring round it, pulsing, and a bigger glow */
+            int32_t p = ipulse(tm, 600);
+            galpha(110 + p * 146 / 256); garc(x, y, 12 + p * 4 / 256, 12 + p * 4 / 256, 0, 65536, c, 1);
+            galpha(60); gdisc(x, y, 10, c);
+        }
         galpha(nb.sp[i].past ? 50 : 130 + (tsin(tm, 50, (int32_t)i * 9000) >> 10)); gdisc(x, y, 7, c); galpha(256);
         gdisc(x, y, 3, nb.sp[i].past ? th->mute : c);
         if (!nb.sp[i].past) gp(x, y, th->text);
@@ -1196,6 +1299,7 @@ static void mach_start(void)
 {
     uint32_t i, now = tr_now_q8() >> 8;
     mc.state = MS_PLAY; mc.score = 0; mc.combo = 0; mc.t = 0; mc.msg_t = 0; mc.flash = 0; mc.ask = 0; tix.on = 0;
+    pf_home_read(mc.which); mc.hb = 0;           /* (played once: the HOME box is done with, its line back) */
     if (mc.which == 0) gh_start();
     else if (mc.which == 1) {
         for (i = 0; i < sizeof jw; i++) ((uint8_t *)&jw)[i] = 0;
@@ -1217,6 +1321,7 @@ static void mach_enter(int which)
 {
     uint32_t i;
     mc.which = (uint8_t)which; mc.state = MS_TITLE; mc.t = 0; mc.msg_t = 0; mc.flash = 0; mc.score = 0; mc.lives = 0; mc.ask = 0; tix.on = 0;
+    mc.hb = (uint8_t)pf_home_new(which); mc.hb_t = 0; mc.hb_rest = 0; mc.hb_al = 0;
     gh.card_track = (uint8_t)(mus_track % JUKE_N); gh.swap_t = -10000; gh.demo_track = 255;
     (void)i;
 #ifdef AC_TEST_SCENE
@@ -1230,8 +1335,20 @@ static int mach_tick(int32_t dt)
     mc.t += dt;
     if (mc.msg_t > 0) mc.msg_t -= dt;
     if (mc.flash > 0) mc.flash -= dt;
-    if (BDOWN(BTN_HOME)) return 1;
+    if (BDOWN(BTN_HOME)) { pf_home_read(mc.which); mc.hb = 0; return 1; }
+    if (mc.hb && !pf_home_new(mc.which)) mc.hb = 0;   /* (a round finished: not new any more) */
     if (mc.state != MS_PLAY) {
+        if (mc.hb && !tix.on && mc.state == MS_TITLE) {   /* the HOME box: in after a moment; a touch sets it aside */
+            int k, touched = in.kdown != 0, want;
+            for (k = 0; k < 8; k++) if (in.enc[k]) touched = 1;
+            if (mc.hb_t < HB_IN && mc.hb_t + dt >= HB_IN) snd_ui(79);
+            mc.hb_t += dt;
+            if (touched && mc.hb_t >= HB_IN) mc.hb_rest = HB_REST;
+            else if (mc.hb_rest > 0) mc.hb_rest -= dt;
+            want = mc.hb_t >= HB_IN && mc.hb_rest <= 0 ? 256 : 0;
+            mc.hb_al = want > mc.hb_al ? imin(want, mc.hb_al + dt * 256 / 260) : imax(want, mc.hb_al - dt * 256 / 160);
+            if (mc.hb_al > 0 && (mc.hb_t / 250) % 2) led_btn_want |= 1u << BTN_HOME;
+        }
         if (tix.on) {                            /* the tickets coming out: the card waits under them; PLAY goes to the sum */
             tix_tick(dt); mc.t = 0;
             if (BDOWN(BTN_PLAY) || BDOWN(BTN_REC)) tix_skip();
@@ -1267,6 +1384,6 @@ static void mach_draw(void)
         if (mc.state == MS_PLAY) mach_hud();
         else mach_card(MACH_NAME[mc.which], th->caps[mc.which * 2 % 5]);
     }
-    if (mc.state != MS_PLAY) tix_draw();
+    if (mc.state != MS_PLAY) { home_big_draw((uint32_t)fm1_ms); tix_draw(); }
     if (mc.state == MS_PLAY && mc.ask) rec_box_draw(1, (uint32_t)fm1_ms);
 }
