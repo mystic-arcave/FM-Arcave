@@ -5,7 +5,7 @@
  * key, C major pentatonic (A minor pentatonic is the same five), so FM-1s on different tunes still agree. The little
  * sounds of the games stay in C major pentatonic, which sits inside every one of the keys. Runs in the audio interrupt. */
 
-enum { MUS_OFF, MUS_INTRO, MUS_JUKE, MUS_LESSON };
+enum { MUS_OFF, MUS_INTRO, MUS_JUKE, MUS_LESSON, MUS_ROLL };   /* MUS_ROLL: the course's own piece (ac_rollmus.h) */
 static volatile uint8_t mus_mode = MUS_OFF, mus_track;
 
 static const uint8_t SC_PEN[5] = {0, 2, 4, 7, 9}, SC_MPEN[5] = {0, 3, 5, 7, 10};
@@ -368,10 +368,12 @@ static void mus_lesson(uint32_t step)
     }
 }
 
+static void mus_roll(uint32_t step);             /* ac_rollmus.h: the roll's piece */
 static void mus_tick(uint32_t tick)
 {
     if (tick % TICKS_STEP) return;
     if (mus_mode == MUS_INTRO) mus_intro(tick / TICKS_STEP);
+    else if (mus_mode == MUS_ROLL) mus_roll(tick / TICKS_STEP);
     else if (mus_mode == MUS_JUKE) mus_juke(tick / TICKS_STEP);
     else if (mus_mode == MUS_LESSON) mus_lesson(tick / TICKS_STEP);
 }
@@ -382,7 +384,7 @@ static void mus_set(uint32_t mode, uint32_t track)
     mus_track = (uint8_t)track;
     mus_mode = (uint8_t)mode;
     if (!tr_follow) {
-        if (mode == MUS_INTRO) tr_bpm_q8 = 120u << 8;
+        if (mode == MUS_INTRO || mode == MUS_ROLL) tr_bpm_q8 = 120u << 8;
         else if (mode == MUS_JUKE) tr_bpm_q8 = (uint32_t)(track == 0u ? take_bpm : SONGS[track % JUKE_N].bpm) << 8;
         else if (mode == MUS_LESSON) tr_bpm_q8 = (uint32_t)LES_BPM << 8;
     }

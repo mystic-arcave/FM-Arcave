@@ -1,0 +1,22 @@
+# the roll's music, standing still: the first chord and its slow notes; seven keys up the keyboard
+1000 btn 12
+3600 btn 12
+9000 shot
+14000 keys 0x1
+14090 keys 0
+15000 shot
+15500 keys 0x20
+15590 keys 0
+17000 keys 0x200
+17090 keys 0
+18500 keys 0x2000
+18590 keys 0
+20000 keys 0x40000
+20090 keys 0
+21000 shot
+21500 keys 0x400000
+21590 keys 0
+23000 keys 0x4000000
+23090 keys 0
+27000 shot
+30000 end

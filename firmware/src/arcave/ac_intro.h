@@ -222,21 +222,52 @@ static void intro_sky_hits(int32_t dt)
         if (o->t == 0) {
             if (!G.sky_used[i] && dx * dx + dy * dy < 144) {
                 G.sky_used[i] = 1; G.spores++; r->vy -= Q8(25);
-                sfx(INTRO_PENT[(o->c + G.spores) % 9], 0, 600, W_SINE, 2950, 6, 130);
+                roll_spore();
             }
         } else if (o->t == 1) {
             if (iabs(dx) < 17 && dy > -20 && dy < 6 && r->vy > -Q8(60) && G.sky_sq[i] <= 0) {
-                static const uint8_t JN[4] = {0, 4, 7, 12};
                 r->vy = -Q8(335); r->vx = d * (imax(d * r->vx, Q8(150)) + Q8(15)); r->g = 0; G.sky_sq[i] = 250;
                 intro_burst(o->x << 8, o->y << 8, o->c, 0, 0);
-                sfx(72 + JN[o->c % 4], 0, 600, W_SINE, 2950, 6, 130);
+                roll_jelly(o->c);
             }
         } else if (!G.sky_used[i] && dx * dx + dy * dy < 400) {
             G.sky_used[i] = 1; r->vx = d * (imax(d * r->vx, 0) + Q8(170)); r->vy = imin(r->vy, -Q8(150)); G.rings++;
             intro_burst(r->x, r->y, o->c, 1, T_SKYHIGH);
-            snd_chime(1);
+            roll_strum(1);
         }
     }
+}
+
+/* the place of the roll's piece (ac_rollmus.h) Rock is in: twenty-four along the course, start to cave; before the
+ * start, the cave's mouth and the hollow have their own. The race back plays it through again, the other way home */
+static int intro_place(void)
+{
+    int32_t px = G.r.x >> 8;
+    if (G.race == 3) return RM_END;
+    if (G.race) return px > RACE_START ? RM_START : px < RACE_END ? RM_END : iclamp((RACE_START - px) * RM_NPLACE / (RACE_START - RACE_END), 0, RM_NPLACE - 1);
+    if (px < CO_WALLX - 16) return RM_HOLLOW;
+    if (px < CO_XS) return RM_START;
+    if (px > CO_L - 64) return RM_END;
+    return iclamp((px - CO_XS) * RM_NPLACE / (CO_L - 64 - CO_XS), 0, RM_NPLACE - 1);
+}
+/* how far Rock is off the platform he woke on, 0..256: the pictures' beat comes in with it (ac_rollmus.h). The platform
+ * is the flat stretch from the wall to where the land first drops (CO_XS); the hollow behind the wall is "off" too */
+static int32_t intro_away(void)
+{
+    int32_t px = G.r.x >> 8;
+    if (G.race) return G.race == 3 ? 0 : 256;
+    return imax(smooth8(CO_XS - 20, CO_XS + 260, px), smooth8(-(CO_WALLX - 20), -(CO_WALLX - 200), -px));
+}
+/* an arpeggio note: the mushroom nearest its place pops (low notes behind Rock, high ones ahead: a row of them is a
+ * xylophone) */
+static void intro_sing(int32_t note)
+{
+    static uint8_t slot;
+    int32_t want = (G.r.x >> 8) + (note - 64) * 8, best = -1, bd = 64, i;
+    for (i = 0; i < CO_NSHROOM; i++) { int32_t dd = iabs(CO_SHROOM[i].x - want); if (dd < bd) { bd = dd; best = i; } }
+    if (best < 0) return;
+    for (i = 0; i < 4; i++) if (rv.sing[i].idx == best && rv.sing[i].t > 0) { rv.sing[i].t = RM_SING_MS; return; }
+    slot = (uint8_t)((slot + 1u) & 3u); rv.sing[slot].idx = (int16_t)best; rv.sing[slot].t = RM_SING_MS;
 }
 
 #define CTRL_X 96                                /* the controls box: its middle, in the course's pixels */
@@ -260,7 +291,7 @@ static int intro_tick(int32_t dt)
     if (G.phase == IP_TITLE && G.t >= LANG_TIP_AT && !G.oct && !lang_touched) { fm1_breath_sync(); G.oct = 1; }
     if (G.oct == 1 && (fm1_breaths() >= 3u || lang_touched || G.phase > IP_WIDE)) G.oct = 2;
     if (G.oct == 1) led_breathe_want |= 1u << BTN_OCT_DOWN | 1u << BTN_OCT_UP;
-    if (in.kdown && G.phase != IP_TITLE) snd_keys(in.kdown, 0);
+    if (in.kdown && G.phase != IP_TITLE) { if (G.phase == IP_PLAY && rv.on) roll_keys(in.kdown); else snd_keys(in.kdown, 0); }   /* (on the course: the chord's notes) */
     if (in.hikey >= 0 && G.phase == IP_PLAY) deco_key_fx(KEY_ZONE[in.hikey], r->x, r->y);
     pfx_tick(dt);
     if (G.phase == IP_TITLE) {
@@ -377,17 +408,19 @@ static int intro_tick(int32_t dt)
         while (G.ntrail && G.trail[0].t > 500) { for (i = 1; i < (int32_t)G.ntrail; i++) G.trail[i - 1] = G.trail[i]; G.ntrail--; }
         if (r->jumped) {
             G.pad_jump = (uint8_t)lock;
-            if (lock) { G.clean++; intro_burst(r->x, r->y, G.clean, 0, 0); snd_chime(0); }
+            if (lock) { G.clean++; intro_burst(r->x, r->y, G.clean, 0, 0); roll_strum(0); }   /* a pad: the chord, strummed */
+            roll_jump(in.hikey, in.hop == HOP_BIG);                                          /* and the key's run up the scale */
         }
         if (r->touch) {
             if (G.pad_jump && d * r->t_vt > 0) {
                 int32_t sl = r->t_sl, n = (int32_t)isqrt((uint32_t)(65536 + sl * sl)), b = d * (G.exact ? Q8(150) : Q8(55));
                 r->vx += b * 256 / n; r->vy += ((b * sl) >> 8) * 256 / n;
-                if (G.exact) { G.bonus++; intro_burst(r->x, r->y, G.bonus, 1, T_BONUS); snd_chime(1); }
+                if (G.exact) { G.bonus++; intro_burst(r->x, r->y, G.bonus, 1, T_BONUS); roll_strum(1); }
             }
             G.pad_jump = 0;
         }
-        if (r->thud) sfx_ex(40, 0, 160, W_SINE, 2600, 2, 30, 0, 0, 64700);
+        if (r->touch && rv.air_ms >= 220) roll_land(r->t_vn);   /* down from a jump: onto the chord's low note */
+        else if (r->thud) roll_thud();           /* a bump: a thud, on the chord's note too */
         sy_rumble_want = (live && r->g) ? imin(40, iabs(r->vx) >> 11) : 0;
         sy_rumble_pitch = 90 + (iabs(r->vx) >> 9);
         if (G.burst.on) { G.burst.t += dt; if (G.burst.t > 600) G.burst.on = 0; }
@@ -396,6 +429,8 @@ static int intro_tick(int32_t dt)
         G.c_off += (((RACING ? r->vx < Q8(25) : r->vx < -Q8(25)) ? (RACING ? Q8(156) : Q8(150)) : Q8(84)) - G.c_off) * imin(400, dt * 5 / 2) / 400;
         G.cam_y += (r->y - Q8(130) - G.cam_y) * imin(200, dt) / 200;
         G.camz = 256; G.camx = iclamp(r->x - G.c_off, Q8(CO_CAMMIN), CAMMAX); G.camy = G.cam_y;
+        roll_tick(dt, r->x, r->y, r->vx, r->g, intro_place(), G.camy, intro_away());   /* the piece follows him (ac_rollmus.h) */
+        if (rv.arp_note) intro_sing(rv.arp_note);
         if (live) {
             if (!G.turned && G.t > 5000) G.hint = imin(256, G.hint + dt * 384 / 1000); else G.hint = imax(0, G.hint - dt * 512 / 1000);
             if (r->x > Q8(CO_XS) && !G.done && !G.race) G.on_course = 1;
@@ -656,12 +691,13 @@ static void intro_draw(void)
                     px = x; py = y;
                 }
             }
-            galpha(64 + (tsin(tm, 20, 0) * 38 >> 14));
-            gellf(dx, by, 13, 13, th->caps[(tm / 1000u) % 5u], 1);
+            galpha(imin(256, 64 + (tsin(tm, 20, 0) * 38 >> 14) + (rv.on ? rv.beat * rv.vis / 256 * 110 / 256 : 0)));   /* its light: the chord's colour, a pulse on the beat */
+            gellf(dx, by, 13, 13, th->caps[rv.on ? rv.col % 5 : (tm / 1000u) % 5u], 1);
             galpha(256);
         }
     }
     far_layer(tlx, tly, 107, 178, 1, th->far2, th->fill);
+    if (z == 256) roll_draw_sky();               /* the melody's stars */
     /* the ground: filled, then its coloured seams, then the rim */
     for (sx = 0; sx < AC_W; sx++) {
         int32_t y = WY(land_y(G.camx + (sx << 16) / z)), j;
@@ -672,9 +708,11 @@ static void intro_draw(void)
     for (k = 4; k >= 0; k--) {
         static const uint8_t BD[5] = {3, 7, 12, 18, 26}, BA[5] = {218, 166, 128, 92, 61};
         int32_t off = BD[k] * imax(154, z) / 256, on = ZS(7 + k * 5), per = on + ZS(4 + k * 4), sh = ((tlx * z) >> 8) + k * 13;
+        int32_t bt = rv.on ? rv.beat * rv.vis / 256 : 0;   /* on the bass and the kick the seams press down and come back, the deeper the further */
         col_t c = th->bands[(k + (th->dark ? prog : 0)) % 5];
         if (per < 2) per = 2;
-        galpha(BA[k]);
+        off += bt * (k + 1) / 110;
+        galpha(imin(256, BA[k] + (256 - BA[k]) * bt / 400));
         for (sx = 0; sx < AC_W; sx++)
             if (((sx + sh) % per + per) % per < on) {
                 int32_t a = gy[sx] + off, b = sx ? gy[sx - 1] + off : a, j;
@@ -686,12 +724,26 @@ static void intro_draw(void)
         int32_t a = gy[sx], b = sx ? gy[sx - 1] : a, j;
         for (j = imin(a, b) + (a != b && a > b); j <= imax(a, b) - (a != b && a < b); j++) gp(sx, j, th->rim);
     }
+    if (rv.on && rv.vis > 0 && (rv.wash > 0 || rv.beat > 0)) {  /* the rim lights in the chord's colour as the chord comes, and a little on each beat */
+        galpha(imin(230, rv.wash * 200 / 256 + rv.beat * 70 / 256) * rv.vis / 256);
+        for (sx = 0; sx < AC_W; sx++) {
+            int32_t a = gy[sx], b = sx ? gy[sx - 1] : a, j;
+            for (j = imin(a, b) + (a != b && a > b); j <= imax(a, b) - (a != b && a < b); j++) { gp(sx, j, th->caps[rv.col % 5]); gp(sx, j + 1, th->caps[rv.col % 5]); }
+        }
+        galpha(256);
+    }
     x0 = tlx - 30; x1 = tlx + (240 << 8) / z + 30;
     for (i = 0; i < CO_NSHROOM; i++) {
         const co_shroom_t *m = &CO_SHROOM[i];
         if (m->x < x0) continue;
         if (m->x > x1) break;
-        mush_draw(WX(m->x << 8), WY(land_y(m->x << 8)) + 1, ZS(m->s), th->caps[m->c], th->stem, 128 + (tsin(tm, 20, m->ph << 8) >> 7));
+        {                                        /* one the arpeggio just played pops up, lit, a mote off its cap */
+            int32_t sg = 0, s2, mx = WX(m->x << 8), my = WY(land_y(m->x << 8)) + 1;
+            if (rv.on) for (k = 0; k < 4; k++) if (rv.sing[k].t > 0 && rv.sing[k].idx == i) sg = rv.sing[k].t * rv.vis / RM_SING_MS;
+            s2 = ZS(m->s) * (256 + sg * 80 / 256) / 256;
+            mush_draw(mx, my, s2, th->caps[m->c], th->stem, imin(256, 128 + (tsin(tm, 20, m->ph << 8) >> 7) + sg + (rv.on ? rv.beat * rv.vis / 1280 : 0)));
+            if (sg) { galpha(sg); grect(mx - 1, my - s2 * 30 / 256 - 3 - (256 - sg) * 12 / 256, 3, 3, th->text); galpha(256); }
+        }
     }
     for (i = 0; i < CO_NPOOL; i++) {             /* pools of light in the late valleys */
         const co_pool_t *o = &CO_POOL[i];
@@ -933,6 +985,7 @@ static void intro_draw(void)
     }
     galpha(256);
     pfx_draw(G.camx, G.camy, z);
+    roll_draw_fx(G.camx, G.camy, z);              /* the sparks of the keys' notes */
     prock_live(WX(r->x), WY(r->y), z, r->th, G.eyes);
     {   /* words in the sky */
         int32_t pulse = 97 + 159 * ipulse(tm, 2600) / 256;

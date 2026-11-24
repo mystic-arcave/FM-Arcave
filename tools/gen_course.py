@@ -25,7 +25,8 @@ def hash_(i):
 
 
 Y0, XS, SL = 300, 130, 0.062
-L_LONG, L_SHORT = 15800, 7900   # the race back keeps the first length; the opening roll is half of it
+L_LONG, L_SHORT = 15800, 9875   # the race back keeps the first length; the opening roll was half of it, and is a
+                                # quarter longer than that now: room for the roll's music (ac_rollmus.h)
 L = XE = XSTOP = 0
 HX0 = -780
 WALLX, LEDGE, XMIN, LOOPX, LOOPR, CARDX, CAMMIN = 18, Y0 - 58, -690, -626, 32, -377, -770

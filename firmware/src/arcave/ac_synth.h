@@ -97,7 +97,11 @@ static void sy_start(const sy_ev_t *e)           /* in the interrupt */
     sy_voice_t *v;
     for (i = 0; i < SY_NV; i++) {
         if (!sy_v[i].on) { pick = i; break; }
-        if (sy_v[i].amp < low) { low = sy_v[i].amp; pick = i; }
+        {                                        /* (the quietest gives way; one still swelling counts as what it swells to,
+                                                    or a slow chord would be the first to go) */
+            int32_t a = sy_v[i].stage == 0u ? sy_v[i].vol : sy_v[i].amp;
+            if (a < low) { low = a; pick = i; }
+        }
     }
     v = &sy_v[pick];
     v->inc = sy_inc(e->note, e->det);

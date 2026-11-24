@@ -21,6 +21,7 @@
 #include "ac_text.h"
 #include "ac_art.h"
 #include "ac_deco.h"
+#include "ac_rollmus.h"
 #include "ac_intro.h"
 #include "ac_cave.h"
 #include "ac_juke.h"
@@ -116,6 +117,7 @@ static void to_cave(int fresh)
 {
     if (scene == SC_ROOM) { room_leave(); save_soon(); }   /* (out of the music room: it is kept as it was left) */
     scene = SC_CAVE;
+    rollmus_leave();
     pfx_clear();
     duo_leave();                                 /* (out of the well, if that is where Rock was: the friend is told) */
     cave_enter(fresh);
@@ -339,6 +341,7 @@ static void arcave_frame(void)
     if (algo_quiet > 0) algo_quiet -= dt;
 
     /* OCT- and OCT+ step through the languages, anywhere */
+    rollmus_frame(dt, scene == SC_INTRO && (G.phase == IP_PLAY || G.phase == IP_OUT));   /* the roll's own piece, its echo (ac_rollmus.h) */
     if (scene != SC_ROOM)                        /* the player's song's echo and reverb, while it is what plays (ac_music.h) */
         take_bus((scene == SC_DISH && ds.stage != DS_STIR) || (mus_mode == MUS_JUKE && mus_track % JUKE_N == 0u));
     if ((BDOWN(BTN_OCT_DOWN) || BDOWN(BTN_OCT_UP)) && !mn.on && !pu.on && scene != SC_ROOM && !dish_rec_screen()) {   /* (nor at the dish, recording: the keys' octave) */   /* (in the music room they are the octave) */   /* (in the settings OCT+ confirms and OCT- steps back) */
