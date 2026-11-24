@@ -7,7 +7,9 @@
 // It returns { screen(fb565), leds(buttons, keys, dimKeys, breathing), key(code, down) -> handled, releaseAll(),
 //   layout("fm1" | "computer"): which computer keys play it (computer: the two bottom rows of letters are its two rows
 //   of keys, and every button, key and knob says which computer key is its own, under its name),
-//   big(on): the screen as large as the window, with its lights in a strip below (on.bigOff() when it is left) }.
+//   big(on): the screen as large as the window, with its lights in a strip below (on.bigOff() when it is left);
+//   in it, FULL SCREEN: the computer's whole screen, the game's screen alone in the middle of it, black at the sides
+//   (Esc, or a double click, back to the big screen) }.
 const NS = "http://www.w3.org/2000/svg";
 const L = { w: 1000, h: 624, screen: [292, 44, 256],
   knobs: [[105, 100, 24, "MASTER", -1], [215, 100, 24, "SELECT", 0], [105, 205, 24, "PRESETS", 6], [215, 205, 24, "ALGORITHM", 1],
@@ -156,7 +158,26 @@ export function mountFm1(host, on) {
   BLACK.forEach((k) => { const i = WHITE.indexOf(k + 1); sKeys[k] = mkS(rowT, "fm1-sk black", k, true); sKeys[k].style.gridColumn = i + 1; });
   for (let id = 0; id < 14; id++) { sBtns[id] = mkS(rowB, "fm1-sb" + (id === 13 ? " rec" : ""), id, false); sBtns[id].firstChild.nextSibling.dataset.name = BTN_NAMES[id]; }
   const exit = document.createElement("button"); exit.className = "fm1-exit"; exit.textContent = "EXIT BIG SCREEN"; host.appendChild(exit);
-  exit.addEventListener("click", () => { exit.blur(); host.classList.remove("big"); on.bigOff?.(); });
+  exit.addEventListener("click", () => { exit.blur(); full(false); host.classList.remove("big"); on.bigOff?.(); });
+  // FULL SCREEN, from the big screen: the page takes the computer's whole screen (the page, not the panel, so what
+  // the page lays over it - the save going to and from an FM-1 - still shows), and nothing but the game's screen is
+  // on it, as large as fits, black at the sides. Esc (the browser's own way out) or a double click: the big screen.
+  // Where the browser has no full screen (an iPhone), the same picture in the window, and a double tap out of it.
+  const fs = document.createElement("button"); fs.className = "fm1-full"; fs.textContent = "FULL SCREEN"; host.appendChild(fs);
+  const doc = document, root = doc.documentElement;
+  function full(onOff) {
+    host.classList.toggle("full", !!onOff);
+    if (onOff && !doc.fullscreenElement && root.requestFullscreen) root.requestFullscreen({ navigationUI: "hide" }).catch(() => {});
+    if (!onOff && doc.fullscreenElement && doc.exitFullscreen) doc.exitFullscreen().catch(() => {});
+  }
+  fs.addEventListener("click", () => { fs.blur(); full(true); });
+  doc.addEventListener("fullscreenchange", () => { if (!doc.fullscreenElement && host.classList.contains("full")) host.classList.remove("full"); });
+  host.addEventListener("dblclick", () => { if (host.classList.contains("full")) full(false); });
+  let tapAt = 0;                                 // (a double tap, where touch gives no double click)
+  host.addEventListener("touchend", () => {
+    if (!host.classList.contains("full")) return;
+    const t = performance.now(); if (t - tapAt < 350) full(false); tapAt = t;
+  });
 
   let maps = MAPS.fm1;
   function layout(mode) {
@@ -181,7 +202,7 @@ export function mountFm1(host, on) {
 
   return {
     layout,
-    big(onOff) { host.classList.toggle("big", !!onOff); },
+    big(onOff) { if (!onOff) full(false); host.classList.toggle("big", !!onOff); },
     screen(fb) {
       const d = img.data;
       for (let i = 0, o = 0; i < 57600; i++, o += 4) {
@@ -250,12 +271,17 @@ export const FM1_CSS = `
 .fm1-kcap{font:400 22px/1 "Silkscreen",ui-monospace,Menlo,monospace;fill:#2a2e35}
 .fm1-kcap.black{fill:#e6e9ec}
 .fm1.kbd .fm1-cap,.fm1.kbd .fm1-kcap,.fm1.kbd .fm1-capbox{display:inline}
-.fm1-strip,.fm1-exit{display:none}
+.fm1-strip,.fm1-exit,.fm1-full{display:none}
 .fm1.big{position:fixed;inset:0;z-index:100;width:auto;height:auto;aspect-ratio:auto;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:12px;box-sizing:border-box}
 .fm1.big svg{display:none}
 .fm1.big .fm1-screen{position:static!important;width:min(calc(100vw - 24px),calc(100vh - 170px))!important;height:auto!important;aspect-ratio:1;border-radius:0}
 .fm1.big .fm1-strip{display:grid;gap:5px;width:min(calc(100vw - 24px),780px)}
-.fm1.big .fm1-exit{display:block;position:absolute;top:12px;right:12px;font:400 11px/1 "Silkscreen",ui-monospace,monospace;letter-spacing:.08em;color:#7fe6d2;background:#000;border:1px solid #7fe6d2;padding:9px 12px;cursor:pointer}
+.fm1.big .fm1-exit,.fm1.big .fm1-full{display:block;position:absolute;top:12px;right:12px;font:400 11px/1 "Silkscreen",ui-monospace,monospace;letter-spacing:.08em;color:#7fe6d2;background:#000;border:1px solid #7fe6d2;padding:9px 12px;cursor:pointer}
+.fm1.big .fm1-full{right:auto;left:12px}
+.fm1.big .fm1-exit:focus-visible,.fm1.big .fm1-full:focus-visible{outline:2px solid #7fe6d2;outline-offset:2px}
+.fm1.big.full{padding:0;gap:0;cursor:none}
+.fm1.big.full .fm1-strip,.fm1.big.full .fm1-exit,.fm1.big.full .fm1-full{display:none}
+.fm1.big.full .fm1-screen{width:min(100vw,100vh)!important}
 .fm1-srow{display:grid;grid-template-columns:repeat(16,1fr);gap:4px;height:26px}
 .fm1-sbtns{display:grid;grid-template-columns:repeat(14,1fr);gap:4px;margin-top:4px}
 .fm1-sk,.fm1-sb{position:relative;display:flex;align-items:center;justify-content:center;border-radius:13px;background:#d9dbd7;cursor:pointer;font:400 10px/1 "Silkscreen",ui-monospace,monospace;color:#3b4048}

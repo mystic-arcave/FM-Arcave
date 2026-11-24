@@ -1,4 +1,5 @@
-# the rings: stuck a minute (the note, HOME breathing), the hint page and back, stuck two (the skip note), HOME held: skipped
+# the rings: stuck a minute (the note, HOME breathing), the hint page and back (the note gone: it was read), stuck two (the
+# skip note, new), HOME held (the note again, its bar filling): skipped
 2000 shot
 61000 shot
 61500 btn 8

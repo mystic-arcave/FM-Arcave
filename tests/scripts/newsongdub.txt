@@ -1,0 +1,210 @@
+# a song at the mended jukebox, then a part added: OCT+ before recording (the keys an octave up), REC, the two bars
+# filling the strip at the foot, RECORDED! as it ends; EDIT: the song plays on while a second part goes over it (OCT-
+# twice: an octave down), PART ADDED!; the effects turned right up; PLAY keeps it (and it is saved)
+500 keys 1
+540 keys 2
+580 keys 4
+620 keys 8
+660 keys 16
+700 keys 0
+1600 keys 1
+1640 keys 2
+1680 keys 4
+1720 keys 8
+1760 keys 16
+1800 keys 32
+1840 keys 64
+1880 keys 128
+1920 keys 256
+1960 keys 512
+2000 keys 1024
+2040 keys 2048
+2080 keys 4096
+2120 keys 8192
+2160 keys 16384
+2200 keys 32768
+2240 keys 65536
+2280 keys 131072
+2320 keys 262144
+2360 keys 524288
+2400 keys 1048576
+2440 keys 2097152
+2480 keys 4194304
+2520 keys 8388608
+2560 keys 16777216
+2600 keys 33554432
+2640 keys 67108864
+2680 keys 0
+11880 shot
+12180 enc 2 8
+12480 enc 4 8
+13080 btn 1
+13180 shot
+13980 keys 8
+14075 shot
+14130 keys 0
+14380 keys 256
+14530 keys 0
+14780 keys 8192
+14930 keys 0
+15180 keys 262144
+15330 keys 0
+15580 btn 13
+15580 keys 8
+15730 keys 0
+15980 keys 256
+16075 shot
+16130 keys 0
+16380 keys 8192
+16530 keys 0
+16780 keys 262144
+16930 keys 0
+17180 keys 8
+17330 keys 0
+17580 keys 256
+17730 keys 0
+17980 keys 8192
+18130 keys 0
+18380 keys 262144
+18530 keys 0
+18780 keys 8
+18930 keys 0
+19180 keys 256
+19330 keys 0
+19580 keys 8192
+19730 keys 0
+19980 keys 262144
+20075 shot
+20130 keys 0
+20380 keys 8
+20530 keys 0
+20780 keys 256
+20930 keys 0
+21180 keys 8192
+21330 keys 0
+21580 keys 262144
+21730 keys 0
+21980 keys 8
+22130 keys 0
+22380 keys 256
+22530 keys 0
+22780 keys 8192
+22930 keys 0
+23180 keys 262144
+23330 keys 0
+23580 keys 8
+23730 keys 0
+23980 keys 256
+24130 keys 0
+24380 keys 8192
+24530 keys 0
+24780 keys 262144
+24930 keys 0
+25075 shot
+25180 keys 8
+25330 keys 0
+25580 keys 256
+25730 keys 0
+25980 keys 8192
+26075 shot
+26130 keys 0
+26380 keys 262144
+26530 keys 0
+26780 keys 8
+26930 keys 0
+27180 keys 256
+27330 keys 0
+27580 keys 8192
+27730 keys 0
+27980 keys 262144
+28075 shot
+28130 keys 0
+28380 keys 8
+28530 keys 0
+28780 keys 256
+28930 keys 0
+29180 keys 8192
+29330 keys 0
+29580 keys 262144
+29730 keys 0
+29980 keys 8
+30075 shot
+30130 keys 0
+32075 shot
+33075 shot
+34580 btn 6
+34780 btn 0
+34980 btn 0
+35080 shot
+35380 keys 2
+35530 keys 0
+35980 keys 64
+36130 keys 0
+36580 keys 1024
+36730 keys 0
+37075 shot
+37180 keys 32768
+37330 keys 0
+37780 keys 2
+37930 keys 0
+38380 keys 64
+38530 keys 0
+38575 shot
+38980 keys 1024
+39130 keys 0
+39580 keys 32768
+39730 keys 0
+40075 shot
+40180 keys 2
+40330 keys 0
+40780 keys 64
+40930 keys 0
+41380 keys 1024
+41530 keys 0
+41575 shot
+41980 keys 32768
+42130 keys 0
+42580 keys 2
+42730 keys 0
+43075 shot
+43180 keys 64
+43330 keys 0
+43780 keys 1024
+43930 keys 0
+44380 keys 32768
+44530 keys 0
+44575 shot
+44980 keys 2
+45130 keys 0
+45580 keys 64
+45730 keys 0
+46075 shot
+46180 keys 1024
+46330 keys 0
+46780 keys 32768
+46930 keys 0
+47380 keys 2
+47530 keys 0
+47575 shot
+47980 keys 64
+48130 keys 0
+48580 keys 1024
+48730 keys 0
+49075 shot
+49180 keys 32768
+49330 keys 0
+49780 keys 2
+49930 keys 0
+50380 keys 64
+50530 keys 0
+50575 shot
+50980 keys 1024
+51130 keys 0
+51580 keys 32768
+51730 keys 0
+52075 shot
+53575 shot
+55075 shot
+55580 btn 12
+57075 shot
+58000 end

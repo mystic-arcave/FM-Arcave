@@ -8,4 +8,5 @@
 51000 shot
 68500 shot
 88500 shot
-90000 end
+110000 shot
+120000 end

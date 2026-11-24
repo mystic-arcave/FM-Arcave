@@ -6,8 +6,10 @@
  *              them: a locked ring no longer turns, nor is it dragged (the numbers at the foot show which are locked).
  *   the dish   a flywheel. Slide a hand a long way along the keys (or turn a knob) to spin it: how fast the hand went
  *              is how fast it turns, and its speed is the tempo, four beats to the turn. Hold a speed for eight beats
- *              and it is yours. Then KNOB 1-4 are the song's effects (HOME tells what each does), and REC, and two
- *              bars of keys are your song. Once the power is back, PLAY at the jukebox does the dish again: a new song.
+ *              and it is yours. Then KNOB 1-4 are the song's effects (HOME tells what each does), OCT- OCT+ the keys'
+ *              octave, and REC, and two bars of keys are your song (a strip at the foot shows the two bars filling).
+ *              EDIT then plays the song round once more while you add a part over it. Once the power is back, PLAY at
+ *              the jukebox does the dish again: a new song, or EDIT to add to the one there is.
  * Between them, the first time: the lamp's light swells until it fills the screen, and the dish comes out of it under
  * two large cards (the jukebox is mended; make a song to celebrate). While the dish stands still a hand on a drawing of
  * the keys brushes along them, back and forth, and the FM-1's own keys light under it. */
@@ -32,6 +34,8 @@ static struct {
     int32_t lock_t[LP_RINGS], nope[LP_RINGS];    /* since each locked (ms, for its flash); a locked knob turned (ms left) */
 } lp;
 static int32_t lp_stuck;                         /* time spent at the rings without the light, every visit (not saved) */
+static uint8_t lp_read;                          /* the hint page has been read: 1 before the skip was offered, 2 after (the
+                                                    note over the rings then goes away: it has said what it had to) */
 
 static void lamp_reset(void)
 {
@@ -106,7 +110,7 @@ static int lamp_tick(int32_t dt)
         lp.home_on = 0;
         if (lp.home_t < 700 && !lp.done && !lp.skip) {
             if (lp.hint) { lp.hint = 0; snd_ui(67); }
-            else if (lp_stuck >= LP_HINT_MS) { lp.hint = 1; lp.t = 0; snd_ui(76); }
+            else if (lp_stuck >= LP_HINT_MS) { lp.hint = 1; lp.t = 0; lp_read = (uint8_t)(lp_stuck >= LP_SKIP_MS ? 2 : imax(lp_read, 1)); snd_ui(76); }
             else return -1;
         }
     }
@@ -296,16 +300,19 @@ static void lamp_draw(void)
     }
     {   /* the words on cleared strips, top and foot: the rings run under them */
         int32_t a = ts(1, 2), at = ts(1, 3), h = gblock_h(232, TR(T_LAMP1), at), fy;
+        int skip = lp_stuck >= LP_SKIP_MS, holding = skip && lp.home_on && lp.home_t > 250;
         if (lp.t < 9000 || a == 1) { grect(0, 0, 240, h + 4, th->bg); gblock(4, 2, 232, TR(T_LAMP1), th->text, at, 1); }
         else h = 0;                              /* (larger text: it steps aside once read, the rings need the room) */
         if (agree >= 1 && agree < 3 && !lp.lock) gfit(120, h + 4 + 2 * a, 232, TR(T_LAMP_TWO), th->caps[3], a);
         fy = gfoot(238 - TLH(a), TR(lp.idle > 20000 ? T_LAMP_HINT : T_LAMP2), lp.idle > 20000 ? th->caps[0] : th->mute, th->bg, a);
         grect(0, 238 - TLH(a), 240, TLH(a) + 2, th->bg);
         lamp_knobs(238 - TLH(a) + 2 * a, a, tm);
-        if (lp_stuck >= LP_HINT_MS && !lp.skip) {   /* the note: a panel over the foot of the rings, popping up when it first comes */
-            int skip = lp_stuck >= LP_SKIP_MS, id = skip ? T_LAMP_SKIP_POP : T_LAMP_HINT_POP;
-            int32_t since = lp_stuck - (skip ? LP_SKIP_MS : LP_HINT_MS), pop = imin(256, since * 256 / 220);
-            int32_t sc = ts(1, 3), w = 216, bh, bar = skip && lp.home_on ? 12 : 0, y;
+        /* the note: a panel over the foot of the rings, popping up when it first comes; gone once the hint page has been
+         * read (HOME still breathes), back only while HOME is held toward the skip, for its bar */
+        if (lp_stuck >= LP_HINT_MS && !lp.skip && (lp_read < (skip ? 2 : 1) || holding)) {
+            int id = skip ? T_LAMP_SKIP_POP : T_LAMP_HINT_POP;
+            int32_t since = holding && lp_read >= 2 ? lp.home_t - 250 : lp_stuck - (skip ? LP_SKIP_MS : LP_HINT_MS), pop = imin(256, since * 256 / 220);
+            int32_t sc = ts(1, 3), w = 216, bh, bar = holding ? 12 : 0, y;
             while (sc > 1 && gblock_h(w - 16, TR(id), sc) > 3 * TLH(sc)) sc--;
             bh = gblock_h(w - 16, TR(id), sc) + 12 + bar;
             y = fy - 6 - bh + (256 - ease8(pop)) * 20 / 256;
@@ -334,6 +341,9 @@ static struct {
     int16_t kage[AC_NKEY];                       /* ms since the drawn hand last went over each key */
     uint8_t stage, msg, n, few, fx_k, intro;     /* intro: the welcome is on (the first time, after the lamp) */
     uint8_t ev[TAKE_MAX][2];
+    int32_t oct, oct_t;                          /* the keys' octave (OCT- OCT+), -2..+2; it was just changed: it shows */
+    int32_t pop_t;                               /* the words that pop up as a take ends ("RECORDED!") */
+    uint8_t dub, base, pop, full;                /* adding a part (EDIT): the song plays on, the notes it had are ev[0..base) */
 } ds;
 static struct { uint8_t again, n, bpm, fx[4], ev[TAKE_MAX][2]; } ds_old;   /* the song there was, should this one not be kept */
 #define DS_SLIDE 8                               /* keys a hand must cross before its speed is believed */
@@ -364,6 +374,7 @@ static void dish_abort(void)                     /* left without keeping a song:
     take_n = ds_old.n;
 }
 static void dish_msg(int id) { ds.msg = (uint8_t)id; ds.msg_t = 1800; }
+static int dish_can_dub(void) { return ds_old.again && ds_old.n >= 3u && !take_n; }   /* the dish again, a song there already */
 
 /* ---- the welcome: out of the lamp's light, two large cards over the dish, then the dish is yours. PLAY or a key skips */
 #define JI_BLOOM 700                             /* the light draining away into the dish */
@@ -636,6 +647,8 @@ static int dish_tick(int32_t dt)
     ds.t += dt; ds.stage_t += dt;
     if (ds.msg_t > 0) ds.msg_t -= dt;
     if (ds.fx_t > 0) ds.fx_t -= dt;
+    if (ds.oct_t > 0) ds.oct_t -= dt;
+    if (ds.pop) { ds.pop_t += dt; if (ds.pop_t > 2000) ds.pop = 0; }
     if (BDOWN(BTN_HOME)) {
         if (ds.stage != DS_STIR) return 2;
         dish_abort(); return -1;
@@ -705,8 +718,27 @@ static int dish_tick(int32_t dt)
         uint32_t now = tr_now_q8(), step = (now >> 8) / TICKS_STEP;
         ds.a = (int32_t)(((now >> 4) % (TICKS_BAR * 16u)) * 1608u / (TICKS_BAR * 16u));   /* the dish turns with the clock now: a bar a turn */
         if (ds.stage == DS_LOCKED && ds.stage_t > 2200) { ds.stage = DS_WAIT; ds.stage_t = 0; }
-        if ((ds.stage == DS_WAIT || ds.stage == DS_REVIEW) && BDOWN(BTN_REC)) {
-            take_n = 0; ds.n = 0; ds.few = 0;
+        if (BDOWN(BTN_OCT_DOWN) || BDOWN(BTN_OCT_UP)) {   /* the keys' octave (here, not the language) */
+            int32_t o = iclamp(ds.oct + (BDOWN(BTN_OCT_UP) ? 1 : -1), -2, 2);
+            if (o != ds.oct) { ds.oct = o; take_voice(key_note(13) + 12 + 12 * o, 0); }
+            else sfx(43, 0, 120, W_SQUARE, 900, 1, 90);   /* (as far as it goes) */
+            ds.oct_t = 1400; ds.fx_t = 0;
+        }
+        if (BDOWN(BTN_EDIT) && (ds.stage == DS_REVIEW || (ds.stage == DS_WAIT && dish_can_dub()))) {   /* add a part */
+            if (ds.stage == DS_WAIT) {           /* (the dish again: the song there was, at the new tempo) */
+                for (k = 0; k < TAKE_MAX; k++) { take_ev[k][0] = ds_old.ev[k][0]; take_ev[k][1] = ds_old.ev[k][1]; }
+                take_n = ds_old.n;
+            }
+            if (take_n >= TAKE_MAX) { dish_msg(T_TAKE_FULL); sfx(43, 0, 160, W_SQUARE, 900, 1, 90); }
+            else {
+                for (k = 0; k < take_n; k++) { ds.ev[k][0] = take_ev[k][0]; ds.ev[k][1] = take_ev[k][1]; }
+                ds.n = take_n; ds.base = take_n; ds.dub = 1; ds.few = 0; ds.full = 0; ds.pop = 0;
+                ds.start_step = ((step + 16u + 31u) / 32u) * 32u;
+                ds.stage = DS_COUNT; ds.stage_t = 0;
+                snd_ui(88);
+            }
+        } else if ((ds.stage == DS_WAIT || ds.stage == DS_REVIEW) && BDOWN(BTN_REC)) {
+            take_n = 0; ds.n = 0; ds.few = 0; ds.dub = 0; ds.base = 0; ds.full = 0; ds.pop = 0;
             ds.start_step = ((step + 16u + 31u) / 32u) * 32u;
             ds.stage = DS_COUNT; ds.stage_t = 0;
             snd_ui(84);
@@ -721,25 +753,38 @@ static int dish_tick(int32_t dt)
         }
         if (ds.stage == DS_REC) {
             if (step >= ds.start_step + 32u) {
-                if (ds.n < 3u) { ds.stage = DS_WAIT; ds.few = 1; }
-                else { for (k = 0; k < ds.n; k++) { take_ev[k][0] = ds.ev[k][0]; take_ev[k][1] = ds.ev[k][1]; } take_n = ds.n; ds.stage = DS_REVIEW; }
-                ds.stage_t = 0;
+                if (!ds.dub && ds.n < 3u) { ds.stage = DS_WAIT; ds.few = 1; }
+                else {
+                    for (k = 0; k < ds.n; k++) { take_ev[k][0] = ds.ev[k][0]; take_ev[k][1] = ds.ev[k][1]; }
+                    take_n = ds.n; ds.stage = DS_REVIEW;
+                    if (!ds.dub || ds.n > ds.base) { /* the words pop up, and a little run up */
+                        static const uint8_t RUN[5] = {72, 76, 79, 84, 88};
+                        ds.pop = (uint8_t)(ds.dub ? T_TAKE_ADDED : T_TAKE_DONE); ds.pop_t = 0;
+                        for (k = 0; k < 5; k++) sfx(RUN[k], (uint32_t)k * 60u, 600, W_TRI, 2400, 3, 160);
+                    }
+                }
+                ds.dub = 0; ds.stage_t = 0;
             } else
                 for (k = 0; k < AC_NKEY; k++)
-                    if ((in.kdown >> k & 1u) && ds.n < TAKE_MAX) {
-                        uint32_t s = (((now >> 8) + TICKS_STEP / 2u) / TICKS_STEP - ds.start_step) % 32u;
-                        ds.ev[ds.n][0] = (uint8_t)s; ds.ev[ds.n][1] = (uint8_t)k; ds.n++;
+                    if (in.kdown >> k & 1u) {
+                        if (ds.n < TAKE_MAX) {
+                            uint32_t s = (((now >> 8) + TICKS_STEP / 2u) / TICKS_STEP - ds.start_step) % 32u;
+                            ds.ev[ds.n][0] = tk_pack(s, ds.oct); ds.ev[ds.n][1] = (uint8_t)k; ds.n++;
+                        } else if (!ds.full) { ds.full = 1; dish_msg(T_TAKE_FULL); }
                     }
-            led_btn_want |= 1u << BTN_REC;
+            led_btn_want |= 1u << (ds.dub ? BTN_EDIT : BTN_REC);
         }
         for (k = 0; k < 4; k++) {                /* the four knobs: the song's effects */
             int32_t d = in.enc[ENC_KNOB1 + k], v = iclamp((int32_t)take_fx[k] + d, 0, TAKE_FX_MAX);
             if (!d) continue;
-            ds.fx_k = (uint8_t)k; ds.fx_t = 1600;
+            ds.fx_k = (uint8_t)k; ds.fx_t = 1600; ds.oct_t = 0;
             if (v != take_fx[k]) { take_fx[k] = (uint8_t)v; take_voice(72 + SC_PEN[v % 5] + 12 * (v / 5), 0); }   /* and how it sounds now */
         }
-        for (k = 0; k < AC_NKEY; k++) if (in.kdown >> k & 1u) take_voice(key_note(k) + 12, 0);
+        for (k = 0; k < AC_NKEY; k++) if (in.kdown >> k & 1u) take_voice(key_note(k) + 12 + 12 * ds.oct, 0);
         if (ds.stage == DS_WAIT && ipulse((uint32_t)ds.t, 900) > 128) led_btn_want |= 1u << BTN_REC;
+        if (ds.oct > 0) led_btn_want |= 1u << BTN_OCT_UP;   /* OCT+ or OCT- lit while the keys are moved that way */
+        else if (ds.oct < 0) led_btn_want |= 1u << BTN_OCT_DOWN;
+        if (ds.stage == DS_REVIEW || (ds.stage == DS_WAIT && dish_can_dub())) led_breathe_want |= 1u << BTN_EDIT;
         if (ds.stage == DS_REVIEW) {
             led_play_breathe = 1;
             if (BDOWN(BTN_PLAY)) return 1;
@@ -748,6 +793,63 @@ static int dish_tick(int32_t dt)
         led_key_want |= in.keys;
     }
     return 0;
+}
+/* the two bars being recorded (or kept), as a strip from (x0, y0), h high: 32 steps left to right, a line every beat,
+ * the two bars numbered and the octave the keys are in; each note a dash in its key's colour, as high as it sounds;
+ * the playhead going over them. While recording, the part it has passed is tinted red (how much of the two bars is
+ * gone) and the bar it is in glows; while adding a part, the notes there were stay dim under the new ones */
+#define DB_X 22
+#define DB_W 196
+#define DB_Y 190                                 /* recording: the strip at the foot, big */
+#define DB_H 40
+static void dish_bars(int32_t y0, int32_t h, uint32_t tm)
+{
+    int32_t k, rec = ds.stage == DS_REC, cnt = ds.stage == DS_COUNT, px, bar, sw = DB_W / 32;
+    uint32_t now = tr_now_q8(), loop = TICKS_STEP * 32u << 8, s32 = ((now >> 8) / TICKS_STEP) % 32u;
+    col_t red = HEXC(0xff453a);
+    char ob[8] = "OCT 0";
+    px = DB_X + (int32_t)((now % loop) * (uint32_t)DB_W / loop);
+    bar = px >= DB_X + DB_W / 2;
+    galpha(215); grect(DB_X - 8, y0 - 12, DB_W + 16, h + 16, th->bg); galpha(256);
+    if (rec) {                                   /* gone by: tinted; the bar it is in, lit */
+        galpha(40); grect(DB_X + bar * DB_W / 2, y0, DB_W / 2, h, red);
+        galpha(90); grect(DB_X, y0, px - DB_X, h, red); galpha(256);
+    }
+    for (k = 0; k <= 32; k += 4) {               /* a line every beat, the bars' brighter */
+        int32_t x = DB_X + k * DB_W / 32;
+        if (k % 16) { galpha(110); gline(x, y0 + 1, x, y0 + h - 2, th->mute); galpha(256); }
+        else grect(x - (k == 16), y0 - 2, 1 + (k == 16), h + 4, th->pad);
+    }
+    gline(DB_X, y0 + h, DB_X + DB_W, y0 + h, th->rim);
+    for (k = 0; k < 2; k++) {                    /* the bars' numbers */
+        char nb[2] = {(char)('1' + k), 0};
+        int on = (rec || cnt) && (cnt ? k == 0 && ipulse(tm, 500) > 128 : k == bar);
+        gtext(DB_X + k * DB_W / 2 + 3, y0 - 9, nb, on ? (rec ? red : th->text) : th->mute, 1);
+    }
+    if (ds.oct) { ob[4] = ds.oct > 0 ? '+' : '-'; ob[5] = (char)('0' + iabs(ds.oct)); ob[6] = 0; }
+    gtextr(DB_X + DB_W, y0 - 9, ob, ds.oct ? th->caps[0] : th->mute, 1);
+    for (k = 0; k < (ds.stage == DS_WAIT && !ds.few ? 0 : ds.n); k++) {   /* the notes */
+        int32_t st = (int32_t)tk_step(ds.ev[k]), key = ds.ev[k][1], p = key_note(key) + 12 * tk_oct(ds.ev[k]);
+        int32_t x = DB_X + st * DB_W / 32 + 1, y = y0 + h - 3 - (p - 24) * (h - 6) / 72;
+        int old = k < ds.base && (rec || cnt || (ds.pop && ds.pop_t < 2000)), hit = (uint32_t)st == s32 && !rec && !cnt;
+        col_t c = JK_ZONE[KEY_ZONE[key]];
+        y = iclamp(y, y0 + 1, y0 + h - 3);
+        if (old) { galpha(110); grect(x, y, sw - 1, 2, c); galpha(256); continue; }
+        if (hit) { galpha(120); gdisc(x + sw / 2, y + 1, 4, c); galpha(256); }
+        grect(x, y - (hit ? 1 : 0), sw - 1, hit ? 4 : 3, c);
+    }
+    if (!cnt) {                                  /* the playhead */
+        col_t c = rec ? red : th->text;
+        galpha(rec ? 256 : 150);
+        gline(px, y0 - 1, px, y0 + h + 1, c);
+        gline(px - 2, y0 - 3, px + 2, y0 - 3, c); gline(px - 1, y0 - 2, px + 1, y0 - 2, c);
+        galpha(256);
+    }
+}
+static void dish_bars_at(int32_t fy, uint32_t tm)   /* over the words at the foot: as much room as is left (none: not drawn) */
+{
+    int32_t h = imin(DB_H, fy - 6 - 184);
+    if (h >= 12) dish_bars(fy - 6 - h, h, tm);
 }
 static void dish_draw(void)
 {
@@ -776,11 +878,11 @@ static void dish_draw(void)
         int32_t a = a16 - 16384, x = cx + ((98 * icos(a)) >> 14), y = cy + ((54 * isin(a)) >> 14);
         galpha(90); gdisc(x, y, 7, th->pad); galpha(256); gdisc(x, y, 3, th->pad);
     }
-    if (ds.stage >= DS_REC || ds.stage == DS_WAIT) { /* the notes played, as stars: when by the angle, how high by the distance */
-        int32_t n = ds.stage == DS_REVIEW ? take_n : ds.n;
+    if (ds.stage >= DS_WAIT) {                   /* the notes played, as stars: when by the angle, how high by the distance */
+        int32_t n = ds.n;
         uint32_t s32 = ((tr_now_q8() >> 8) / TICKS_STEP) % 32u;
         for (k = 0; k < n; k++) {
-            int32_t st = ds.ev[k][0], a = st * 2048 * 2 - 16384, rr = 24 + ds.ev[k][1] * 2;
+            int32_t st = (int32_t)tk_step(ds.ev[k]), a = st * 2048 * 2 - 16384, rr = 24 + ds.ev[k][1] * 2;
             int32_t x = cx + ((rr * icos(a)) >> 14), y = cy + ((rr * 55 / 100 * isin(a)) >> 14);
             int hit = (uint32_t)st == s32 && ds.stage == DS_REVIEW;
             galpha(80); gdisc(x, y, hit ? 6 : 3, th->caps[ds.ev[k][1] % 5]); galpha(256);
@@ -800,7 +902,17 @@ static void dish_draw(void)
             }
             galpha(256);
         }
-        if (ds.fx_t > 0) {                       /* the one just turned: its name, and how much */
+        uint32_t stp = (tr_now_q8() >> 8) / TICKS_STEP;
+        int counting = ds.stage == DS_COUNT && ds.start_step > stp && ds.start_step - stp <= 16u;   /* (the count's number is there) */
+        if (ds.oct_t > 0 && !ds.pop && !counting) {   /* the keys' octave, just changed */
+            char b[8] = "OCT 0";
+            if (ds.oct) { b[4] = ds.oct > 0 ? '+' : '-'; b[5] = (char)('0' + iabs(ds.oct)); b[6] = 0; }
+            galpha(imin(256, ds.oct_t));
+            grect(60, cy - 6 - 3 * ts(2, 3), 120, 5 * ts(2, 3) + 12, th->bg);
+            gfit(120, cy - 3 * ts(2, 3), 116, b, ds.oct ? th->caps[0] : th->text, ts(2, 3));
+            galpha(256);
+        }
+        if (ds.fx_t > 0 && !ds.pop) {            /* the one just turned: its name, and how much */
             char b[40]; const char *p = TR(T_FX_NAME1 + ds.fx_k); int32_t n = 0;
             while (*p && n < 34) b[n++] = *p++;
             b[n++] = ' '; b[n++] = (char)('0' + take_fx[ds.fx_k]); b[n] = 0;
@@ -849,21 +961,37 @@ static void dish_draw(void)
         } else if (ds.stage == DS_WAIT) {
             gfit(120, top, 232, TR(T_TAKE1), th->text, st);
             fy = gfoot(238, TR(ds.few ? T_TAKE_FEW : T_TAKE_REC), ds.few ? th->caps[0] : th->pad, th->bg, a);
-            gfoot(fy - 2, TR(T_FX_HINT), th->mute, th->bg, hint);
+            if (dish_can_dub()) fy = gfoot(fy - 2, TR(T_TAKE_DUB), th->caps[2], th->bg, hint);
+            fy = gfoot(fy - 2, TR(T_FX_HINT), th->mute, th->bg, hint);
+            dish_bars_at(fy, tm);
         } else if (ds.stage == DS_COUNT) {
             uint32_t step = (tr_now_q8() >> 8) / TICKS_STEP;
-            gfit(120, top, 232, TR(T_TAKE_READY), th->text, st);
+            gfit(120, top, 232, TR(ds.dub ? T_TAKE_DUBBING : T_TAKE_READY), th->text, st);
             if (ds.start_step > step && ds.start_step - step <= 16u) {
                 char num[2] = {(char)('0' + (ds.start_step - step + 3u) / 4u), 0};
                 gtextc(120, cy - 12, num, th->pad, 5);
             }
+            dish_bars(DB_Y, DB_H, tm);
         } else if (ds.stage == DS_REC) {
-            used = gfit(128, top, 208, TR(T_TAKE_RECING), HEXC(0xff453a), st);
-            gdisc(128 - gtextw(TR(T_TAKE_RECING), used) / 2 - 4 - 3 * used, top + 5 * used / 2, 2 * used, HEXC(0xff453a));
+            int id = ds.dub ? T_TAKE_DUBBING : T_TAKE_RECING;
+            used = gfit(128, top, 208, TR(id), HEXC(0xff453a), st);
+            if ((tm / 400u) & 1u || ds.dub) gdisc(128 - gtextw(TR(id), used) / 2 - 4 - 3 * used, top + 5 * used / 2, 2 * used, HEXC(0xff453a));
+            dish_bars(DB_Y, DB_H, tm);
         } else {
             gfit(120, top, 232, TR(T_YOURSONG), th->text, st);
             fy = gfoot(238, TR(T_TAKE_KEEP), th->pad, th->bg, a);
-            gfoot(fy - 2, TR(T_FX_HINT), th->mute, th->bg, hint);
+            fy = gfoot(fy - 2, TR((tm / 3000u) & 1u ? T_FX_HINT : T_TAKE_DUB), (tm / 3000u) & 1u ? th->mute : th->caps[2], th->bg, hint);   /* (taking turns: room for the strip) */
+            dish_bars_at(fy, tm);
+        }
+        if (ds.stage != DS_STIR && ds.msg_t > 0) gfoot(DB_Y - 14, TR(ds.msg), th->caps[0], th->bg, hint);
+        if (ds.pop) {                            /* "RECORDED!": large, dropping in, bobbing, then up and away; twinkles */
+            for (k = 0; k < 10; k++) {
+                int32_t x = 20 + (int32_t)(ihash((uint32_t)k + 400u) * 200u >> 16), y = 50 + (int32_t)(ihash((uint32_t)k + 500u) * 120u >> 16);
+                int32_t p = 256 - iabs(ds.pop_t - 200 - k * 90) * 256 / 500;
+                if (p <= 0) continue;
+                galpha(p); jk_star(x, y, 1 + p / 70, th->caps[k % 5]); galpha(256);
+            }
+            jk_big(TR(ds.pop), cy - 4, ds.pop_t, 0, 1500, 0, tm);
         }
     }
 }

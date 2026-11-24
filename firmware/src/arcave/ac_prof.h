@@ -53,8 +53,10 @@ static const col_t PF_KCOL[8] = {0, AC_RGB(255, 96, 190), AC_RGB(255, 140, 40), 
 /* ---------------------------------------------------------------- what is kept */
 #define PF_NAME_MAX 12
 enum { PF_NAMED = 1, PF_TOLD_TIX = 2, PF_TOLD_NAME = 4, PF_BT = 8 };
+enum { PF_ONCE_BT = 1 };
 typedef struct {
-    uint8_t ver, flags, mach_done, rsv0;         /* mach_done: a bit for each machine a round has been finished on */
+    uint8_t ver, flags, mach_done, once;         /* mach_done: a bit for each machine a round has been finished on; once:
+                                                    PF_ONCE_BT, Bluetooth turned on the first time this firmware ran */
     char name[PF_NAME_MAX + 4];
     uint32_t tickets, won;                       /* in the pocket; won since the start */
     uint8_t own[16];                             /* a bit an item: shelf * 16 + kind */
@@ -92,12 +94,15 @@ static void pf_reset(void)
     uint32_t i;
     for (i = 0; i < sizeof pf; i++) ((uint8_t *)&pf)[i] = 0;
     pf.ver = 1;
+    pf.flags = PF_BT; pf.once = PF_ONCE_BT;      /* Bluetooth on from the start (the settings turn it off) */
 }
 /* after a load: nothing worn that is not owned or not in the catalogue, a name of letters the font has */
 static void pf_check(void)
 {
     int32_t i, z;
     if (pf.ver != 1) { pf_reset(); return; }
+    if (!(pf.once & PF_ONCE_BT)) { pf.flags |= PF_BT; pf.once |= PF_ONCE_BT; pf_dirty = 1; }   /* a save from before Bluetooth was
+                                                    on by default: on, once (turned off after this, it stays off) */
     pf.name[PF_NAME_MAX] = 0;
     for (i = 0; i < PF_NAME_MAX && pf.name[i]; i++) if (pf.name[i] < ' ' || pf.name[i] > 'Z') pf.name[i] = '?';
     for (i = 0; i < PC_ROCK_N; i++) if (!pf_owned(i, pf.eq[i])) pf.eq[i] = 0;
@@ -167,4 +172,5 @@ static void pf_hat_told(int which)
 
 /* Bluetooth: bt_set, bt_state and bt_name are the platform's (firmware/src/bt.c on the FM-1; stand-ins in
  * tests/host.c and web/emu/web_host.c, where there is no radio and the settings do not show the line). ON or OFF is
- * kept here, PF_BT in pf.flags: off until the player turns it on. */
+ * kept here, PF_BT in pf.flags: on from the start (and once, on the first start after an update from a firmware where it
+ * was off by default), until the player turns it off. */

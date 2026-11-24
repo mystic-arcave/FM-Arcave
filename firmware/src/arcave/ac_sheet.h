@@ -115,8 +115,8 @@ static void sheet_draw(void)
 {
     if (sh.on == SH_MACH) { mtutor_draw(); return; }
     if (sh.on == SH_FX) {
-        static const int IDS[5] = {T_FX_1, T_FX_2, T_FX_3, T_FX_4, T_FX_5};
-        sheet_page(TR(T_FX_TITLE), th->pad, IDS, 5, 1);
+        static const int IDS[6] = {T_FX_1, T_FX_2, T_FX_3, T_FX_4, T_FX_5, T_FX_6};
+        sheet_page(TR(T_FX_TITLE), th->pad, IDS, 6, 1);
         return;
     }
     if (sh.on == SH_INTRO) { tutor_draw(); return; }

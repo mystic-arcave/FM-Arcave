@@ -2,12 +2,14 @@
 /* The settings, on GLO: the game holds still under a sheet of dark glass. SELECT (or KNOB 1) moves, PRESETS (or
  * KNOB 2) changes; PLAY or OCT+ confirms or steps on (OCT- steps back: in here they do not change the language);
  * GLO closes. ABOUT tells what the Mystic Arcave is. The first line is the player's profile (ac_shop.h); the last
- * wipes the whole save, and only here: PLAY held on it for three seconds. BLUETOOTH is shown where there is a radio. */
+ * wipes the whole save, and only here: PLAY held on it for three seconds; the line over it, not one to select, is the
+ * firmware's version. BLUETOOTH is shown where there is a radio. */
 
-enum { MI_PROFILE, MI_LANG, MI_TEXT, MI_EAR, MI_LOOK, MI_LINK, MI_BT, MI_ABOUT, MI_REPLAY, MI_SKIP, MI_RESET, MI_WIPE, MI_N };
+enum { MI_PROFILE, MI_LANG, MI_TEXT, MI_EAR, MI_LOOK, MI_LINK, MI_BT, MI_ABOUT, MI_REPLAY, MI_SKIP, MI_RESET, MI_VER, MI_WIPE, MI_N };
 enum { MA_NONE, MA_REPLAY, MA_RESET, MA_CHANGED, MA_SKIP, MA_PROFILE, MA_WIPE, MA_BT };
 static struct { uint8_t on, sel, about, sure; int32_t t, win, rest, hold; } mn;
 static int mi_shown(int i) { return i != MI_BT || bt_state() != BT_NONE; }
+static int mi_pickable(int i) { return mi_shown(i) && i != MI_VER; }   /* (the version is only read) */
 #ifndef APP_VER
 #define APP_VER "dev"
 #endif
@@ -36,7 +38,7 @@ static int menu_tick(int32_t dt)
     if (BDOWN(BTN_GLO) || BDOWN(BTN_HOME)) { mn.on = 0; snd_ui(67); return MA_NONE; }   /* (arcave.c: this press does not reopen it) */
     if (mv) {                                    /* (past a line that is not shown) */
         int32_t k = mn.sel, d = mv > 0 ? 1 : -1;
-        do k += d; while (k >= 0 && k < MI_N && !mi_shown(k));
+        do k += d; while (k >= 0 && k < MI_N && !mi_pickable(k));
         if (k >= 0 && k < MI_N) mn.sel = (uint8_t)k;
         mn.sure = 0; mn.hold = 0; snd_ui(64 + mn.sel);
     }
@@ -72,7 +74,7 @@ static int menu_tick(int32_t dt)
 }
 static void menu_draw(void)
 {
-    static const int LAB[MI_N] = {T_PROFILE, T_LANGUAGE, T_TEXTSIZE, T_EAR, T_LOOK, T_LINK, T_BT, T_ABOUT, T_REPLAY, T_SKIP, T_RESET, T_WIPE_ALL};
+    static const int LAB[MI_N] = {T_PROFILE, T_LANGUAGE, T_TEXTSIZE, T_EAR, T_LOOK, T_LINK, T_BT, T_ABOUT, T_REPLAY, T_SKIP, T_RESET, T_VERSION, T_WIPE_ALL};
     static const int BTS[5] = {T_OFF, T_BT_START, T_BT_ADV, T_BT_CONN, T_BT_FAIL};
     int bt_up = mn.sel == MI_BT && bt_state() != BT_OFF && bt_state() != BT_NONE;   /* the radio's line, and it is doing something */
     static const int LKS[4] = {T_LINK_ALONE, T_LINK_FOLLOW, T_LINK_LEAD, T_LINK_CLOCK};
@@ -124,11 +126,13 @@ static void menu_draw(void)
             if (!mi_shown(i)) { vals[i] = val; scs[i] = sc; lw[i] = 216; hs[i] = 0; continue; }
             if (i == MI_PROFILE) val = pf_named() ? pf.name : "\xE2\x86\x92";
             else if (i == MI_BT) val = TR(pf.flags & PF_BT ? T_ON : T_OFF);
+            else if (i == MI_VER) val = APP_VER;
             else if (i == MI_LANG) val = TR(T_LANG);
             else if (i == MI_TEXT) val = TR(T_SMALL + tsize);
             else if (i == MI_EAR) val = TR(sy_ear ? T_ON : T_OFF);
             else if (i == MI_LOOK) val = look_i ? "SLOW GLASS" : "BLACK OPAL";
             else if (i == MI_LINK) { if (link_id) { idb[0] = (char)('0' + link_id); idb[1] = 0; val = idb; } else val = TR(T_OFF); }
+            if (i == MI_VER) sc = smin;          /* (small: something to read, not to set) */
             while (sc > smin && gtextw(lab, sc) + gtextw(val, sc) + 14 > 216) sc--;
             vals[i] = val; scs[i] = sc; lw[i] = 216 - (val[0] ? gtextw(val, sc) + 10 : 0);
             hs[i] = imax(rh, gblock_h(lw[i], lab, sc) + 8);

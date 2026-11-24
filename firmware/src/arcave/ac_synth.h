@@ -64,6 +64,8 @@ static volatile uint32_t sy_echo_len = SY_DLN;   /* the echo's time, in half-rat
 static int16_t sy_rv[RV_L0 + RV_L1 + RV_L2 + RV_LA] AC_POOL;
 static uint32_t sy_rvi[4];
 static int32_t sy_rvlp[3], sy_rv_live;           /* (blocks it still has something to say: it costs nothing when silent) */
+static volatile int32_t sy_rv_fb = 214, sy_rv_hold = 4200;   /* its combs' feedback (Q8: how long it rings) and blocks kept
+                                                    awake after a note (the player's song turns both up with KNOB 2) */
 static volatile uint8_t sy_ear;                  /* child ear protection: everything 12 dB down and capped well under full scale */
 
 static volatile int32_t sy_drone_want, sy_rumble_want, sy_rumble_pitch = 256, sy_music_want = 256;   /* 0..256 */
@@ -236,7 +238,7 @@ static void arcave_audio(int32_t *out, uint32_t n)
                 fq = o->fq; flp = o->lp; fbp = o->bp;
             }
             ph = o->ph; inc = o->inc; a = o->amp >> 8; gl = o->gl; gr = o->gr; sd = o->send; rs = o->rs; dr = o->dr;
-            if (rs) sy_rv_live = 4200;           /* (three seconds after its last note) */
+            if (rs) sy_rv_live = sy_rv_hold;     /* (three seconds after its last note, longer for a long reverb) */
             for (i = 0; i < 32u; i++) {
                 int32_t s;
                 ph += inc;
@@ -321,7 +323,7 @@ static void arcave_audio(int32_t *out, uint32_t n)
                     int16_t *p = &sy_rv[OFF[k] + sy_rvi[k]];
                     c[k] = *p;
                     sy_rvlp[k] += ((c[k] - sy_rvlp[k]) * 17000) >> 15;   /* the highs die first */
-                    *p = (int16_t)iclamp(x + ((sy_rvlp[k] * 214) >> 8), -32000, 32000);
+                    *p = (int16_t)iclamp(x + ((sy_rvlp[k] * sy_rv_fb) >> 8), -32000, 32000);
                     if (++sy_rvi[k] >= LEN[k]) sy_rvi[k] = 0;
                 }
                 s = (c[0] + c[1] + c[2]) >> 1;

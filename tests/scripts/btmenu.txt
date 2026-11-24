@@ -1,5 +1,6 @@
-# the settings where there is a radio (BT=1: a pretend one): down to BLUETOOTH, turned ON: starting, waiting for a
-# computer under the FM-1's name, then connected (a banner says so once the settings are closed)
+# the settings where there is a radio (BT=1: a pretend one): Bluetooth is on from the start, so BLUETOOTH reads ON,
+# waiting for a computer under the FM-1's name; PLAY turns it OFF, PLAY again ON: starting, waiting, then connected
+# (a banner says so once the settings are closed)
 2000 btn 7
 2300 enc 0 1
 2400 enc 0 1
@@ -9,8 +10,10 @@
 2800 enc 0 1
 3100 shot
 3300 btn 12
-3700 shot
-5000 shot
-6800 btn 7
-7600 shot
-9000 end
+3600 shot
+3900 btn 12
+4300 shot
+5600 shot
+7400 btn 7
+8200 shot
+9600 end

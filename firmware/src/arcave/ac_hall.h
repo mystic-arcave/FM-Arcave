@@ -381,6 +381,7 @@ static void room_enter(void)
     rh.ride = -1; rh.intro = 1; rh.zoom = 0; rh.leave = 0; rh.want = 0; rh.closing = 0; rh.inited = 1;
     mus_set(MUS_OFF, 0); sy_drone_want = 0; sy_rumble_want = 0; sy_music_want = 256;
     if (!tr_follow) tr_bpm_q8 = (uint32_t)rm.bpm << 8;
+    take_bus(0);                                 /* (the player's song's echo and reverb off: the room's own) */
     room_echo_set();
     sfx(57, 0, 900, W_SINE, 2400, 60, 200); sfx(64, 120, 900, W_SINE, 2000, 60, 200); sfx(72, 260, 1400, W_SINE, 2000, 60, 220);
 }

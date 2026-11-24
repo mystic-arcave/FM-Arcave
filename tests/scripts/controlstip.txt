@@ -1,0 +1,51 @@
+# the controls lesson, helped along: the wrong control puts a tip under the scene and the control to use flashes (a
+# key in the roll: the knob; the top row in the hop: the bottom row; the bottom row in the big hop and the jump: the
+# top row; a top key before Rock is on the white keys: the knob); left alone at YOUR TURN, the row flashes again; and
+# doing a step right during its demo takes it over (the roll, the hop, the jump: no YOUR TURN, straight to the tick)
+600 btn 12
+2600 btn 12
+7000 btn 8
+7600 keys 1
+7700 keys 0
+7750 shot
+8000 shot
+8300 enc 6 4
+8350 shot
+8500 enc 6 4
+8700 enc 6 4
+8800 shot
+10300 keys 2
+10400 keys 0
+10450 shot
+10650 shot
+11000 keys 1
+11050 shot
+11100 keys 0
+11200 keys 1
+11300 keys 0
+11350 shot
+17750 shot
+17850 shot
+18500 keys 1
+18600 keys 0
+18650 shot
+19000 keys 2
+19100 keys 0
+19300 keys 2
+19400 keys 0
+19500 shot
+21300 keys 1
+21400 keys 0
+21450 shot
+22000 enc 6 2
+22100 shot
+22500 keys 2
+22600 keys 0
+22650 shot
+23000 enc 6 8
+23200 enc 6 8
+23500 keys 2
+23600 keys 0
+24000 shot
+26600 shot
+28000 end

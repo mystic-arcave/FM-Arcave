@@ -40,6 +40,7 @@
 
 enum { SC_INTRO, SC_CAVE, SC_LAMP, SC_DISH, SC_MACH, SC_DUO, SC_ROOM };
 static uint8_t scene, replay, thanks_due;
+static int dish_rec_screen(void) { return scene == SC_DISH && ds.stage != DS_STIR && !ds.intro; }   /* (OCT and EDIT are the dish's there) */
 static uint32_t ac_last_ms, save_at;
 static uint8_t ac_started, juke_track;
 static int32_t thanks_t, algo_quiet, tip_t;
@@ -139,7 +140,7 @@ static void story_reset(void)
 static void save_wipe(void)
 {
     uint32_t i;
-    pf_reset(); bt_set(0); pu.on = PU_OFF; pfx_clear(); tix.on = 0;
+    pf_reset(); bt_set(1); pu.on = PU_OFF; pfx_clear(); tix.on = 0;   /* (as new: Bluetooth on) */
 #ifdef DINGHY_HOST
     printf("%6u ms  the whole save wiped\n", fm1_ms);
 #endif
@@ -203,7 +204,7 @@ static void arcave_init(void)
         set_lang(v->lang); set_look(v->look); story = v->story > 4u ? 0u : v->story; link_id = v->link % 5u; juke_track = v->track % JUKE_N;
         take_bpm = v->take_bpm ? v->take_bpm : 90u;
         tsize = v->tsize1 >= 1u && v->tsize1 <= 3u ? (uint8_t)(v->tsize1 - 1u) : 1u;
-        for (i = 0; i < TAKE_MAX; i++) { take_ev[i][0] = v->take[i][0] % 32u; take_ev[i][1] = v->take[i][1] % AC_NKEY; }
+        for (i = 0; i < TAKE_MAX; i++) { take_ev[i][0] = tk_sane(v->take[i][0]); take_ev[i][1] = v->take[i][1] % AC_NKEY; }
         take_n = v->take_n > TAKE_MAX ? 0u : v->take_n;
         for (i = 0; i < 3u; i++) best[i] = v->best[i];
         play_s = play_saved_s = sv.play_s; sy_ear = sv.ear ? 1u : 0u; cv.secrets = sv.secrets & 14u; race_best_cs = sv.race_cs;
@@ -335,7 +336,9 @@ static void arcave_frame(void)
     if (algo_quiet > 0) algo_quiet -= dt;
 
     /* OCT- and OCT+ step through the languages, anywhere */
-    if ((BDOWN(BTN_OCT_DOWN) || BDOWN(BTN_OCT_UP)) && !mn.on && !pu.on && scene != SC_ROOM) {   /* (in the music room they are the octave) */   /* (in the settings OCT+ confirms and OCT- steps back) */
+    if (scene != SC_ROOM)                        /* the player's song's echo and reverb, while it is what plays (ac_music.h) */
+        take_bus((scene == SC_DISH && ds.stage != DS_STIR) || (mus_mode == MUS_JUKE && mus_track % JUKE_N == 0u));
+    if ((BDOWN(BTN_OCT_DOWN) || BDOWN(BTN_OCT_UP)) && !mn.on && !pu.on && scene != SC_ROOM && !dish_rec_screen()) {   /* (nor at the dish, recording: the keys' octave) */   /* (in the music room they are the octave) */   /* (in the settings OCT+ confirms and OCT- steps back) */
         set_lang(lang + (BDOWN(BTN_OCT_UP) ? 1 : L_N - 1));
         lang_touched = 1;
         if (lang_tip_up()) ;                     /* the tip is up: it shows the new language itself */
@@ -398,7 +401,7 @@ static void arcave_frame(void)
         } else if (in.enc[ENC_ALGORITHM] && scene != SC_INTRO && scene != SC_LAMP && scene != SC_DISH && scene != SC_DUO && scene != SC_ROOM
             && !(scene == SC_MACH && mc.which == 2 && mc.state == MS_PLAY)) juke_change(in.enc[ENC_ALGORITHM]);
         if (BDOWN(BTN_FX) && scene != SC_ROOM) fx_trigger();   /* (the music room's buttons are its own) */
-        if (BDOWN(BTN_EDIT) && !(scene == SC_INTRO && G.phase == IP_TITLE) && scene != SC_DUO && scene != SC_ROOM) {
+        if (BDOWN(BTN_EDIT) && !(scene == SC_INTRO && G.phase == IP_TITLE) && scene != SC_DUO && scene != SC_ROOM && !dish_rec_screen()) {
             pu_open(PU_SHOP, 0); in.bdown &= ~(1u << BTN_EDIT);   /* (the scores: the board in the cave, or the profile) */
         }
         else if (scene == SC_INTRO && G.phase == IP_PLAY && BDOWN(BTN_HOME)) sheet_open(SH_INTRO);

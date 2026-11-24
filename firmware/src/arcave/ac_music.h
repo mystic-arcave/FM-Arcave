@@ -41,22 +41,54 @@ static int32_t song_root(const song_t *s) { int32_t t = (int32_t)(s - SONGS); re
 /* the player's own tune (kept in the save; ac_game.c copies it here) */
 #define TAKE_MAX 48
 static volatile uint8_t take_n, take_bpm = 90;
-static uint8_t take_ev[TAKE_MAX][2];             /* [step of 32, key] */
+static uint8_t take_ev[TAKE_MAX][2];             /* [step of 32 | octave << 5, key]: the octave (OCT- OCT+ at the dish) in the
+                                                    top three bits, -2..+2 (0 in every song made before it could be set) */
+static uint32_t tk_step(const uint8_t *e) { return e[0] & 31u; }
+static int32_t tk_oct(const uint8_t *e) { return (int32_t)(int8_t)(e[0] & 0xE0u) >> 5; }
+static uint8_t tk_pack(uint32_t step, int32_t oct) { return (uint8_t)((step & 31u) | (((uint32_t)oct & 7u) << 5)); }
+static uint8_t tk_sane(uint32_t b)               /* a step byte from a save: an octave out of range is none */
+{
+    int32_t o = (int32_t)(int8_t)(b & 0xE0u) >> 5;
+    return tk_pack(b & 31u, o >= -2 && o <= 2 ? o : 0);
+}
 /* the song's four effects, 0..8 each (KNOB 1-4 at the dish): echo, reverb, distortion, chorus */
 #define TAKE_FX_MAX 8
 static volatile uint8_t take_fx[4] = {4, 0, 0, 0};
 /* one of the player's notes, with the effects on it. irq: from the tune (the interrupt), else from the main loop, after
- * delay ms */
+ * delay ms. Each knob's eight steps rise on a curve: gentle at first, far stronger at the top (echo: more of it, and it
+ * comes back longer, take_bus; reverb: wetter, the dry note stepping back, and a longer ring; distortion: driven up to
+ * 32 times into the clip; chorus: up to 60 cents apart, wider, and the two copies as loud as the note) */
 static void take_voice_at(int32_t note, int irq, uint32_t delay)
 {
-    uint32_t e = take_fx[0], r = take_fx[1], d = take_fx[2], c = take_fx[3], k;
-    uint32_t vol = 3000u * 256u / (256u + d * 20u), send = e ? 26u + e * 26u : 0u, rs = r * 28u;
+    static const uint8_t SEND[9] = {0, 40, 70, 100, 130, 160, 195, 225, 255}, RSND[9] = {0, 36, 64, 96, 128, 160, 196, 228, 255};
+    static const uint8_t DRV[9] = {0, 2, 3, 5, 8, 12, 18, 27, 40}, DET[9] = {0, 6, 9, 13, 18, 25, 34, 46, 60}, PAN[9] = {0, 40, 50, 58, 64, 70, 75, 80, 84};
+    static const uint16_t DVOL[9] = {3000, 2600, 2300, 2050, 1850, 1700, 1580, 1480, 1400};   /* (a clipped note is louder) */
+    uint32_t e = take_fx[0] % 9u, r = take_fx[1] % 9u, d = take_fx[2] % 9u, c = take_fx[3] % 9u, k, vol = DVOL[d];
+    if (r) vol = vol * (24u - r) / 24u;
     if (c) vol = vol * 4u / 5u;
-    for (k = 0; k < (c ? 3u : 1u); k++) {        /* chorus: two more of it, a little off pitch, one each side */
-        int32_t det = k == 1u ? 5 + (int32_t)c * 3 : k == 2u ? -5 - (int32_t)c * 3 : 0, pan = k == 1u ? 70 : k == 2u ? -70 : 0;
-        uint32_t v = k ? vol * 11u / 20u : vol;
-        if (irq) sy_now_fx(note, 700, W_TRI, v, 5, send, det, pan, 0, rs, d);
-        else sfx_fx(note, delay, 700, W_TRI, v, 5, send, det, pan, 0, rs, d);
+    for (k = 0; k < (c ? 3u : 1u); k++) {        /* chorus: two more of it, off pitch, one each side */
+        int32_t det = k == 1u ? DET[c] : k == 2u ? -(int32_t)DET[c] : 0, pan = k == 1u ? PAN[c] : k == 2u ? -(int32_t)PAN[c] : 0;
+        uint32_t v = k ? vol * (10u + c) / 20u : vol;
+        if (irq) sy_now_fx(note, 700, W_TRI, v, 5, SEND[e], det, pan, 0, RSND[r], DRV[d]);
+        else sfx_fx(note, delay, 700, W_TRI, v, 5, SEND[e], det, pan, 0, RSND[r], DRV[d]);
+    }
+}
+/* the echo and reverb (shared by every sound) set for the player's song while it is what plays (the dish, or its tune
+ * on the jukebox): the echo three sixteenths long at its tempo, coming back more often the higher KNOB 1; the reverb
+ * ringing longer the higher KNOB 2. Off: as they were (the music room sets its own as it is entered) */
+static uint8_t take_bus_on;
+static void take_bus(int on)
+{
+    static const uint8_t FB[9] = {115, 120, 130, 145, 160, 175, 190, 205, 220};
+    if (on) {
+        uint32_t r = take_fx[1] % 9u, n = 22050u * 45u / (uint32_t)imax(take_bpm, 40);
+        if (n > SY_DLN) n = n * 2u / 3u;         /* (slow: two sixteenths) */
+        sy_echo_len = n; sy_echo_fb = FB[take_fx[0] % 9u];
+        sy_rv_fb = 214 + (int32_t)r * 4; sy_rv_hold = 4200 + (int32_t)r * 1200;
+        take_bus_on = 1;
+    } else if (take_bus_on) {
+        sy_echo_len = SY_DLN; sy_echo_fb = 115; sy_rv_fb = 214; sy_rv_hold = 4200;
+        take_bus_on = 0;
     }
 }
 static void take_voice(int32_t note, int irq) { take_voice_at(note, irq, 0); }
@@ -162,7 +194,7 @@ static int mus_in_song(uint32_t ss) { return mus_solo && (mus_demo || mus_cs(ss)
 static int32_t mus_take_first(uint32_t s32)      /* the player's own song: its first note at this step of 32, or -1 */
 {
     uint32_t k;
-    for (k = 0; k < take_n; k++) if (take_ev[k][0] == s32) return (int32_t)k;
+    for (k = 0; k < take_n; k++) if (tk_step(take_ev[k]) == s32) return (int32_t)k;
     return -1;
 }
 
@@ -205,7 +237,7 @@ static int32_t mus_note_at(uint32_t track, uint32_t ss, int32_t *pitch, int *par
         int32_t k = mus_take_first(ss % 32u), key;
         if (k < 0) return MUS_NONE;
         key = take_ev[k][1];
-        *pitch = key_note(key) + 12; *part = 2;
+        *pitch = key_note(key) + 12 + 12 * tk_oct(take_ev[k]); *part = 2;
         return key * 15 / 26;
     }
     bar = MELODY[track % JUKE_N][(ss / 16u) % mus_song_bars(track)];
@@ -274,7 +306,7 @@ static void mus_juke(uint32_t step)
         uint32_t s32 = step % 32u;
         int32_t first = solo && !mus_demo ? mus_take_first(s32) : -1;   /* (the one the player plays is left out) */
         for (k = 0; k < take_n; k++)
-            if (take_ev[k][0] == s32 && (int32_t)k != first) take_voice(key_note(take_ev[k][1]) + 12, 1);
+            if (tk_step(take_ev[k]) == s32 && (int32_t)k != first) take_voice(key_note(take_ev[k][1]) + 12 + 12 * tk_oct(take_ev[k]), 1);
     }
 }
 
