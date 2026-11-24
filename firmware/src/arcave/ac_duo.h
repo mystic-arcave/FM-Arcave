@@ -10,10 +10,12 @@
  *     TWIN ROAD       a song comes up the road at you, half of its notes yours, half your friend's, the big ones both
  *                     at once. Each player has a shape of their own (a diamond, a circle, a triangle): yours are full,
  *                     the others' only outlined
- *     ECHO STEPS      one plays a few notes; the other only sees the friend's rock and keys, and plays them back;
- *                     a bar counted in before each part (4, 3, 2, 1 on the beats), and they swap
- *     NOTE RALLY      one note, kept in the air: it comes down in a lane drawn at random each time, a knob rolls you
- *                     under it, a key sends it back on the beat
+ *     ECHO STEPS      chasm after chasm on the way to the Echo's family: whoever leads plays a path of their own
+ *                     across in one bar, each note a stepping stone (where in the bar, how high its key's colour); the
+ *                     others play it back to cross. A bar counted in before each part (4, 3, 2, 1), and they swap
+ *     NOTE RALLY      one note, kept in the air in the giant's hall: it comes down on a cushion drawn at random each
+ *                     time, a knob rolls you under it, a key sends it back on the beat
+ *                     (these two are places, with a story's opening each: ac_duoplace.h)
  *   ROCK-OFF      the one game against each other: the same song for both, who catches more (a key where no note
  *                 is costs points)
  *   afterwards    the story played through, its four games can be played again for the best score; TWIN ROAD then
@@ -32,6 +34,8 @@
  *                 next seat 1, the next seat 2 (a fourth waits at the door)
  *   CC 112 k+32s  a key pressed (k 0..26)    CC 113 k+32s  a key let go (127: all)    CC 114 d+16s  the pipe's dial
  *   CC 118 c, CC 115 a, CC 116 b, CC 117 op+16s   a message with three numbers; the op comes last (DO_...)
+ *                 (ECHO STEPS: each stone of the path is told by whoever leads, DO_STONE, so all build the same echo)
+ *                 (and, one at a time with "I am here": what each one's Rock wears, DO_LOOK, and their name, DO_NAME)
  *   (CC 114 d is also the rock the potion is over, and your lane in NOTE RALLY)
  * The Link page passes the four of a message on together, so two players' messages never mix on the way to a third.
  * Seat 0 also says where its clock is four times a second (ac_sync.h, CC 102-107 with sender 5 and "follow"): the
@@ -45,7 +49,7 @@ static const uint8_t DU_CHAP[4] = {DM_PIPE, DM_ROAD, DM_ECHO, DM_DRUM};
 static int du_chap(int m) { int i; for (i = 0; i < 4; i++) if (DU_CHAP[i] == m) return i; return 4; }
 static const uint8_t DU_TRACK[DM_N] = {4, 1, 3, 5, 2};   /* OPAL TIDE, SPORE DRIFT, MYCELIUM NIGHTS, ROLL ON, CRYSTAL STEPS */
 enum { DUS_LOBBY, DUS_MENU, DUS_CARD, DUS_COUNT, DUS_PLAY, DUS_RESULT, DUS_FINALE, DUS_ERROR };
-enum { DO_HELLO = 1, DO_EPOCH, DO_PICK, DO_OPEN, DO_READY, DO_GO, DO_HIT, DO_MISS, DO_QUIT, DO_STRAY, DO_SONG, DO_POUR };
+enum { DO_HELLO = 1, DO_EPOCH, DO_PICK, DO_OPEN, DO_READY, DO_GO, DO_HIT, DO_MISS, DO_QUIT, DO_STRAY, DO_SONG, DO_POUR, DO_STONE, DO_LOOK, DO_NAME };
 #define DU_YL 180                                /* the line the notes are played on */
 #define DU_LOOK 288                              /* a note is seen three beats ahead */
 #define DU_WIN 34                                /* ticks either side that still count */
@@ -53,7 +57,19 @@ enum { DO_HELLO = 1, DO_EPOCH, DO_PICK, DO_OPEN, DO_READY, DO_GO, DO_HIT, DO_MIS
 #define DU_NOTES 160
 #define DU_PIPE_N 12                             /* (the dial's message: a rock of POTION CHOIR, a lane of NOTE RALLY) */
 #define DU_ECHO_R 6                              /* ECHO STEPS: six rounds, */
-#define DU_ECHO_LEN 1536                         /* each four bars: the call, a count, the echo, a count to the next call */
+#define DU_ECHO_LEN 1536                         /* each four bars: the path, a count, the echo, a count to the next path */
+#define EC_INTRO 15600                           /* the story's openings (ac_duoplace.h): ECHO STEPS', NOTE RALLY's, */
+#define RA_INTRO 15800                           /* POTION CHOIR's (ms); POTION CHOIR's then goes on to its lesson */
+#define PO_INTRO 13200                           /* (ac_potlesson.h: page 2 of the card, for two) */
+static void ec_sounds(int32_t t0, int32_t t1);
+static void po_sounds(int32_t t0, int32_t t1);
+static void pl_begin(void);
+static int pl_tick(int32_t dt);
+static void pl_draw(uint32_t tm);
+#ifdef AC_TEST_DUO
+static const char *du_hint(void);
+#endif
+static void ra_sounds(int32_t t0, int32_t t1);
 #define DU_POT_N 12                              /* POTION CHOIR: at most twelve rocks; */
 static const uint8_t DU_POT_RN[3] = {6, 8, 12};  /* three rounds, each of new rocks: six, then eight, then twelve. In each,
                                                     everyone pours once (a "pour": one of them needs the potion), */
@@ -88,6 +104,14 @@ static struct {
     uint16_t stray[4];                           /* ROCK-OFF: keys pressed where no note was (30 points each: no winning by hammering) */
     int16_t lx[4];
 } du;
+/* ECHO STEPS: keys pressed during an echo (a wrong one shows as a wobbly grey stone), and the round whose path the Echo
+   has filled out (fewer than two stones: it adds one). NOTE RALLY: when and where the note last fell */
+static struct { int32_t t; uint8_t lane, seat; } du_wp[16];
+static int du_wpn, du_wpr, du_efill;
+static int32_t du_rdrop_t = -100000, du_rdrop_x;
+/* each seat's Rock as its player has him (stone, hat, face; heard: has said) and their name, if they gave him one */
+static uint8_t du_look[4][3], du_lk_heard[4], du_lk_i;
+static char du_nm[4][PF_NAME_MAX + 2];
 
 static int du_live(int i) { return du.pnon[i] && fm1_ms - du.plast[i] < 2500u; }
 static int du_seat_live(int s)                   /* a seat's FM-1 still heard from */
@@ -206,25 +230,15 @@ static void du_add(uint32_t step, int lane, int own, int hid, int pitch)
 static void du_build(uint32_t seed)
 {
     const song_t *g = &SONGS[du_track()];
-    uint32_t s, r, j, last = 0;
+    uint32_t s, j, last = 0;
     int32_t p, d;
     int part;
     du.n = 0;
-    if (du.mission == DM_ECHO) {                 /* six rounds of four bars: the call, a count, the echo, a count; the caller
-                                                    changes (for three: the other two echo together) */
-        static const uint8_t TPL[3][5] = {{0, 4, 8, 99, 99}, {0, 4, 8, 12, 99}, {0, 4, 6, 8, 12}};
-        for (r = 0; r < 6u; r++) {               /* (in the order they are played: the judging counts on it) */
-            uint32_t cnt = 0, e;
-            int caller = (int)(r % (uint32_t)du.np);
-            while (cnt < 5u && TPL[r / 2u][cnt] != 99u) cnt++;
-            for (e = 0; e < 2u; e++)
-                for (j = 0; j < cnt; j++) {
-                    int lane = (int)(ihash(seed * 131u + r * 17u + j) % 4u);
-                    du_add(r * 64u + e * 32u + TPL[r / 2u][j], lane, e ? du_all() & ~(1 << caller) : 1 << caller, (int)e, mus_ladder(g, 5 + lane * 2) + 12);
-                    if (!e) du_n[du.n - 1].pair = (uint8_t)(du.n - 1u + cnt);
-                }
-        }
-        last = 6u * 64u - 14u;
+    if (du.mission == DM_ECHO) {                 /* six rounds of four bars: the path, a count, the echo, a count; who leads
+                                                    changes (for three: the other two echo together). No notes yet: the
+                                                    echo's are the stones of each path as it is played (du_stone_add) */
+        du_wpn = 0; du_wpr = -1; du_efill = 0;
+        last = 6u * 64u - 8u;
     } else if (du.mission == DM_ROAD || du.mission == DM_DUEL) {   /* the tune's own melody, round until sixteen bars */
         uint32_t n = mus_song_steps(du_track());
         last = 256u;
@@ -316,6 +330,12 @@ static void du_abort(void)
     }
     du.state = DUS_MENU; du.t = 0;
 }
+static int du_opening(void) { return du.mission == DM_ECHO || du.mission == DM_DRUM || du.mission == DM_PIPE; }   /* (the
+                                                    story's games with an opening on the card's first page) */
+static void du_opened(void)                      /* the opening over: how it is played (POTION CHOIR for two: its lesson) */
+{
+    if (du.mission == DM_PIPE && du.np == 2u) { pl_begin(); du.page = 2; } else du.page = 1;
+}
 static void du_open(int item)
 {
     du.mission = (uint8_t)((item & 7) % DM_N); du.story = (uint8_t)(item >> 3 & 1);
@@ -367,12 +387,49 @@ static void du_rally_hit(int seat, int lane, int q, int32_t t0, int32_t t1)
     du.hop[seat] = 240;
     mus_mel_voice(mus_ladder(&SONGS[du_track()], 5 + (lane & 3) * 2) + 12, 0, seat == du.seat ? 256 : 170, 0);
 }
+/* NOTE RALLY's cushions: a seat's lane, across the floor of the hall; yours on the left, then the one you send it to */
+static int32_t du_rh_x(int seat, int lane)
+{
+    int g = (seat - du.seat + 3 * du.np) % imax(du.np, 2);
+    return du.np == 3u ? g * 80 + 13 + (lane & 3) * 18 : g * 126 + 18 + (lane & 3) * 26;
+}
 static void du_rally_drop(int seat, int32_t now)  /* it fell on seat's side: that seat serves again */
 {
+    du_rdrop_t = now; du_rdrop_x = du_rh_x(seat, du.bto);
     if (du.rally > du.rbest) du.rbest = du.rally;
     du.rally = 0; du.bmode = 0; du.bown = (uint8_t)seat; du.bready = now + 192;
     du_sour(55);
     if (seat == du.seat) { du.msg = T_MISS; du.msg_t = 500; }
+}
+/* ECHO STEPS: a stone of round r's path, at its place in the bar (slot: the half beat, 0..7), lane its colour; hid:
+   the Echo's own. It is a note of the echo, a bar and a half later, for all but who leads; kept in order, so every
+   FM-1 numbers them alike. 0: there is one there already */
+static int du_stone_add(int r, int slot, int lane, int hid)
+{
+    uint32_t step = (uint32_t)(r * 64 + 32 + slot * 2);
+    int i, j;
+    du_note_t *n;
+    if (r < 0 || r >= DU_ECHO_R || slot < 0 || slot > 7 || du.n >= DU_NOTES) return 0;
+    for (i = 0; i < du.n && du_n[i].step < step; i++) ;
+    if (i < du.n && du_n[i].step == step) return 0;
+    for (j = du.n; j > i; j--) du_n[j] = du_n[j - 1];
+    du.n++;
+    n = &du_n[i];
+    n->step = (uint16_t)step; n->lane = (uint8_t)(lane & 3); n->own = (uint8_t)(du_all() & ~(1 << (r % du.np))); n->hid = (uint8_t)hid;
+    n->pair = 255; n->st[0] = n->st[1] = n->st[2] = 0;
+    n->pitch = (int8_t)(mus_ladder(&SONGS[du_track()], 5 + (lane & 3) * 2) + 12);
+#ifdef DINGHY_HOST
+    printf("%6u ms  ECHO STEPS: a stone in round %d, half beat %d, colour %d%s\n", fm1_ms, r, slot, lane & 3, hid ? " (the Echo's)" : "");
+#endif
+    return 1;
+}
+static void du_wp_add(int32_t now, int lane, int seat)   /* a key pressed by seat: kept if it was during their echo */
+{
+    int32_t e = now + DU_WIN, r = e / DU_ECHO_LEN, q = e % DU_ECHO_LEN;
+    if (now < 0 || r >= DU_ECHO_R || q < 768 || q >= 1152 + 2 * DU_WIN || seat == (int)(r % du.np)) return;
+    if (r != du_wpr) { du_wpr = (int)r; du_wpn = 0; }
+    if (du_wpn >= 16) return;
+    du_wp[du_wpn].t = now; du_wp[du_wpn].lane = (uint8_t)lane; du_wp[du_wpn].seat = (uint8_t)seat; du_wpn++;
 }
 static void du_op(int from, uint32_t op, uint32_t a, uint32_t b, uint32_t c)   /* from: the seat that sent it */
 {
@@ -423,6 +480,21 @@ static void du_op(int from, uint32_t op, uint32_t a, uint32_t b, uint32_t c)   /
         if (du.state == DUS_PLAY && du.mission == DM_PIPE && a == du.pr && !du.pend) du_pour((int)a, (int)b, iclamp((int32_t)c, 1, DU_POT_BARS));
         break;
     case DO_STRAY: if (du.state == DUS_PLAY) du.stray[from]++; break;
+    case DO_LOOK: du_look[from][0] = (uint8_t)a; du_look[from][1] = (uint8_t)b; du_look[from][2] = (uint8_t)c; du_lk_heard[from] = 1; break;
+    case DO_NAME:                                /* two letters of a name, from a: (0, 0) where it ends */
+        if (a < PF_NAME_MAX) {
+            du_nm[from][a] = b >= 32u && b <= 90u ? (char)b : 0;
+            du_nm[from][a + 1] = c >= 32u && c <= 90u ? (char)c : 0;
+            du_nm[from][PF_NAME_MAX] = 0;
+        }
+        break;
+    case DO_STONE:                               /* ECHO STEPS: a stone of the path, from whoever leads; a: its place (+8: the
+                                                    Echo's own), b its colour, c the round */
+        if (du.mission == DM_ECHO && (du.state == DUS_PLAY || du.state == DUS_COUNT) && from == (int)(c % du.np) && du_stone_add((int)c, (int)(a & 7u), (int)b, (int)(a >> 3 & 1u))) {
+            if (a & 8u) sfx(96, 0, 90, W_SINE, 500, 2, 60);
+            else { mus_mel_voice(mus_ladder(&SONGS[du_track()], 5 + (int)(b & 3u) * 2) + 12, 0, 170, 0); du.hop[from] = 240; }
+        }
+        break;
     case DO_QUIT:
         if (a) {                                 /* gone back up to the Arcave: not heard from again */
             int i;
@@ -464,6 +536,13 @@ static void duo_poll(void)
     du.last_tx = now;
     midi_send(0xBFu, 110u, du.nonce);
     du_tx(DO_HELLO, duo_prog, du.state, 0);
+    {                                            /* and in turn: how Rock looks, then his name two letters at a time */
+        int k = du_lk_i++ % 8u, p = (k - 1) * 2;
+        if (k == 0) du_tx(DO_LOOK, pf.eq[0], pf.eq[1], pf.eq[2]);
+        else if (pf_named() ? p <= PF_NAME_MAX && (p == 0 || pf.name[p - 1]) : p == 0)
+            du_tx(DO_NAME, (uint32_t)p, pf_named() && p < PF_NAME_MAX ? (uint32_t)(uint8_t)pf.name[p] : 0u,
+                  pf_named() && p + 1 < PF_NAME_MAX && pf.name[p] ? (uint32_t)(uint8_t)pf.name[p + 1] : 0u);
+    }
     if (du.seat == 0u && du_peer()) { uint32_t v = (tr_tick & 0x3FFFFFFu) >> 5; du_tx(DO_EPOCH, v >> 7, v, v >> 14); }
 }
 static int duo_leads(void) { return du.on && du.seat == 0u && du_peer(); }   /* (ac_sync.h: this FM-1 says where its clock is) */
@@ -474,6 +553,7 @@ static void duo_enter(void)
     uint32_t i, k;
     for (i = 0; i < sizeof du; i++) ((uint8_t *)&du)[i] = 0;
     du.on = 1; du.state = DUS_LOBBY;
+    for (i = 0; i < 4u; i++) { du_lk_heard[i] = 0; du_nm[i][0] = 0; }
     du.nonce = (uint8_t)(1u + (ac_rnd() ^ fm1_ms ^ (fm1_ms >> 7) ^ tr_now_q8()) % 126u);
     du.np = 1; du.ros[0] = du.nonce;
     du.last_rx = fm1_ms - 5000u;
@@ -532,6 +612,7 @@ static void du_latch(void)
 static void du_play_tick(int32_t now)
 {
     int me = du.seat, i, k;
+    uint32_t used = 0;                           /* (keys that made a stone of the path) */
     if (du.mission == DM_PIPE) {
         int r = du.pr, giver = du_giver(r);
         int32_t el = now - du.pstart, b = now >= 0 ? now / 96 : -1;
@@ -614,7 +695,7 @@ static void du_play_tick(int32_t now)
             }
         }
         if (v != (du.dial[me] & 3)) { du.dial[me] = (uint8_t)v; du_dial_tx((uint32_t)v); sfx(84, 0, 30, W_SQUARE, 700, 1, 0); }
-        for (i = 0; i < du.np; i++) du.tx[i] = Q8(du.lx[du.dial[i] & 3]);
+        for (i = 0; i < du.np; i++) du.tx[i] = Q8(du_rh_x(i, du.dial[i] & 3));
         if (du.bown == me && !du.bmode) {        /* yours to serve: any key; where it goes is drawn at random */
             if (key >= 0 && now >= du.bready && now < du.end_tick - 480) {
                 int32_t t1 = (now + 95) / 96 * 96 + 384;
@@ -652,10 +733,50 @@ static void du_play_tick(int32_t now)
             if (q < 96 && (tm >> me & 1)) sfx(100, 0, 220, W_SINE, 1500, 1, 60);
         }
     }
+    if (du.mission == DM_ECHO && now >= -DU_WIN) {   /* the path: whoever leads makes it, a stone a half beat at most */
+        int32_t e = now + 24, r = e / DU_ECHO_LEN, q = e % DU_ECHO_LEN;
+        if (r < DU_ECHO_R && q < 384) {
+            int caller = (int)(r % du.np), slot = (int)(q / 48), s2;
+            if (caller == me)
+                for (k = 0; k < AC_NKEY; k++) if (in.kdown >> k & 1u) {
+                    int lane = du_lane(k);
+                    used |= 1u << k;
+                    if (du_stone_add((int)r, slot, lane, 0)) {
+                        du_tx(DO_STONE, (uint32_t)slot, (uint32_t)lane, (uint32_t)r);
+                        mus_mel_voice(mus_ladder(&SONGS[du_track()], 5 + lane * 2) + 12, 0, 256, 0);
+                    } else sfx(key_play(k) + 12, 0, 200, W_SINE, 900, 4, 60);
+                }
+            for (s2 = 0; s2 < du.np; s2++) {     /* (tests) a seat that plays by itself makes a path of its own */
+                int bot = 0, lane = (int)(ihash((uint32_t)r * 131u + (uint32_t)slot * 7u + 3u) % 4u);
+#ifdef AC_TEST_CATCH
+                if (s2 == me) bot = 1;
+#endif
+#ifdef AC_TEST_DUO
+                if (s2 != me) bot = 1;
+#endif
+                if (!bot || s2 != caller || q % 48 < 24 || (slot % 4 && ihash((uint32_t)r * 977u + (uint32_t)slot * 31u) % 3u == 0u)) continue;
+                if (du_stone_add((int)r, slot, lane, 0)) {
+                    if (s2 == me) du_tx(DO_STONE, (uint32_t)slot, (uint32_t)lane, (uint32_t)r);
+                    mus_mel_voice(mus_ladder(&SONGS[du_track()], 5 + lane * 2) + 12, 0, s2 == me ? 256 : 170, 0);
+                }
+            }
+        }
+        r = now / DU_ECHO_LEN; q = now % DU_ECHO_LEN;
+        if (now >= 0 && r < DU_ECHO_R && q >= 384 && (int)(r % du.np) == me && du_efill != r + 1) {   /* the path played: fewer than two
+                                                    stones and the Echo adds them, on the first and third beats */
+            static const uint8_t FILL[4] = {0, 4, 2, 6};
+            int cnt = 0;
+            du_efill = (int)r + 1;
+            for (i = 0; i < du.n; i++) cnt += du_n[i].step >= r * 64 + 32 && du_n[i].step < r * 64 + 48;
+            for (k = 0; k < 4 && cnt < 2; k++)
+                if (du_stone_add((int)r, FILL[k], k + 1, 1)) { du_tx(DO_STONE, FILL[k] | 8u, (uint32_t)(k + 1), (uint32_t)r); cnt++; sfx(96, 0, 90, W_SINE, 500, 2, 60); }
+        }
+    }
     for (k = 0; k < AC_NKEY; k++) {
         int best = -1, lane = du_lane(k);
         int32_t bd = DU_WIN + 1, early = 0;
-        if (!(in.kdown >> k & 1u)) continue;
+        if (!(in.kdown >> k & 1u) || (used >> k & 1u)) continue;
+        if (du.mission == DM_ECHO) du_wp_add(now, lane, me);
         for (i = 0; i < du.n; i++) {
             const du_note_t *n = &du_n[i];
             int32_t d = n->step * 24 - now;
@@ -717,6 +838,13 @@ static int duo_tick(int32_t dt)
     if (du.state == DUS_CARD && du.ready[0]) for (s = 1; s < 4; s++) du.ready[s] = 1;
 #endif
     du.t += dt;
+#if defined(AC_TEST_DUO) && defined(DINGHY_HOST)
+    {   /* (tests) what the CPU friend says, each time it changes */
+        static char last[128];
+        const char *h = du_hint();
+        if (strcmp(h, last)) { strcpy(last, h); if (*h) printf("%6u ms  the CPU friend says: %s\n", fm1_ms, h); }
+    }
+#endif
     if (du.out) { du.out += dt; return du.out > DU_OUT_MS ? -1 : 0; }   /* back up: dark first, the Arcave fades in by itself */
     if (du.msg_t > 0) du.msg_t -= dt;
     for (k = 0; k < 4; k++) {
@@ -743,6 +871,7 @@ static int duo_tick(int32_t dt)
         for (s = 0; s < 4; s++) if (s != me && (du.pk_down[s] >> k & 1u)) {   /* and what they do, on yours */
             du.hop[s] = 240;
             if (du.state == DUS_PLAY && du.mission != DM_DRUM && du.mission != DM_PIPE) du.tx[s] = Q8(du.lx[du_lane(k)]);
+            if (du.state == DUS_PLAY && du.mission == DM_ECHO) du_wp_add(du_now(), du_lane(k), s);
             if (du.state != DUS_PLAY && du.state != DUS_COUNT) sfx(key_play(k) + 12, 0, 400, W_SINE, 1700, 6, 120);
         }
     }
@@ -772,13 +901,24 @@ static int duo_tick(int32_t dt)
     case DUS_CARD:
         led_breathe_want |= 1u << BTN_REC;
         if (!du.ready[me]) led_play_breathe = 1;
+        if (du.page == 0u && du_opening()) {     /* the story's opening: its sounds; at its end, on to how it is played */
+            if (du.mission == DM_ECHO) ec_sounds(du.t - dt, du.t);
+            else if (du.mission == DM_DRUM) ra_sounds(du.t - dt, du.t);
+            else po_sounds(du.t - dt, du.t);
+            if (du.t >= (du.mission == DM_ECHO ? EC_INTRO : du.mission == DM_DRUM ? RA_INTRO : PO_INTRO)) du_opened();
+        }
+        if (du.page == 2u) {                     /* POTION CHOIR's lesson: its own keys, knobs and PLAY; REC as ever */
+            if (BDOWN(BTN_REC)) { du_tx(DO_OPEN, 127, 0, 0); du_abort(); break; }
+            if (pl_tick(dt)) du.page = 1;
+            break;
+        }
         if (du.mission == DM_ROAD && !du.story && du.page && in.any_knob) {   /* TWIN ROAD, the story told: a knob turns to another song */
             du.song = (uint8_t)((du.song + 5 + (in.any_knob > 0 ? 1 : -1)) % 5);
             du.ready[0] = du.ready[1] = du.ready[2] = du.ready[3] = 0;
             du_tx(DO_SONG, du.song, 0, 0); mus_set(MUS_JUKE, du_track()); snd_ui(84);
         }
         if (BDOWN(BTN_PLAY)) {
-            if (du.page == 0u) { du.page = 1; snd_ui(84); }
+            if (du.page == 0u) { du_opened(); snd_ui(84); }
             else if (!du.ready[me]) { du.ready[me] = 1; du_tx(DO_READY, 1, 0, 0); snd_ui(88); }
         } else if (BDOWN(BTN_REC)) { du_tx(DO_OPEN, 127, 0, 0); du_abort(); break; }
         for (s = 0, k = 1; s < du.np; s++) k &= du.ready[s];
@@ -845,17 +985,28 @@ static void du_bg(uint32_t tm)                   /* the well: rings of the five 
     }
     galpha(256);
 }
+/* a player's Rock as they have him (what he wears: yours as you have him, a friend's as their FM-1 says), his rim in
+   their colour */
+static void du_body(int32_t x, int32_t y, int seat, int32_t z, int32_t a, int32_t eyes)
+{
+    uint8_t e[4] = {0, 0, 0, 0};
+    seat &= 3;
+    if (seat == du.seat) { e[0] = pf.eq[0]; e[1] = pf.eq[1]; e[2] = pf.eq[2]; }
+    else if (du_lk_heard[seat]) { e[0] = (uint8_t)(du_look[seat][0] % 10u); e[1] = du_look[seat][1]; e[2] = du_look[seat][2]; }
+    deco_rock_ex(x, y, z, a, eyes, e, fm1_ms, DU_COL[seat]);
+}
 static void du_rock(int32_t x, int32_t y, int seat, int32_t z)
 {
     int32_t h = du.hop[seat], up = h > 0 ? (isin((240 - h) * 32768 / 240) * 12) >> 14 : 0;
-    rock_draw(x, y - up, z, (du.rx[seat] >> 8) * 1159, 256, th->rock, DU_COL[seat], 1, DU_COL[seat], th->eye, th->pupil);
+    du_body(x, y - up, seat, z, (du.rx[seat] >> 8) * 1159, (fm1_ms + (uint32_t)seat * 1300u) % 3100u < 150u ? 30 : 256);
 }
 static const char *du_who(int seat)              /* YOU, FRIEND; for three: YOU, PLAYER 2 and so on */
 {
     static char b[4][24];
     const char *q;
     int p = 0;
-    if (seat == du.seat) return TR(T_DU_YOU);
+    if (seat == du.seat) return pf_named() ? pf.name : TR(T_DU_YOU);   /* (named in the profile: that name) */
+    if (du_nm[seat & 3][0]) return du_nm[seat & 3];
     if (du.np < 3u) return TR(T_DU_FRIEND);
     for (q = TR(T_DU_PLAYER); *q && p < 20; ) b[seat & 3][p++] = *q++;
     b[seat & 3][p++] = ' '; b[seat & 3][p++] = (char)('1' + seat); b[seat & 3][p] = 0;
@@ -876,7 +1027,7 @@ static void du_hud(void)
     } else { num_str(b, du.score); gtextr(234, 6, b, th->text, 2); }
     if (du.msg_t > 0) {
         galpha(imin(256, du.msg_t * 256 / 250));
-        gfit(120, (du.mission == DM_PIPE ? 190 : du.mission == DM_ECHO ? 150 : 50) - (500 - du.msg_t) / 50, 200, TR(du.msg), du.msg == T_MISS ? th->caps[0] : th->pad, ts(1, 2));
+        gfit(120, (du.mission == DM_PIPE ? 190 : du.mission == DM_ECHO ? 110 : 50) - (500 - du.msg_t) / 50, 200, TR(du.msg), du.msg == T_MISS ? th->caps[0] : th->pad, ts(1, 2));
         galpha(256);
     }
 }
@@ -890,26 +1041,7 @@ static void du_kb(void)                          /* the keyboard at the foot: yo
         j++;
     }
 }
-/* ECHO STEPS, where the round is: r the round, ph its bar (0 the call, 1 the count, 2 the echo, 3 the count to the next
- * call), q the tick in the bar; who plays this bar (tm) and who plays the next one (nm), as bits of seats; p the
- * beat's pulse, 256 on the beat and gone by the next; c the colour of it all: yours when you are in it */
-typedef struct { int r, ph, q, caller, tm, nm, who; int32_t p; col_t c; } du_ech_t;
 static int du_first(int m) { int s; for (s = 0; s < 3; s++) if (m >> s & 1) return s; return -1; }
-static du_ech_t du_ech(int32_t now)
-{
-    du_ech_t e;
-    int32_t f;
-    int me = du.seat, echo, m;
-    e.r = now / DU_ECHO_LEN; e.ph = now % DU_ECHO_LEN / 384; e.q = now % 384; e.caller = e.r % du.np;
-    echo = du_all() & ~(1 << e.caller);
-    e.tm = e.ph == 0 ? 1 << e.caller : e.ph == 2 ? echo : 0;
-    e.nm = e.ph == 1 ? echo : e.ph == 3 && e.r + 1 < DU_ECHO_R ? 1 << ((e.r + 1) % du.np) : 0;
-    f = e.q % 96; e.p = (96 - f) * (96 - f) * 256 / 9216;
-    m = e.tm ? e.tm : e.nm;
-    e.who = (m >> me & 1) ? me : du_first(m);
-    e.c = e.who >= 0 ? DU_COL[e.who] : th->mute;
-    return e;
-}
 /* a line said large in the middle of the road: one line at three times if it fits, else up to two lines at twice,
  * on a shadow so the lanes do not cut through it */
 static void du_say(int32_t y, const char *s, col_t c)
@@ -920,61 +1052,7 @@ static void du_say(int32_t y, const char *s, col_t c)
     gtext_wrap(7, y + 1, 228, s, th->bg, sc, TLH(sc), -1, 1, 0, 1, 0, 0);
     gtext_wrap(6, y, 228, s, c, sc, TLH(sc), -1, 1, 0, 1, 0, 0);
 }
-/* behind the notes: the road breathing on every beat in the colour of whoever plays (or plays next), the part said
- * large in the middle, and in a count the number, huge for the one about to play */
-static void du_echo_back(int32_t now)
-{
-    du_ech_t e = du_ech(now);
-    int me = du.seat, b = e.q / 96, id, mine = e.tm >> me & 1, next = e.nm >> me & 1;
-    char num[2];
-    galpha(((mine ? 58 : 28) + (b == 0 ? 18 : 0)) * e.p / 256);
-    grect(0, 34, 240, DU_YL - 24, e.c);
-    galpha(256);
-    if (e.nm) {                                  /* the count: 4, 3, 2, 1 on the beats */
-        int32_t sc = next ? (e.p > 170 ? 10 : 9) : 5, w;
-        num[0] = (char)('4' - b); num[1] = 0;
-        w = gtextw(num, sc);
-        galpha(next ? 140 + e.p * 116 / 256 : 70 + e.p * 70 / 256);
-        gtext(120 - w / 2 + 1, 128 - sc * 7 / 2 + 1, num, th->bg, sc);
-        gtext(120 - w / 2, 128 - sc * 7 / 2, num, e.c, sc);
-        galpha(256);
-    }
-    id = e.ph == 0 ? (e.caller == me ? T_DU_CALL : T_DU_WATCH)
-       : e.ph == 1 ? (next ? T_DU_GETREADY : T_DU_NEXT_FR)
-       : e.ph == 2 ? (mine ? T_DU_ECHO : T_DU_LISTEN)
-       : !e.nm ? -1 : next ? T_DU_NEXT_YOU : T_DU_NEXT_FR;
-    if (id >= 0) du_say(50, TR(id), next ? ((e.q / 48) & 1 ? th->text : DU_COL[me]) : e.c);   /* (yours next: it blinks with the count) */
-}
-/* over everything: the frame in the colour of whoever plays (thick when it is you), a ring beating round each rock
- * that plays, the line under the rocks flashing on the beat, the rounds and the bar's four beats at the top, YOUR TURN */
-static void du_echo_front(int32_t now)
-{
-    du_ech_t e = du_ech(now);
-    int me = du.seat, b = e.q / 96, i, k, mine = e.tm >> me & 1, m = e.tm ? e.tm : e.nm;
-    if (e.tm) {
-        galpha(mine ? 150 + e.p * 106 / 256 : 100 + e.p * 120 / 256);
-        for (k = 0; k < (mine ? 4 : 2); k++) gbox(k, 34 + k, 240 - 2 * k, DU_YL - 22 - 2 * k, e.c);
-        galpha(256);
-    }
-    for (i = 0; i < du.np; i++) if (m >> i & 1) {   /* each rock that plays (or is next) gets a ring on every beat */
-        int32_t x = du.rx[i] >> 8, rr = 16 + (256 - e.p) * 12 / 256;
-        galpha(e.p * (e.tm ? 220 : 150) / 256);
-        gcirc(x, DU_YL - 10, rr, DU_COL[i]); gcirc(x, DU_YL - 10, rr + 1, DU_COL[i]);
-        galpha(256);
-    }
-    galpha(90 + e.p * 166 / 256);                /* the line the notes are played on, flashing on the beat */
-    grect(0, DU_YL + 9, 240, b == 0 ? 4 : 2, e.c);
-    galpha(256);
-    for (i = 0; i < DU_ECHO_R; i++) { if (i <= e.r) grect(6 + i * 9, 8, 6, 6, i == e.r ? th->text : th->mute); else gbox(6 + i * 9, 8, 6, 6, th->mute); }
-    for (i = 0; i < 4; i++) {                    /* the bar's four beats, the one now beating */
-        int32_t x = 87 + i * 22, y = 11;
-        if (i == b) { gdisc(x, y, 5 + e.p * 3 / 256, e.c); }
-        else if (i < b) gdisc(x, y, 4, e.c);
-        else gcirc(x, y, 4, th->mute);
-    }
-    if (mine && e.q < 120) { galpha(230 - e.q * 230 / 120); gfit(120, 104, 232, TR(T_TU_TURN), DU_COL[me], 4); galpha(256); }
-}
-/* the road of ECHO STEPS, TWIN ROAD and ROCK-OFF: four lanes in the keyboard's four colours, the notes coming down to
+/* the road of ROCK-OFF: four lanes in the keyboard's four colours, the notes coming down to
  * the line the two rocks stand on */
 /* TWIN ROAD: the road seen from behind the rocks, the notes coming up it at you. A note dt ticks from the line is drawn
  * as far off as it would be: rd_s is how far below the horizon (DU_YL - RD_HOR at the line, a quarter of that RD_LOOK
@@ -1064,7 +1142,7 @@ static void rd_field(int32_t now)
 }
 static void du_field(int32_t now)
 {
-    int i, k, me = du.seat, echo = du.mission == DM_ECHO && now >= 0 && now < DU_ECHO_R * DU_ECHO_LEN;
+    int i, k, me = du.seat;
     if (du.mission == DM_ROAD) { rd_field(now); return; }
     for (i = 0; i < 4; i++) {
         galpha(34); grect(du.lx[i], 34, 1, DU_YL - 34, GH_ZONE[i]);
@@ -1072,7 +1150,6 @@ static void du_field(int32_t now)
     }
     galpha(256);
     ghl(0, 240, DU_YL + 10, th->mute);
-    if (echo) du_echo_back(now);
     for (i = 0; i < du.n; i++) {
         const du_note_t *n = &du_n[i];
         int32_t d = n->step * 24 - now, x = du.lx[n->lane], y = DU_YL - d * 146 / DU_LOOK;
@@ -1080,7 +1157,6 @@ static void du_field(int32_t now)
         col_t c = GH_ZONE[n->lane];
         if (d > DU_LOOK) break;
         if (d < -70) continue;
-        if (du.mission == DM_ECHO && (!mine || n->hid)) continue;   /* (your friend's call is not shown: watch the rock) */
         if (n->st[w] == 1u || n->st[w] == 2u) continue;
         galpha(n->st[w] == 3u ? 70 : 256);
         if (both) { gdisc(x, y, 10, c); gcirc(x, y, 12, th->text); gcirc(x, y, 13, th->text); }
@@ -1090,42 +1166,6 @@ static void du_field(int32_t now)
     galpha(256);
     for (k = 0; k < du.np; k++) if (k != me) du_rock(du.rx[k] >> 8, DU_YL, k, 210);
     du_rock(du.rx[me] >> 8, DU_YL, me, 256);
-    if (echo) du_echo_front(now);
-    du_kb();
-}
-/* NOTE RALLY: the four lanes between the rocks, yours at the foot and the others' at the top; the note flies from
- * one to the next, a ring closing on the lane where it lands (for three, between the two at the top it arcs across) */
-static int32_t du_rally_y(int s) { return s == du.seat ? DU_YL : du.np == 3u && s == du_next(du_next(du.seat)) ? 64 : 56; }
-static void du_rally(int32_t now)
-{
-    int i, me = du.seat;
-    char b[8];
-    int32_t ytop = 62, ybot = DU_YL - 12;
-    for (i = 0; i < 4; i++) { galpha(40); grect(du.lx[i], 50, 1, DU_YL - 40, GH_ZONE[i]); galpha(256); gdisc(du.lx[i], 50, 2, GH_ZONE[i]); }
-    ghl(0, 240, DU_YL + 10, th->mute); galpha(120); ghl(0, 240, 44, th->mute); galpha(256);
-    gbox(40, 30, 160, 5, th->mute);              /* how much of the song is left */
-    grect(42, 32, 156 * iclamp(du.end_tick - now, 0, du.end_tick) / imax(du.end_tick, 1), 1, th->pad);
-    for (i = 0; i < du.np; i++) if (i != me) du_rock(du.rx[i] >> 8, du_rally_y(i), i, 180);
-    du_rock(du.rx[me] >> 8, DU_YL, me, 256);
-    if (du.bmode) {
-        int from = (du.bown + du.np - 1) % du.np;   /* (who sent it: the one before) */
-        int32_t f = iclamp((now - du.bt0) * 256 / imax(du.bt1 - du.bt0, 1), 0, 300), tome = du.bown == me;
-        int32_t y0 = from == me ? ybot : ytop, y1 = tome ? ybot : ytop, x = du.lx[du.bfrom] + (du.lx[du.bto] - du.lx[du.bfrom]) * f / 256;
-        int32_t y = y0 + (y1 - y0) * f / 256 - (y0 == y1 ? (isin(iclamp(f, 0, 256) * 128) * 30) >> 14 : 0);
-        int32_t r = 6 + ((isin(iclamp(f, 0, 256) * 128) * 6) >> 14), rr = 9 + imax(0, 256 - f) * 26 / 256;
-        if (y0 == y1) y += 20;                   /* (between the two at the top: a little lower, an arc over) */
-        col_t c = GH_ZONE[du.bto];
-        galpha(tome ? 256 : 130);
-        garc(du.lx[du.bto], y1, rr, rr, 0, 65536, c, tome); gcirc(du.lx[du.bto], y1, 9, th->text);
-        galpha(60); gdisc(x, y, r + 5, c);
-        galpha(256); gdisc(x, y, r, c); gtext(x - 3, y - 4, "\xE2\x99\xAA", th->bg, 1);
-    } else {                                     /* waiting to be served: over the rock that has it */
-        int s = du.bown;
-        int32_t x = du.rx[s] >> 8, y = (s == me ? DU_YL - 26 : du_rally_y(s) + 20) + (tsin(fm1_ms, 50, 0) >> 12);
-        galpha(60); gdisc(x, y, 11, DU_COL[s]); galpha(256); gdisc(x, y, 6, th->text); gtext(x - 3, y - 4, "\xE2\x99\xAA", th->bg, 1);
-        if (s == me && now >= du.bready) { galpha(150 + ipulse(fm1_ms, 900) * 106 / 256); gfit(120, 108, 232, TR(T_DU_SERVE), DU_COL[me], ts(1, 2)); galpha(256); }
-    }
-    if (du.rally) { b[0] = 'x'; num_str(b + 1, du.rally); gtext(6, 6, b, du.rally >= 4 ? th->pad : th->text, 2); }
     du_kb();
 }
 /* a rock of the deep choir, standing on y + 16: four bodies, one to three eyes, five things on its head, three mouths,
@@ -1173,6 +1213,39 @@ static void du_char_m(int32_t x, int32_t y, const du_ch_t *c, int show)
     }
 }
 static void du_char(int32_t x, int32_t y, const du_ch_t *c) { du_char_m(x, y, c, DC_ALL); }
+#ifdef AC_TEST_DUO
+/* (the local test build, web/emu/build_local.sh) POTION CHOIR with a CPU friend, whose turn it is to say who needs the
+   potion: what they would say, for the page to show under the FM-1 ("" when there is nothing to say) */
+static char du_hint_s[128];
+static void du_hint_cat(int *n, const char *s) { while (*s && *n < (int)sizeof du_hint_s - 1) du_hint_s[(*n)++] = *s++; du_hint_s[*n] = 0; }
+static const char *du_hint(void)
+{
+    static const char *const SHAPE[4] = {"ROUND", "TALL", "FLAT", "POINTED"}, *const EYES[3] = {"ONE EYE", "TWO EYES", "THREE EYES"};
+    static const char *const MOUTH[3] = {"A SMILE", "AN O FOR A MOUTH", "TWO TEETH"};
+    static const char *const TOP[5] = {"NOTHING ON ITS HEAD", "A MUSHROOM ON ITS HEAD", "TWO CRYSTALS ON ITS HEAD", "A SPROUT ON ITS HEAD", "MOSS ON ITS HEAD"};
+    static const struct { uint32_t rgb; const char *nm; } CN[8] = {{0xe248c8, "PINK"}, {0x963ede, "PURPLE"}, {0x18c0c8, "TEAL"}, {0x7fe6d2, "MINT GREEN"},
+        {0x5668e6, "BLUE"}, {0x6a4cc8, "VIOLET"}, {0x241a6e, "DARK BLUE"}, {0x1a1650, "NAVY"}};
+    const du_ch_t *c;
+    int n = 0, i, best = 0;
+    int32_t bd = 1 << 30;
+    col_t cc;
+    du_hint_s[0] = 0;
+    if (!du.on || du.mission != DM_PIPE || du.state != DUS_PLAY || du.pr >= du_pot_pours() || du.pend || du_giver(du.pr) != du.seat) return du_hint_s;
+    c = &du_ch[du_n[du.pr].lane % DU_POT_N];
+    cc = th->caps[c->col % 5u];
+    for (i = 0; i < 8; i++) {                    /* (its colour by name: the nearest of these) */
+        int32_t r = (int32_t)((cc >> 11) & 31) * 8 - (int32_t)(CN[i].rgb >> 16), g = (int32_t)((cc >> 5) & 63) * 4 - (int32_t)(CN[i].rgb >> 8 & 255), b = (int32_t)(cc & 31) * 8 - (int32_t)(CN[i].rgb & 255);
+        if (r * r + g * g + b * b < bd) { bd = r * r + g * g + b * b; best = i; }
+    }
+    du_hint_cat(&n, "THE ONE THAT NEEDS IT IS ");
+    du_hint_cat(&n, SHAPE[c->shape & 3]); du_hint_cat(&n, ", ");
+    du_hint_cat(&n, CN[best].nm); du_hint_cat(&n, ", WITH ");
+    du_hint_cat(&n, EYES[(c->eyes + 2) % 3]); du_hint_cat(&n, ", ");
+    du_hint_cat(&n, MOUTH[c->mouth % 3u]); du_hint_cat(&n, " AND ");
+    du_hint_cat(&n, TOP[c->top % 5u]); du_hint_cat(&n, ".");
+    return du_hint_s;
+}
+#endif
 static void du_bottle(int32_t x, int32_t y, col_t c)
 {
     grect(x - 2, y - 10, 5, 2, th->stem); grect(x - 2, y - 8, 5, 5, th->text);
@@ -1260,10 +1333,12 @@ static void du_potion(int32_t now)
         gblock(4, 238 - gblock_h(232, s, a) - 2, 232, s, DU_COL[me == giver ? giver : me], a, 1);
     }
 }
+#include "ac_duoplace.h"
 static void du_play_draw(int32_t now)
 {
     if (du.mission == DM_PIPE) du_potion(now);
-    else if (du.mission == DM_DRUM) du_rally(now);
+    else if (du.mission == DM_DRUM) du_rally_hall(now);
+    else if (du.mission == DM_ECHO) du_echo_world(now);
     else du_field(now);
     du_hud();
 }
@@ -1426,7 +1501,7 @@ static void duo_draw(void)
         if (du.out) gfade(du.out * 256 / DU_OUT_MS);
         break;
     case DUS_MENU:
-        gfit(120, 12, 232, "UNDERSONG", th->caps[(tm / 500u) % 5u], 3);
+        gfit(120, 12, 232, "UNDERSONG", th->caps[(tm / 500u) % 5u], 3);   /* (the story's chapters numbered in its order) */
         if (du.np == 3u) gfit(120, 32, 232, TR(T_DU_TRIO), DU_COL[2], 1);
         du_pair(56, 0);
         n = du_items(it);
@@ -1439,7 +1514,7 @@ static void duo_draw(void)
             if (sel) { grect(6, y, 228, h, th->panel); gbox(6, y, 228, h, DU_COL[du.seat]); }
             if (it[i] & 8u) {                    /* the story: its chapter */
                 for (q = TR(T_DU_STORY); *q && p < 24; ) b[p++] = *q++;
-                b[p++] = ' '; b[p++] = (char)('1' + m); b[p++] = '/'; b[p++] = '4'; b[p] = 0;
+                b[p++] = ' '; b[p++] = (char)('1' + du_chap(m)); b[p++] = '/'; b[p++] = '4'; b[p] = 0;
                 gfit(120, y + 5, 216, b, sel ? th->text : th->mute, a);
             } else {
                 int32_t bs = *du_bestp(m, 0);
@@ -1457,6 +1532,11 @@ static void duo_draw(void)
         }
         break;
     case DUS_CARD: {
+        if (du.page == 0u && du_opening()) {     /* the story's opening */
+            if (du.mission == DM_ECHO) ec_intro(du.t, tm); else if (du.mission == DM_DRUM) ra_intro(du.t, tm); else po_intro(du.t, tm);
+            break;
+        }
+        if (du.page == 2u) { pl_draw(tm); break; }   /* POTION CHOIR's lesson */
         const char *s = du.page == 0u ? TR(T_DU_S1 + du.mission) : TR((du.np == 3u ? T_DU_T1 : T_DU_H1) + du.mission);
         int song = du.mission == DM_ROAD && !du.story && du.page;   /* (TWIN ROAD, the story told: its song, a knob turns to another) */
         int32_t foot = du.page ? (song ? 118 : 150) : 214;   /* (how it is played: the two rocks under it, ticked as each is ready) */

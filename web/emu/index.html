@@ -64,6 +64,7 @@ main{padding:28px 0 0;display:grid;gap:22px}
       </div>
     </div>
   </div>
+  <div id="cpu-hint" class="status" role="status" hidden style="border:2px solid #e248c8;border-radius:8px;padding:8px 12px;margin:8px auto;max-width:640px;color:#fff;background:#2a0f2a"></div>
   <div id="status" class="status" role="status">The same code that runs on the FM-1, version @VERSION@.</div>
   <div class="bar">
     <button class="btn" id="fm1" aria-pressed="false">PLAY WITH MY FM-1</button>
@@ -152,7 +153,11 @@ function midiOut(list) {
   if (friends && cc.length) friends.postMessage(cc);
 }
 const browserSave = () => { try { const s = localStorage.getItem(SAVE); if (s) return Uint8Array.from(atob(s), (c) => c.charCodeAt(0)); } catch (e) {} return null; };
-const ready = () => "The same code that runs on the FM-1, version @VERSION@.";
+// a local test build (web/emu/build_local.sh) sets this: the FM-1 is only a controller (its save is neither used nor
+// written: nothing played here reaches it), and the game has a CPU player 2 waiting in the well for UNDERSONG
+const CTRL_ONLY = "@CTRLONLY@" === "1";
+const ready = () => CTRL_ONLY ? "LOCAL TEST BUILD (@VERSION@): a CPU player 2 waits down the well for UNDERSONG. PLAY WITH MY FM-1 uses the FM-1 as a controller only: its save is not read or written."
+  : "The same code that runs on the FM-1, version @VERSION@.";
 // the sound first, while the click still counts as one (a browser lets sound start only from a click)
 function audio() {
   if (!ac) ac = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 44100, latencyHint: "interactive" });
@@ -187,18 +192,23 @@ function onWorklet(n, m) {
   else if (m.type === "error") $("status").textContent = "Could not start: " + m.text;
   else if (m.type === "frame") {
     if (m.fb) fm.screen(m.fb);
+    if (m.hint !== undefined) { $("cpu-hint").hidden = !m.hint; $("cpu-hint").textContent = m.hint ? "PLAYER 2 SAYS: " + m.hint : ""; }
     fm.leds(m.leds[0], m.leds[1], m.leds[2], m.leds[3]);
     if (window.__fm) window.__fm.last = { state: m.state, clock: m.clock, bpm: m.bpm };
-    if (remote && remote.state === "connected") {
-      remote.lights(m.leds);
+    const linked = remote && remote.state === "connected";
+    if (linked) remote.lights(m.leds);
+    if (linked && !CTRL_ONLY) {
       if (m.store && saveWaiter) { saveWaiter(m.store); saveWaiter = null; }   // (the last save, asked for on leaving)
       else if (m.store && !fm1.leaving) { if (m.store.length === fm1.len) remote.sendSave(m.store); }
-    } else if (m.store && !fm1.game) { try { localStorage.setItem(SAVE, btoa(String.fromCharCode(...m.store))); } catch (e) {} }
+    } else if (m.store && !fm1.game) { try { localStorage.setItem(SAVE, btoa(String.fromCharCode(...m.store))); } catch (e) {} }   // (a controller only: this browser's own save)
     midiOut(m.midi);
   }
   else if (m.type === "midi") midiOut(m.midi);
 }
-function start() { if (node) return; audio(); boot(browserSave()); }
+// (the local test build, with no save of its own yet: one with the jukebox mended, so the well is open, UNDERSONG at
+// its first chapter; the same as tests/duo_test.mjs starts from)
+const seedSave = () => { const b = new Uint8Array(192), v = new DataView(b.buffer); v.setUint32(0, 0x41434156, true); b[6] = 4; b[10] = 90; b[11] = 2; return b; };
+function start() { if (node) return; audio(); boot(browserSave() || (CTRL_ONLY ? seedSave() : null)); }
 $("on").addEventListener("click", start);
 $("mute").addEventListener("click", () => {
   const off = $("mute").getAttribute("aria-pressed") !== "true";
@@ -275,7 +285,8 @@ function xferDraw() {
     if (remote && remote.state === "searching") {
       title = "LOOKING FOR YOUR FM-1";
       note = bt ? "CONNECTED BY BLUETOOTH. ASKING IT FOR ITS SAVE" : "PLUG IT IN BY USB, SWITCHED ON, WITH FM-ARCAVE RUNNING";
-    } else title = "READING YOUR FM-1'S SAVE";
+    } else title = CTRL_ONLY ? "CONNECTING YOUR FM-1" : "READING YOUR FM-1'S SAVE";
+    if (CTRL_ONLY && !(remote && remote.state === "searching")) note = "AS A CONTROLLER ONLY: ITS SAVE IS NOT USED";
     if (p && p.dir === "in") { frac = p.of ? p.got / p.of : 0; bytes = kb(p.got) + " OF " + kb(p.of); }
   } else {
     title = "SAVING WHAT YOU PLAYED ON YOUR FM-1";
@@ -327,7 +338,7 @@ async function fm1Stop() {
   fm1Off();
   if (fm1.game) {
     fm1.game = false;
-    boot(browserSave(), how === "kept" ? "Your progress is kept on your FM-1, and it is playing its own game again. Back to the game saved in this browser."
+    boot(browserSave() || (CTRL_ONLY ? seedSave() : null), how === "kept" ? "Your progress is kept on your FM-1, and it is playing its own game again. Back to the game saved in this browser."
       : how === "none" ? "Back to the game saved in this browser. Your FM-1 is playing its own game again."
       : "Your FM-1 did not confirm the last save, so what you played since " + (fm1.kept ? fm1.kept : "you started") + " may not be on it. Back to the game saved in this browser.");
   } else $("status").textContent = node ? ready() : "";
@@ -349,6 +360,12 @@ function fm1Start(access, via) {
         "The Bluetooth link to your FM-1 broke (out of range, or switched off?). Press PLAY WITH MY FM-1 (BLUETOOTH) to carry on with it: what you play meanwhile is not kept."));
     },
     onSave: (bytes) => {
+      if (CTRL_ONLY) {                            // (the FM-1 sends its save as it connects: left unread, the game here goes on)
+        fm1.len = 0; fm1.game = false; xferHide();
+        fm1Button(say("FM-1: CONTROLLER", "FM-1: CONTROLLER (BLUETOOTH)"), true);
+        $("status").textContent = "Your FM-1 is the controller" + say("", " by Bluetooth") + ". Its save is not used, and nothing played here goes to it.";
+        return;
+      }
       if (bytes.length > saveSize) {
         remote.stop(); fm1Off("Your FM-1's FM-ARCAVE is newer than this page's. Nothing was changed.");
         return;

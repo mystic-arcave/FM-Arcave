@@ -386,6 +386,11 @@ static void room_enter(void)
     sfx(57, 0, 900, W_SINE, 2400, 60, 200); sfx(64, 120, 900, W_SINE, 2000, 60, 200); sfx(72, 260, 1400, W_SINE, 2000, 60, 220);
 }
 static void room_leave(void) { sy_echo_len = SY_DLN; sy_echo_fb = 115; sy_x.fmode = 0; sy_x.gl = 0; }
+/* teleported in (the settings, arcave.c): Rock still in the middle of the floor, not rolling in at the door; how much
+   of him there is yet (256: all), and where he is on the screen */
+static int32_t room_rock_a = 256;
+static void room_tele_in(void) { rh.x = Q8(RH_DOOR_X + 96); rh.vx = 0; rh.intro = 0; rh.drag = 0; room_rock_a = 0; }
+static void room_rock_xy(int32_t *x, int32_t *y) { *x = (rh.x >> 8) - (rh.camx >> 8); *y = rh.y >> 8; }
 static void room_open(int st)                    /* a station opens (1..5): the picture goes in on it first */
 {
     rh.want = (uint8_t)st; rh.zoom = 1; rh.closing = 0;
@@ -695,7 +700,8 @@ static void room_draw(void)
         }
     }
     pfx_draw(cx * 256, 0, 256);
-    prock_live(SX(rh.x >> 8), rh.y >> 8, 256, rh.th, (tm % 3700u) < 160u ? iabs((int32_t)(tm % 3700u) - 80) * 256 / 80 : 256);
+    { uint32_t a0 = ga; ga = a0 * (uint32_t)room_rock_a >> 8;
+      prock_live(SX(rh.x >> 8), rh.y >> 8, 256, rh.th, (tm % 3700u) < 160u ? iabs((int32_t)(tm % 3700u) - 80) * 256 / 80 : 256); ga = a0; }
     if (rh.near && !rh.zoom) {                   /* the box: what is here, and what PLAY and HOME do */
         int st = rh.near - 1;
         int32_t sc = ts(1, 3), s1 = ts(1, 2), x, y = 28;

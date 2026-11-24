@@ -1,7 +1,15 @@
 # UNDERSONG beside a friend who never misses (DUO=0), no key touched: PLAY three times (the story page, how it is
 # played, ready), POTION CHOIR runs: the friend pours in its turns, yours run out of time
+# (POTION CHOIR's card: PLAY skips the opening, then each of the lesson's six steps, then ALL DONE)
 900 btn 12
 1700 btn 12
+1800 btn 12
+1900 btn 12
+2000 btn 12
+2100 btn 12
+2200 btn 12
+2300 btn 12
+2400 btn 12
 2500 btn 12
 12000 shot
 30000 shot

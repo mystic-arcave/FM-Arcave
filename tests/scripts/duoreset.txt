@@ -1,0 +1,33 @@
+# the settings in the cave, the story told: down to the last line (WIPE), one back up past the version to START
+# UNDERSONG OVER; PLAY asks which (OCT- the story, OCT+ its scores too); GLO: neither; PLAY again, OCT-: the story only
+500 btn 7
+700 enc 0 1
+780 enc 0 1
+860 enc 0 1
+940 enc 0 1
+1020 enc 0 1
+1100 enc 0 1
+1180 enc 0 1
+1260 enc 0 1
+1340 enc 0 1
+1420 enc 0 1
+1500 enc 0 1
+1580 enc 0 1
+1660 enc 0 1
+1740 enc 0 1
+1820 enc 0 1
+1900 enc 0 1
+1980 enc 0 1
+2060 enc 0 1
+2140 enc 0 1
+2220 enc 0 1
+2500 enc 0 -1
+2800 shot
+3100 btn 12
+3300 shot
+3500 btn 7
+3700 shot
+3900 btn 12
+4300 btn 0
+4600 shot
+9000 end

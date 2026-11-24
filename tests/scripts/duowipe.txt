@@ -1,0 +1,30 @@
+# the settings in the cave, the story told: START UNDERSONG OVER, PLAY: the question; OCT+: the story and its best
+# scores both (and saved)
+500 btn 7
+700 enc 0 1
+780 enc 0 1
+860 enc 0 1
+940 enc 0 1
+1020 enc 0 1
+1100 enc 0 1
+1180 enc 0 1
+1260 enc 0 1
+1340 enc 0 1
+1420 enc 0 1
+1500 enc 0 1
+1580 enc 0 1
+1660 enc 0 1
+1740 enc 0 1
+1820 enc 0 1
+1900 enc 0 1
+1980 enc 0 1
+2060 enc 0 1
+2140 enc 0 1
+2220 enc 0 1
+2500 enc 0 -1
+2800 shot
+3100 btn 1
+3300 shot
+3700 btn 1
+4000 shot
+9000 end

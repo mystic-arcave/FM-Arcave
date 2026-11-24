@@ -63,6 +63,11 @@ class FmArcave extends AudioWorkletProcessor {
         msg.fb = new Uint16Array(ex.memory.buffer, ex.web_screen(), 240 * 240).slice();
         tr.push(msg.fb.buffer);
       }
+      if (ex.web_duo_hint) {                      // (the local test build: what the CPU friend says, when it changes)
+        const p = ex.web_duo_hint(), b = new Uint8Array(ex.memory.buffer, p, 128); let s = "";
+        for (let i = 0; i < 128 && b[i]; i++) s += String.fromCharCode(b[i]);
+        if (s !== this.hint) { this.hint = s; msg.hint = s; }
+      }
       const g = ex.web_store_gen();
       if (g !== this.gen) { this.gen = g; msg.store = new Uint8Array(ex.memory.buffer, ex.web_store(), ex.web_store_len()).slice(); }
       this.port.postMessage(msg, tr);

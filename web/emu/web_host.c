@@ -99,6 +99,9 @@ static float w_l[1024], w_r[1024];
 static uint32_t w_have, w_pos, w_owed;
 
 EXPORT void web_boot(void) { fm1_ms = 1; arcave_frame(); }
+#ifdef AC_TEST_DUO
+EXPORT const char *web_duo_hint(void) { return du_hint(); }   /* (the local test build: what the CPU friend says) */
+#endif
 EXPORT float *web_out_l(void) { return w_l; }
 EXPORT float *web_out_r(void) { return w_r; }
 /* n frames (at most 1024) of sound, and the FM-1's time that goes with them */

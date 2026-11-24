@@ -1,0 +1,39 @@
+# the high right ledge, rolled into the tunnel slowly (a knob a click at a time): its floor holds Rock (it was a
+# springy cap's and threw him to the roof), and he rolls on down to the music room's door
+300 shot
+500 enc 2 1
+750 enc 2 1
+1000 enc 2 1
+1250 enc 2 1
+1500 enc 2 1
+1750 enc 2 1
+2000 enc 2 1
+2250 enc 2 1
+2500 enc 2 1
+2750 enc 2 1
+3000 enc 2 1
+3250 enc 2 1
+3500 enc 2 1
+3750 enc 2 1
+4000 enc 2 1
+4250 enc 2 1
+4500 enc 2 1
+4750 enc 2 1
+5000 enc 2 1
+5250 enc 2 1
+5500 enc 2 1
+5750 enc 2 1
+6000 enc 2 1
+6250 enc 2 1
+6500 enc 2 1
+6750 enc 2 1
+7000 enc 2 1
+1500 shot
+2500 shot
+3500 shot
+4500 shot
+5500 shot
+6500 shot
+7500 shot
+8500 shot
+9000 end

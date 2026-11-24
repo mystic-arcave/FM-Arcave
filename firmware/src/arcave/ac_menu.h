@@ -3,12 +3,16 @@
  * KNOB 2) changes; PLAY or OCT+ confirms or steps on (OCT- steps back: in here they do not change the language);
  * GLO closes. ABOUT tells what the Mystic Arcave is. The first line is the player's profile (ac_shop.h); the last
  * wipes the whole save, and only here: PLAY held on it for three seconds; the line over it, not one to select, is the
- * firmware's version. BLUETOOTH is shown where there is a radio. */
+ * firmware's version. START UNDERSONG OVER asks which, in a box over the list: OCT- its chapters back to none (the
+ * story's first chapter is the one played again; with a friend, the lowest of the two is), OCT+ its best scores
+ * cleared too; GLO, HOME or SELECT: neither. BLUETOOTH is shown where there is a radio. TELEPORT TO MUSIC ROOM, once the tunnel to it is
+ * mended and Rock is not in it already: there at once, in a beam of light (arcave.c). */
 
-enum { MI_PROFILE, MI_LANG, MI_TEXT, MI_EAR, MI_LOOK, MI_LINK, MI_BT, MI_ABOUT, MI_REPLAY, MI_SKIP, MI_RESET, MI_VER, MI_WIPE, MI_N };
-enum { MA_NONE, MA_REPLAY, MA_RESET, MA_CHANGED, MA_SKIP, MA_PROFILE, MA_WIPE, MA_BT };
+enum { MI_PROFILE, MI_TELE, MI_LANG, MI_TEXT, MI_EAR, MI_LOOK, MI_LINK, MI_BT, MI_ABOUT, MI_REPLAY, MI_SKIP, MI_DUORESET, MI_VER, MI_WIPE, MI_N };
+enum { MA_NONE, MA_REPLAY, MA_DUORESET, MA_DUOWIPE, MA_CHANGED, MA_SKIP, MA_PROFILE, MA_WIPE, MA_BT, MA_TELE };
 static struct { uint8_t on, sel, about, sure; int32_t t, win, rest, hold; } mn;
-static int mi_shown(int i) { return i != MI_BT || bt_state() != BT_NONE; }
+static uint8_t mn_tele_ok;                        /* (arcave.c, each frame: the music room can be teleported to) */
+static int mi_shown(int i) { return (i != MI_BT || bt_state() != BT_NONE) && (i != MI_TELE || mn_tele_ok); }
 static int mi_pickable(int i) { return mi_shown(i) && i != MI_VER; }   /* (the version is only read) */
 #ifndef APP_VER
 #define APP_VER "dev"
@@ -35,6 +39,13 @@ static int menu_tick(int32_t dt)
         led_play_breathe = 1;
         return MA_NONE;
     }
+    if (mn.sure) {                               /* START UNDERSONG OVER's question: OCT- the story, OCT+ its scores too */
+        led_breathe_want |= 1u << BTN_OCT_DOWN | 1u << BTN_OCT_UP;
+        if (BDOWN(BTN_OCT_DOWN)) { mn.sure = 0; mn.on = 0; snd_ui(79); return MA_DUORESET; }
+        if (BDOWN(BTN_OCT_UP)) { mn.sure = 0; mn.on = 0; snd_ui(79); return MA_DUOWIPE; }
+        if (BDOWN(BTN_GLO) || BDOWN(BTN_HOME) || mv) { mn.sure = 0; snd_ui(67); }   /* (neither: back to the list) */
+        return MA_NONE;
+    }
     if (BDOWN(BTN_GLO) || BDOWN(BTN_HOME)) { mn.on = 0; snd_ui(67); return MA_NONE; }   /* (arcave.c: this press does not reopen it) */
     if (mv) {                                    /* (past a line that is not shown) */
         int32_t k = mn.sel, d = mv > 0 ? 1 : -1;
@@ -56,6 +67,7 @@ static int menu_tick(int32_t dt)
         int d = ch > 0 ? 1 : -1;
         switch (mn.sel) {
         case MI_PROFILE: if (ok) { mn.on = 0; act = MA_PROFILE; } break;
+        case MI_TELE: if (ok) { mn.on = 0; act = MA_TELE; } break;
         case MI_BT: act = MA_BT; break;          /* (arcave.c turns the radio and keeps the setting) */
         case MI_LANG: set_lang(lang + d); act = MA_CHANGED; break;
         case MI_TEXT: tsize = (uint8_t)((tsize + 3 + d) % 3); act = MA_CHANGED; break;
@@ -65,7 +77,7 @@ static int menu_tick(int32_t dt)
         case MI_ABOUT: mn.about = 1; mn.win = 0; break;
         case MI_REPLAY: if (ok) { mn.on = 0; act = MA_REPLAY; } break;
         case MI_SKIP: if (ok) { mn.on = 0; act = MA_SKIP; } break;
-        case MI_RESET: if (ok) { if (mn.sure) { mn.on = 0; act = MA_RESET; } else mn.sure = 1; } break;
+        case MI_DUORESET: if (ok) mn.sure = 1; break;   /* (the question, over the list) */
         }
         snd_ui(79);
     }
@@ -74,7 +86,7 @@ static int menu_tick(int32_t dt)
 }
 static void menu_draw(void)
 {
-    static const int LAB[MI_N] = {T_PROFILE, T_LANGUAGE, T_TEXTSIZE, T_EAR, T_LOOK, T_LINK, T_BT, T_ABOUT, T_REPLAY, T_SKIP, T_RESET, T_VERSION, T_WIPE_ALL};
+    static const int LAB[MI_N] = {T_PROFILE, T_TELE, T_LANGUAGE, T_TEXTSIZE, T_EAR, T_LOOK, T_LINK, T_BT, T_ABOUT, T_REPLAY, T_SKIP, T_DUO_RESET, T_VERSION, T_WIPE_ALL};
     static const int BTS[5] = {T_OFF, T_BT_START, T_BT_ADV, T_BT_CONN, T_BT_FAIL};
     int bt_up = mn.sel == MI_BT && bt_state() != BT_OFF && bt_state() != BT_NONE;   /* the radio's line, and it is doing something */
     static const int LKS[4] = {T_LINK_ALONE, T_LINK_FOLLOW, T_LINK_LEAD, T_LINK_CLOCK};
@@ -111,8 +123,8 @@ static void menu_draw(void)
     foot -= TLH(sf);
     if (bt_up) gfit(120, foot + 2 * sf, 232, TR(BTS[imin(bt_state(), 4)]), bt_state() == BT_FAILED ? th->caps[0] : th->caps[3], sf);   /* what it is doing */
     else
-    gfit(120, foot + 2 * sf, 232, mn.sel == MI_LINK && link_id ? TR(LKS[lk.state]) : mn.sel == MI_RESET && mn.sure ? TR(T_SURE)
-         : "SELECT \xE2\x86\x91\xE2\x86\x93   OCT+ OK", mn.sel == MI_RESET && mn.sure ? th->caps[0] : mn.sel == MI_LINK && link_id ? th->caps[3] : th->mute, sf);
+    gfit(120, foot + 2 * sf, 232, mn.sel == MI_LINK && link_id ? TR(LKS[lk.state]) : 
+         "SELECT \xE2\x86\x91\xE2\x86\x93   OCT+ OK", mn.sel == MI_LINK && link_id ? th->caps[3] : th->mute, sf);
     /* the lines: as many as fit, the list moving under the selected one. A line too long for the size wraps its
      * name onto a second row rather than shrink (small print is what the size setting is there to avoid) */
     {
@@ -125,6 +137,7 @@ static void menu_draw(void)
             int32_t sc = sh;
             if (!mi_shown(i)) { vals[i] = val; scs[i] = sc; lw[i] = 216; hs[i] = 0; continue; }
             if (i == MI_PROFILE) val = pf_named() ? pf.name : "\xE2\x86\x92";
+            else if (i == MI_TELE) val = "\xE2\x86\x92";
             else if (i == MI_BT) val = TR(pf.flags & PF_BT ? T_ON : T_OFF);
             else if (i == MI_VER) val = APP_VER;
             else if (i == MI_LANG) val = TR(T_LANG);
@@ -158,5 +171,26 @@ static void menu_draw(void)
         gblock(18, yb + 6, 204, TR(T_WIPE), th->text, a, 1);
         gbox(30, yb + h + 14, 180, 9, th->mute);
         grect(32, yb + h + 16, 176 * imin(mn.hold, 3000) / 3000, 5, th->caps[0]);
+    }
+    if (mn.sure) {                               /* START UNDERSONG OVER: which. OCT- and OCT+ as keys, each with its answer */
+        static const int ANS[2] = {T_DUO_R_STORY, T_DUO_R_ALL};
+        static const char *const KEY[2] = {"OCT-", "OCT+"};
+        int32_t a = ts(1, 2), st = ts(2, 3), hh[2], tot, yb, k, ht = gblock_h(208, TR(T_DUO_RESET), st);
+        while (st > a && ht > 2 * TLH(st)) { st--; ht = gblock_h(208, TR(T_DUO_RESET), st); }   /* (two lines at most) */
+        for (k = 0; k < 2; k++) hh[k] = imax(24, gblock_h(150, TR(ANS[k]), a) + 8);
+        tot = 8 + ht + 8 + hh[0] + 6 + hh[1] + 8 + TLH(a) + 6;
+        yb = imax(4, 120 - tot / 2);
+        galpha(200); grect(0, 0, AC_W, AC_H, th->bg); galpha(256);
+        grect(8, yb, 224, tot, th->panel); gbox(8, yb, 224, tot, th->caps[0]); gbox(9, yb + 1, 222, tot - 2, th->caps[0]);
+        gblock(16, yb + 8, 208, TR(T_DUO_RESET), th->text, st, 1);
+        y = yb + 8 + ht + 8;
+        for (k = 0; k < 2; k++) {
+            int32_t bh = gblock_h(150, TR(ANS[k]), a), on = ipulse(fm1_ms + (uint32_t)k * 400u, 1200);
+            galpha(170 + on * 86 / 256); gbox(16, y + (hh[k] - 20) / 2, 50, 20, k ? th->caps[0] : th->pad); galpha(256);
+            gtextc(41, y + (hh[k] - 20) / 2 + 7, KEY[k], k ? th->caps[0] : th->pad, 1);
+            gblock(74, y + (hh[k] - bh) / 2, 150, TR(ANS[k]), th->text, a, 0);
+            y += hh[k] + 6;
+        }
+        gfit(120, y + 2 + 2 * a, 210, TR(T_CLOSE), th->mute, a);
     }
 }

@@ -396,7 +396,8 @@ static int cave_tick(int32_t dt)
             if (p->kind == 2 && (story < 4 || cv.x <= Q8(CV_W - 14))) continue;
             if (k == 0u ? bot >= top : (py + rad <= top + 256 && bot >= top - (p->kind == 2 ? Q8(2) : 0))) {
                 cv.y = top - rad;
-                if (p->kind) {                   /* a cap throws you up, and sings */
+                if (p->kind == 1) {              /* a cap throws you up, and sings (the tunnel's floor, kind 2, does not:
+                                                    it did, and a slow roll in was thrown to its roof) */
                     cv.vy = -Q8(368); cv.sq[k - 4u] = 250;
                     sfx(60 + (k == 4 ? 7 : 12), 0, 800, W_SINE, 3800, 4, 220); sfx(72 + (k == 4 ? 7 : 12), 60, 600, W_SINE, 2000, 4, 220);
                 } else {

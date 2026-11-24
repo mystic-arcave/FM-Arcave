@@ -249,20 +249,22 @@ static void deco_face(const rk_t *k, int kind, col_t ink, col_t line)   /* ink: 
         break;
     }
 }
-/* Rock in what eq says he wears (eq: stone, hat, face, trail), at screen (x, y), zoom z, turned by a */
-static void deco_rock(int32_t x, int32_t y, int32_t z, int32_t a, int32_t eyes, const uint8_t *eq, uint32_t tm)
+/* Rock in what eq says he wears (eq: stone, hat, face, trail), at screen (x, y), zoom z, turned by a; rimc: his rim in
+   this colour instead (UNDERSONG: each player's own), 0 the stone's own */
+static void deco_rock_ex(int32_t x, int32_t y, int32_t z, int32_t a, int32_t eyes, const uint8_t *eq, uint32_t tm, col_t rimc)
 {
     const pf_body_t *b = &PF_BODY[eq[0] < 10u ? eq[0] : 0u];
     rk_t k;
-    col_t body = b->body ? b->body : th->rock, rim = b->rim ? b->rim : th->rock_rim, moss = b->moss ? b->moss : th->moss;
+    col_t body = b->body ? b->body : th->rock, rim = rimc ? rimc : b->rim ? b->rim : th->rock_rim, moss = b->moss ? b->moss : rimc ? rimc : th->moss;
     col_t eye = b->eye ? b->eye : th->eye, pupil = b->eye ? b->pupil : th->pupil, line = th->dark ? th->rock_rim : 0;
     k.x = x; k.y = y; k.z = z; k.c = icos(a); k.s = isin(a);
-    rock_draw(x, y, z, a, 0, body, rim, b->body ? 1 : th->dark, moss, eye, pupil);
+    rock_draw(x, y, z, a, 0, body, rim, b->body || rimc ? 1 : th->dark, moss, eye, pupil);
     if (eq[0]) deco_body(&k, eq[0], moss, tm);
     rock_eyes(x, y, z, a, eyes, eye, pupil);
     if (eq[2]) deco_face(&k, eq[2], eye, line);
     if (eq[1]) deco_hat(&k, eq[1], line, tm);
 }
+static void deco_rock(int32_t x, int32_t y, int32_t z, int32_t a, int32_t eyes, const uint8_t *eq, uint32_t tm) { deco_rock_ex(x, y, z, a, eyes, eq, tm, 0); }
 
 /* ---------------------------------------------------------------- sparks: what the keys throw off, what he leaves behind
  * A small pool of them, in the world's own places (Q8), so they stay where they were let go as the camera moves. */

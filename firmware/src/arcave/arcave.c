@@ -35,6 +35,7 @@
 #include "ac_hall.h"
 #include "ac_shop.h"
 #include "ac_sheet.h"
+#include "ac_potlesson.h"                       /* (after ac_sheet.h: it uses the lessons' parts) */
 #include "ac_remote.h"
 #include "ac_sync.h"
 #include "ac_menu.h"
@@ -112,6 +113,38 @@ static void save_now(void)
     settings_save(&svr, sizeof svr);
 }
 static void save_soon(void) { save_dirty = 1; save_at = fm1_ms + 1500u; }
+/* TELEPORT TO MUSIC ROOM (the settings): Rock drawn up into a beam of light out of wherever he is, a flash, and he comes
+   down in one in the middle of the music room. tele_t: ms since it began (0: none); the scene holds still under it */
+#define TELE_OUT 900
+#define TELE_IN 1100
+static int32_t tele_t;
+static void tele_draw(void)
+{
+    uint32_t tm = fm1_ms;
+    int32_t k, bx = 120, by = 140, f, g;
+    if (tele_t < TELE_OUT) {                     /* out: the beam comes down on him, he rises and thins into sparks */
+        f = tele_t * 256 / TELE_OUT;
+        galpha(f * 170 / 256); grect(0, 0, AC_W, AC_H, th->bg);
+        for (k = 0; k < 3; k++) { galpha((60 + k * 50) * imin(256, f * 3) / 256); grect(bx - 26 + k * 9, 0, 52 - k * 18, AC_H, k == 2 ? th->text : th->caps[(tm / 120u + (uint32_t)k) % 5u]); }
+        galpha(f < 170 ? 256 : (256 - f) * 3); prock_draw(bx, by - f * f / 700, 600 - f, (int32_t)(tm * 40u), 256);
+        for (k = 0; k < 18; k++) {
+            int32_t z = (int32_t)((tm / 2u + (uint32_t)k * 97u) % 240u);
+            galpha(f * (240 - z) / 240); gdisc(bx - 22 + (int32_t)(ihash((uint32_t)k * 7u) % 44u), by + 30 - z, 1 + k % 2, th->caps[k % 5]);
+        }
+        if (f > 190) { galpha((f - 190) * 256 / 66); grect(0, 0, AC_W, AC_H, AC_RGB(255, 255, 255)); }
+        galpha(256);
+        return;
+    }
+    g = (tele_t - TELE_OUT) * 256 / TELE_IN;     /* in: the flash fades, a beam down onto where he is, the sparks gather */
+    room_rock_xy(&bx, &by);
+    for (k = 0; k < 3; k++) { galpha((60 + k * 50) * (256 - g) / 256); grect(bx - 22 + k * 8, 0, 44 - k * 16, by + 14, k == 2 ? th->text : th->caps[(tm / 120u + (uint32_t)k) % 5u]); }
+    for (k = 0; k < 18; k++) {
+        int32_t a = k * 3641 + (int32_t)tm * 30, r = 60 * (256 - g) / 256 + 4;
+        galpha(imin(256, (256 - g) * 2)); gdisc(bx + (icos(a) * r >> 14), by + (isin(a) * r >> 14), 1 + k % 2, th->caps[k % 5]);
+    }
+    if (g < 90) { galpha((90 - g) * 256 / 90); grect(0, 0, AC_W, AC_H, AC_RGB(255, 255, 255)); }
+    galpha(256);
+}
 
 static void to_cave(int fresh)
 {
@@ -368,10 +401,25 @@ static void arcave_frame(void)
     if (held && !was_paused) { was_paused = 1; pause_tick = tr_now_q8() >> 8; gh_pause(); }
     if (!held && was_paused) { uint32_t d = (tr_now_q8() >> 8) - pause_tick; was_paused = 0; nb.t0 += d; gh_resume(); }
     }
+    mn_tele_ok = story >= 4u && scene != SC_ROOM && !tele_t;   /* (the settings offer the teleport once the tunnel is mended) */
     if (mn.on) {
         r = menu_tick(dt);
         if (r == MA_REPLAY) { replay = 1; scene = SC_INTRO; intro_reset(); mus_set(MUS_INTRO, 0); sy_drone_want = 0; sy_music_want = 256; }
-        else if (r == MA_RESET) story_reset();
+        else if (r == MA_DUORESET || r == MA_DUOWIPE) {   /* UNDERSONG from its first chapter again; OCT+: its best scores
+                                                    cleared too (for two and for three, TWIN ROAD's other songs' too) */
+            uint32_t i;
+            duo_prog = 0;
+            if (r == MA_DUOWIPE) {
+                for (i = 0; i < DM_N; i++) duo_best[i] = trio_best[i] = 0;
+                for (i = 0; i < 4u; i++) duo_road[i] = trio_road[i] = 0;
+            }
+            save_soon();
+            banner_show(r == MA_DUOWIPE ? TR(T_DUO_SC0) : "UNDERSONG", TR(T_DUO_OVER), 0);
+            sfx(72, 0, 200, W_TRI, 2600, 4, 120); sfx(60, 160, 500, W_TRI, 2600, 4, 120);
+#ifdef DINGHY_HOST
+            printf("%6u ms  UNDERSONG started over: chapters 0%s\n", fm1_ms, r == MA_DUOWIPE ? ", scores cleared" : ", scores kept");
+#endif
+        }
         else if (r == MA_SKIP) {                 /* into the cave as if PLAY had just been pressed at its mouth: Rock at the
                                                     entrance, the fade in; the story stays where it stands */
             if (story < 1u) story = 1;
@@ -380,6 +428,10 @@ static void arcave_frame(void)
         else if (r == MA_CHANGED) save_soon();
         else if (r == MA_WIPE) save_wipe();
         else if (r == MA_PROFILE) pu_open(pf_named() ? PU_CARD : PU_NAME, 1);   /* (the first time: NAME YOUR ROCK) */
+        else if (r == MA_TELE) {                 /* TELEPORT TO MUSIC ROOM: the beam (tele_draw), the room at its flash */
+            tele_t = 1; sy_rumble_want = 0;
+            sfx_ex(48, 0, 900, W_SAW, 1800, 300, 200, 0, 0, 66500); sfx(84, 200, 700, W_SINE, 1600, 200, 220); sfx(91, 450, 500, W_SINE, 1400, 100, 220);
+        }
         else if (r == MA_BT) {                   /* kept at once: the first time it is turned on the FM-1 restarts by itself */
             pf.flags ^= PF_BT; save_dirty = 0; save_now();
             bt_set((pf.flags & PF_BT) != 0);
@@ -396,6 +448,20 @@ static void arcave_frame(void)
             if (scene == SC_DISH) { dish_abort(); if (story < 4u) story = 2; }   /* (from the effects' page: no song kept) */
             to_cave(0);
         }
+    } else if (tele_t) {                         /* teleporting: the scene holds still; at the flash, the music room */
+        tele_t += dt;
+        if (tele_t >= TELE_OUT && scene != SC_ROOM) {
+            to_cave(0); dlg.on = 0;
+            cv.x = Q8(CV_TDOOR_X - 34); cv.y = cave_tun_q8(cv.x) - rock_rad(cv.th); cv.vx = cv.vy = 0; cv.drag = 0; cv.g = 1;   /* (out of
+                                                    the room again: at its door in the tunnel) */
+            scene = SC_ROOM; room_enter(); room_tele_in();
+#ifdef DINGHY_HOST
+            printf("%6u ms  teleported to the music room\n", fm1_ms);
+#endif
+            sfx(72, 0, 1200, W_SINE, 2600, 10, 230); sfx(79, 90, 1100, W_SINE, 2200, 10, 230); sfx(88, 180, 1000, W_SINE, 1800, 10, 230);
+        }
+        if (scene == SC_ROOM) room_rock_a = tele_t < TELE_OUT + TELE_IN / 3 ? 0 : imin(256, (tele_t - TELE_OUT - TELE_IN / 3) * 384 / TELE_IN);
+        if (tele_t >= TELE_OUT + TELE_IN) { tele_t = 0; room_rock_a = 256; }
     } else {
         /* (in NIGHT BLOOM the ALGORITHM knob turns a ring, and CRYSTAL ROAD's song plays on: the jukebox waits) */
         if (scene == SC_MACH && mc.which == 0) { /* CRYSTAL ROAD's cards: SELECT, PRESETS and ALGORITHM all turn the song */
@@ -490,6 +556,7 @@ static void arcave_frame(void)
     if (sh.on && !mn.on) sheet_draw();
     if (pu.on && !mn.on) pu_draw();
     if (mn.on) menu_draw();
+    if (tele_t) tele_draw();
     banner_draw(dt);
     if (!mn.on && batt_pct() >= 0 && batt_low && (now / 500u) & 1u) {   /* the battery running low: it flashes in the corner, on any screen */
         grect(216, 1, 23, 11, th->bg);

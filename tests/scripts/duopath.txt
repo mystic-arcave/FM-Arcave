@@ -1,0 +1,14 @@
+# ECHO STEPS by hand (DUO=2: a friend who never misses): PLAY skips the story's opening, both ready; you lead first
+# and play a path of one note only (a key in the second colour, on the third half beat), so the Echo adds one more
+# at the bar's end; your friend plays them back. A picture of the stones as they are made and as they are followed
+500 btn 12
+1200 btn 12
+1800 btn 12
+2400 btn 12
+7400 keys 512
+7600 keys 0
+8000 shot
+10200 shot
+13600 shot
+14400 shot
+40000 end

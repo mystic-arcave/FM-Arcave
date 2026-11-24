@@ -1,0 +1,18 @@
+# the settings (GLO), story told: TELEPORT TO MUSIC ROOM, the line under the profile; PLAY: Rock is drawn up into a
+# beam out of the cave, a flash, and he comes down in one in the middle of the music room; PLAY at its door, rolled to:
+# back out into the tunnel by the door
+600 shot
+1000 btn 7
+1300 enc 0 1
+1500 shot
+1800 btn 12
+2000 shot
+2300 shot
+2600 shot
+2800 shot
+3000 shot
+3300 shot
+3700 shot
+4300 shot
+6000 shot
+7000 end

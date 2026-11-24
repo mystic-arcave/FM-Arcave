@@ -1,0 +1,36 @@
+# POTION CHOIR as the story's first chapter (DUO=0): its opening runs to its end by itself (down the well, the silent
+# choir, the drop, Pink's gleam and call, Teal pours, it sings), then its lesson: the two steps that only tell run out,
+# a knob turned twice moves the potion, a key pours it, the last two run out; ALL DONE, then the card's own page and
+# PLAY: ready, and the game counts in
+900 btn 12
+1500 shot
+2600 shot
+3900 shot
+5400 shot
+6900 shot
+8200 shot
+9300 shot
+10900 shot
+11900 shot
+13600 shot
+16000 shot
+19800 shot
+21600 shot
+25400 shot
+28000 enc 2 1
+28100 shot
+28400 enc 2 1
+30800 shot
+33600 keys 4096
+33700 keys 0
+33900 shot
+36000 shot
+38200 shot
+41000 shot
+43000 shot
+44900 shot
+46200 shot
+48200 shot
+48600 btn 12
+52000 shot
+53000 end

@@ -1,6 +1,6 @@
 # the keyboard in the cave with the jukebox on: the lowest, a middle and the highest key on each tune in turn
 # (ALGORITHM steps the tune); each key plays a note of that tune's own key, lowest key lowest. Then LINK 1 in the
-# settings and back to MYCELIUM NIGHTS: in the shared key (A minor), not its own (D minor)
+# settings (six down: TELEPORT TO MUSIC ROOM is the second line once the story is told) and back to MYCELIUM NIGHTS: in the shared key (A minor), not its own (D minor)
 1000 keys 0x1
 1100 keys 0
 1300 keys 0x2000
@@ -49,6 +49,7 @@
 13000 enc 0 1
 13200 enc 0 1
 13400 enc 0 1
+13550 enc 0 1
 13700 enc 6 1
 14000 shot
 14300 btn 7

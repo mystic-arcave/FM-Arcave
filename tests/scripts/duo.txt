@@ -2,11 +2,19 @@
 # first chapter (its story page, how it is played, both ready, the count), POTION CHOIR to its end and its result;
 # then TWIN ROAD, ECHO STEPS and NOTE RALLY the same way, the finale, the menu of the four games with their scores, and
 # ROCK-OFF chosen there and played (a draw: both catch everything). PLAY is pressed all the way, except over a result.
+# (POTION CHOIR's card: PLAY skips the opening, then each of the lesson's six steps, then ALL DONE)
 500 shot
 900 btn 12
 1300 shot
 1700 btn 12
+1800 btn 12
+1900 btn 12
+2000 btn 12
+2100 btn 12
 2100 shot
+2200 btn 12
+2300 btn 12
+2400 btn 12
 2500 btn 12
 3300 shot
 4200 shot
