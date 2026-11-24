@@ -74,7 +74,7 @@ function run(ms) {                                 // a millisecond at a time: b
       frameAt = now;
       if (pageLights) R.lights(leds(D));
       const g = D.ex.web_store_gen();
-      if (g !== D.gen) { D.gen = g; const s = storeOf(D); if (R.state === "connected" && s.length === pageLen) R.sendSave(s); }
+      if (g !== D.gen) { D.gen = g; const s = storeOf(D); if (R.state === "connected" && !R.leaving && s.length === pageLen) R.sendSave(s); }
     }
   }
 }
@@ -138,12 +138,20 @@ if ([...perMs.values()].some((n) => n > 2)) fail("the page sent more than 2 of i
 ok("the page's save is kept on the FM-1, byte for byte (two messages a millisecond)");
 run(200); shot(F, "remote-fm1-saved");
 
-// 5. goodbye: the FM-1 plays its own game, from the save it was given
-R.stop(); run(3500);
+// 5. let go straight after playing (as the page's button does): the game saved at once, kept, then the goodbye. Without
+// the wait, the goodbye cuts the save on its way and what was just played is lost
+F.ex.web_buttons(1 << 1); run(60); F.ex.web_buttons(0); run(150);   // OCT+ again: a third language, not yet saved
+if (lang(D) !== 2) fail("OCT+ on the FM-1 did not change the page's language again: " + lang(D));
+D.ex.web_save_now(); D.gen = D.ex.web_store_gen();
+const leaving = R.leave(storeOf(D));
+until("letting go never finished", () => !R.leaving, 10000);
+const how = await leaving;
+if (how !== "kept") fail("letting go: the last save was " + how);
+run(3500);
 if (remoteOn(F)) fail("the FM-1 is still in remote mode after goodbye");
-if (lang(F) !== 1 || story(F) !== 4 || scene(F) !== 0) fail(`the FM-1 should be at its title, in the page's language (lang ${lang(F)}, story ${story(F)}, scene ${scene(F)})`);
+if (lang(F) !== 2 || story(F) !== 4 || scene(F) !== 0) fail(`the FM-1 should be at its title, in the language just chosen in the page (lang ${lang(F)}, story ${story(F)}, scene ${scene(F)})`);
 if (!intoCave(F)) fail("the FM-1's own game does not go on from its title");
-ok("goodbye: the FM-1 is itself again (its title, in the language chosen in the page; PLAY: the cave)");
+ok("let go straight after playing: the last save kept, then goodbye (its title, in the language just chosen; PLAY: the cave)");
 
 // 6. the page goes quiet: the FM-1 is itself again by itself
 saveIn = null; R = new Fm1Remote(access, { ...page, now: () => now }); R.start();

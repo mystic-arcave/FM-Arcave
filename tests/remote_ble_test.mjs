@@ -86,7 +86,7 @@ async function run(ms) {
       frameAt = now;
       R.lights(leds(D));
       const g = D.ex.web_store_gen();
-      if (g !== D.gen) { D.gen = g; const s = storeOf(D); if (R.state === "connected" && s.length === pageLen) R.sendSave(s); }
+      if (g !== D.gen) { D.gen = g; const s = storeOf(D); if (R.state === "connected" && !R.leaving && s.length === pageLen) R.sendSave(s); }
     }
     await yieldNow();                              // (the write queue's promises)
   }
@@ -126,8 +126,16 @@ if (!remoteOn(F)) fail("the FM-1 left remote mode while the page's save came (a 
 if (btDropped) fail(`the FM-1's Bluetooth queue overflowed: ${btDropped} dropped`);
 ok(`the page's save kept on the FM-1 by Bluetooth, byte for byte (${((now - at) / 1000).toFixed(1)} s, one 20-octet write an event)`);
 
-// 4. goodbye
-R.stop(); await run(300);
+// 4. let go straight after playing (the page's button): the game saved at once, kept by Bluetooth, then the goodbye
+F.ex.web_buttons(1 << 1); await run(60); F.ex.web_buttons(0); await run(150);   // OCT+ again, not yet saved
+if (lang(D) !== 2) fail("OCT+ on the FM-1 did not change the page's language again: " + lang(D));
+D.ex.web_save_now(); D.gen = D.ex.web_store_gen();
+const t0 = now, leaving = R.leave(storeOf(D));
+await until("letting go never finished", () => !R.leaving, 30000);
+const how = await leaving;
+if (how !== "kept") fail("letting go: the last save was " + how);
+await run(500);
 if (remoteOn(F)) fail("the goodbye did not reach the FM-1");
-ok("goodbye by Bluetooth: the FM-1 is itself again");
+if (lang(F) !== 2) fail("the FM-1 did not keep what was played just before letting go (language " + lang(F) + ")");
+ok(`let go straight after playing: the last save kept by Bluetooth (${((now - t0) / 1000).toFixed(1)} s), then goodbye; the FM-1 is itself again`);
 console.log("remote by Bluetooth: all passed");

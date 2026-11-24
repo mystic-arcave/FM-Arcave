@@ -45,7 +45,7 @@ export class Fm1Remote {
     this.state = "off"; this.input = null; this.output = null;
     this.nonce = 1 + Math.floor(Math.random() * 127);
     this.btn = 0; this.keys = 0; this.lit = new Array(13).fill(-1);
-    this.rx = null; this.sendAt = 0; this.txq = []; this.lastHello = 0; this.lastHere = 0; this.started = 0;
+    this.rx = null; this.sendAt = 0; this.txq = []; this.leaving = null; this.unanswered = 0; this.lastHello = 0; this.lastHere = 0; this.started = 0;
     this.onMsg = (e) => this.msg(e);
   }
   set(s, detail) { if (s !== this.state || detail) { this.state = s; this.o.onState?.(s, detail); } }
@@ -54,7 +54,7 @@ export class Fm1Remote {
   listen() { for (const i of this.access.inputs.values()) if (!this.input || i === this.input) i.onmidimessage = this.onMsg; }
 
   start() {
-    this.input = null; this.output = null; this.btn = 0; this.keys = 0; this.lit.fill(-1); this.rx = null; this.txq = [];
+    this.input = null; this.output = null; this.btn = 0; this.keys = 0; this.lit.fill(-1); this.rx = null; this.txq = []; this.unanswered = 0;
     this.started = this.now(); this.lastHere = 0; this.lastHello = -1e9;
     this.access.onstatechange = () => this.listen();
     this.listen();
@@ -62,6 +62,7 @@ export class Fm1Remote {
     this.tick();
   }
   stop() {
+    this.done("stopped");
     if (this.state === "off") return;
     this.cc(HELLO, 0);                           // goodbye: the FM-1 is itself again
     for (const i of this.access.inputs.values()) if (i.onmidimessage === this.onMsg) i.onmidimessage = null;
@@ -73,11 +74,12 @@ export class Fm1Remote {
     if (this.state === "off" || this.state === "absent") return;
     const t = this.now();
     this.pump();
+    if (this.leaving && t > this.leaving.until) { this.done("timeout"); this.stop(); return; }   // (no answer: let it go all the same)
     if (t - this.lastHello >= HELLO_MS) { this.lastHello = t; this.cc(HELLO, this.nonce); }
     if (this.state === "searching" && t - this.started > ABSENT_MS) { this.stop(); this.set("absent"); }
     else if (this.state !== "searching" && t - this.lastHere > LOST_MS) {
       for (const i of this.access.inputs.values()) if (i.onmidimessage === this.onMsg) i.onmidimessage = null;
-      this.releaseAll(); this.txq = []; this.set("lost"); this.state = "off";
+      this.releaseAll(); this.txq = []; this.done("lost"); this.set("lost"); this.state = "off";
     }
   }
   releaseAll() {
@@ -97,13 +99,27 @@ export class Fm1Remote {
     const m = [[LEN_HI, bytes.length >> 7], [LEN_LO, bytes.length], ...pack7(bytes).map((v) => [DATA, v]),
       [SUM, (sum >> 7) & 127], [SUM, sum & 127]];
     if (this.outs().some((o) => o.backlog)) {     // Bluetooth: a newer save takes the place of one not yet all out (the
-      this.txq = m; this.pump();                  // FM-1 drops a save cut short by the next one's length)
+      if (!this.txq.length) this.unanswered++;    // FM-1 drops a save cut short by the next one's length: no answer to it)
+      this.txq = m; this.pump();
       return;
     }
+    this.unanswered++;
     let at = Math.max(this.sendAt, this.now());
     for (const [d1, d2] of m) { at += GAP_MS; this.cc(d1, d2, at); }
     this.sendAt = at;
   }
+  // let the FM-1 go, but only once it has kept the game's last save (bytes): the goodbye would cut a save still on its
+  // way (by Bluetooth that takes seconds). Resolves to "kept", "refused" (another size), "timeout", "lost" or
+  // "stopped"; without a save, or not connected, the goodbye at once ("none")
+  leave(bytes, ms = 30000) {
+    return new Promise((res) => {
+      if (this.state !== "connected" || !bytes) { this.stop(); res("none"); return; }
+      this.done("stopped");
+      this.leaving = { res, bytes, until: this.now() + ms, tries: 0, how: "timeout" };
+      this.sendSave(bytes);
+    });
+  }
+  done(how) { const l = this.leaving; if (l) { this.leaving = null; l.res(how); } }
   // by Bluetooth: the save a few packets at a time, the next only once the last is all but written, so a hello or a
   // light never waits long behind it and nothing piles up to be dropped
   pump() {
@@ -155,6 +171,14 @@ export class Fm1Remote {
       }
       this.set("connected");
       this.o.onSave?.(Uint8Array.from(r.bytes));
-    } else if (c === KEPT) this.o.onKept?.(v);
+    } else if (c === KEPT) {
+      this.o.onKept?.(v);
+      this.unanswered = Math.max(0, this.unanswered - 1);
+      const l = this.leaving;
+      if (!l || this.unanswered) return;          // (the answer to an earlier save: the last one is still on its way)
+      if (v === 3 && ++l.tries < 3) { this.sendSave(l.bytes); return; }   // damaged on the way: once or twice more
+      l.how = v === 1 ? "kept" : v === 2 ? "refused" : "timeout";
+      this.leaving = null; this.stop(); l.res(l.how);
+    }
   }
 }

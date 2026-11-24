@@ -33,6 +33,7 @@ class FmArcave extends AudioWorkletProcessor {
     else if (m.type === "enc") ex.web_enc(m.id, m.n);
     else if (m.type === "midi") ex.web_midi(m.st, m.d1, m.d2);
     else if (m.type === "hidden") this.hidden = m.on;
+    else if (m.type === "save") ex.web_save_now();             // (the next frame carries it)
   }
   process(_in, out) {
     const ex = this.ex, o = out[0];

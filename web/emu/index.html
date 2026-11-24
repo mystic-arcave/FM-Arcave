@@ -161,7 +161,8 @@ function onWorklet(n, m) {
     if (window.__fm) window.__fm.last = { state: m.state, clock: m.clock, bpm: m.bpm };
     if (remote && remote.state === "connected") {
       remote.lights(m.leds);
-      if (m.store) { if (m.store.length === fm1.len) remote.sendSave(m.store); }
+      if (m.store && saveWaiter) { saveWaiter(m.store); saveWaiter = null; }   // (the last save, asked for on leaving)
+      else if (m.store && !fm1.leaving) { if (m.store.length === fm1.len) remote.sendSave(m.store); }
     } else if (m.store && !fm1.game) { try { localStorage.setItem(SAVE, btoa(String.fromCharCode(...m.store))); } catch (e) {} }
     midiOut(m.midi);
   }
@@ -197,7 +198,17 @@ $("midi").addEventListener("click", async () => {
 // By USB (Web MIDI, or an FM-1 the computer has connected as a Bluetooth MIDI device), or by Bluetooth from this page
 // (Web Bluetooth: web/link/ble.js, as the Link pages use it).
 let remote = null, ble = null, btPort = null, btAcc = null;
-const fm1 = { on: false, via: "", game: false, len: 0, older: false, kept: "" };   // game: the game running is the FM-1's
+const fm1 = { on: false, via: "", game: false, len: 0, older: false, kept: "", leaving: false };
+let saveWaiter = null;
+// the game saved now, whatever it was waiting for: the bytes, from the next frame (null if none came)
+function saveNow() {
+  return new Promise((res) => {
+    if (!node) { res(null); return; }
+    const t = setTimeout(() => { saveWaiter = null; res(null); }, 1500);
+    saveWaiter = (b) => { clearTimeout(t); res(b); };
+    node.port.postMessage({ type: "save" });
+  });
+}   // game: the game running is the FM-1's
 const FM1_LABEL = { usb: "PLAY WITH MY FM-1", bt: "PLAY WITH MY FM-1 (BLUETOOTH)" }, FM1_ID = { usb: "fm1", bt: "fm1bt" };
 function fm1Button(label, on) {
   for (const v of ["usb", "bt"]) {
@@ -220,10 +231,27 @@ function fm1Off(text) {
   if (fm1.via === "bt") btLetGo();
   if (text) $("status").textContent = text;
 }
-function fm1Stop() {                              // back to this browser's own game; the FM-1 is itself again
-  remote.stop(); fm1Off();
-  if (fm1.game) { fm1.game = false; boot(browserSave(), "Back to the game saved in this browser. Your FM-1 is playing its own game again."); }
-  else $("status").textContent = node ? ready() : "";
+// back to this browser's own game; the FM-1 is itself again, once it has kept what was just played (its last save, made
+// now and sent; the goodbye only after the FM-1 says it is kept: by Bluetooth that takes a few seconds)
+async function fm1Stop() {
+  if (fm1.leaving) return;
+  let how = "none";
+  if (fm1.game && remote.state === "connected" && !fm1.older) {
+    fm1.leaving = true;
+    fm1Button("SAVING ON YOUR FM-1...", true);
+    $("status").textContent = "Saving what you played on your FM-1" + (fm1.via === "bt" ? " by Bluetooth: a few seconds" : "") + "... Keep it switched on.";
+    const bytes = await saveNow();
+    how = await remote.leave(bytes && bytes.length === fm1.len ? bytes : null);
+    fm1.leaving = false;
+    if (!fm1.on) return;                          // (the link went meanwhile: fm1Off has said so)
+  } else remote.stop();
+  fm1Off();
+  if (fm1.game) {
+    fm1.game = false;
+    boot(browserSave(), how === "kept" ? "Your progress is kept on your FM-1, and it is playing its own game again. Back to the game saved in this browser."
+      : how === "none" ? "Back to the game saved in this browser. Your FM-1 is playing its own game again."
+      : "Your FM-1 did not confirm the last save, so what you played since " + (fm1.kept ? fm1.kept : "you started") + " may not be on it. Back to the game saved in this browser.");
+  } else $("status").textContent = node ? ready() : "";
 }
 function fm1Start(access, via) {
   const say = (usb, bt) => (via === "bt" ? bt : usb);

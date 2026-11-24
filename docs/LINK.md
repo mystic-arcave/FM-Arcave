@@ -278,9 +278,13 @@ version of FM-ARCAVE, the page runs the game and shows it; the FM-1 becomes its 
 - every save the game makes goes back to the FM-1 and is kept in its flash, so the FM-1 carries on from there.
 
 Meanwhile the FM-1 shows a screen of its own (ON THE COMPUTER, Rock under the computer, in its language) and makes no
-sound: the sound is the computer's. Press the button again (FM-1: ON), close the page or unplug the FM-1, and within
-three seconds the FM-1 is itself again, as after a power-on, with the last save the page sent. The page then goes back
-to the game saved in the browser.
+sound: the sound is the computer's. Press the button again (FM-1: ON) and the page first saves the game as it is
+that moment (not waiting for the game's own next save, which can be a second and a half away, or a quarter of an hour
+for the time played), sends that save and waits until the FM-1 says it is kept (SAVING ON YOUR FM-1..., a few seconds
+by Bluetooth); only then does it say goodbye, and the FM-1 is itself again, as after a power-on, with that save. A
+goodbye sent at once would cut a save still on its way, and what was just played would be lost. Close the page or
+unplug the FM-1 instead and within three seconds it is itself again with the last save it had kept. The page then
+goes back to the game saved in the browser.
 
 Like everything else here it is control changes on channel 16, so it would pass through anything that carries MIDI,
 and the browser build can play the FM-1's part in the tests. The firmware's side is `firmware/src/arcave/ac_remote.h`,

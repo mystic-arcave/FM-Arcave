@@ -159,5 +159,8 @@ EXPORT uint32_t web_tick(void) { return tr_tick; }
  * build is itself playing an FM-1's part (the tests) */
 _Static_assert(sizeof svr <= sizeof w_store, "the game's save outgrew the page's store: raise w_store");
 EXPORT uint32_t web_save_size(void) { return sizeof svr; }
+/* the game saved now, not in a second and a half (or, for the time played, a quarter of an hour): the page asks before
+ * letting an FM-1 go, so what was just played is in the save the FM-1 keeps */
+EXPORT void web_save_now(void) { save_dirty = 0; save_now(); }
 EXPORT uint32_t web_remote(void) { return fmr.on | (uint32_t)fmr.msg << 1 | (uint32_t)fmr.tx_st << 4; }
 EXPORT uint32_t web_scene(void) { return scene | (uint32_t)story << 8 | (uint32_t)lang << 16 | (uint32_t)lk.state << 24; }
