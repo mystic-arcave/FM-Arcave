@@ -5,6 +5,9 @@
 // queue drops, as bt_oq_put does), one write an event from the page. Both ways go through the real BLE-MIDI packets
 // (web/link/ble.js), the page's side through the real write queue (Outbox) and remote.js's bleAccess.
 //   node tests/remote_ble_test.mjs        (after web/emu/build.sh)
+//   node tests/remote_ble_test.mjs mac    as a Mac does it: the page's writes taken at once into the computer's own
+//                                         queue and six packets an event, the FM-1's ring of 64 coming in read every 4 ms
+//                                         but now and then not for 40 ms (a picture, the sound): a full ring drops
 // The FM-1's save comes over whole with nothing dropped, paced by the room in its queue (bt_tx_room); the panel and the
 // lights; the page's save kept on the FM-1 with nothing dropped and no hello missed; goodbye.
 import { readFileSync } from "node:fs";
@@ -13,7 +16,9 @@ import { blePack, BleDecoder, Outbox } from "../web/link/ble.js";
 const fail = (m) => { console.error("FAIL", m); process.exit(1); };
 const ok = (m) => console.log("ok  ", m);
 const WASM = readFileSync("build/emu/fm-arcave.wasm");
-const IV = 15, CAP = 20, NOTIFY = 2, WRITES = 1, BT_OQ = 64;
+const MAC = process.argv[2] === "mac";
+const IV = 15, CAP = 20, NOTIFY = 2, WRITES = MAC ? 6 : 1, BT_OQ = 64, RING = 64;
+const POLL = 4, STALL_EVERY = MAC ? 300 : 0, STALL = 40;
 
 async function fm(store) {
   const { instance } = await WebAssembly.instantiate(WASM, {});
@@ -42,10 +47,12 @@ const toPage = new BleDecoder(), toFm1 = new BleDecoder();
 // the page's side: a BlePorts port as ble.js makes one, its writes taken one an event
 const writes = [];
 const port = { id: "ble:test", name: "FM-ARCAVE 3F2A", kind: "ble", state: "on" };
-port.out = new Outbox((pkt) => new Promise((res) => writes.push({ pkt, res })));
+port.out = new Outbox((pkt) => MAC ? (writes.push({ pkt, res() {} }), Promise.resolve())   // (taken at once: the computer's queue)
+  : new Promise((res) => writes.push({ pkt, res })));
 port.send = (bytes) => { if (port.state === "on") port.out.send(bytes); };
 const acc = bleAccess(port);
-let fm1In = 0;
+let fm1In = 0, ringDropped = 0, ringMax = 0;
+const ring = [];                                   // the FM-1's MIDI input ring (usb.c MQ): Bluetooth's interrupt fills it
 
 let saveIn = null, kept = [], states = [];
 const R = new Fm1Remote(acc, {
@@ -69,10 +76,13 @@ async function run(ms) {
       }
       for (let k = 0; k < WRITES && writes.length; k++) {
         const w = writes.shift();
-        for (const m of toFm1.take(w.pkt)) { F.ex.web_midi(m.d[0], m.d[1], m.d[2]); fm1In++; }
+        for (const m of toFm1.take(w.pkt)) { if (ring.length < RING) ring.push(m.d); else ringDropped++; fm1In++; }
         w.res();
       }
     }
+    ringMax = Math.max(ringMax, ring.length);
+    const stalled = STALL_EVERY && now % STALL_EVERY < STALL;
+    if (now % POLL === 0 && !stalled) for (const d of ring.splice(0)) F.ex.web_midi(d[0], d[1], d[2]);   // link_poll
     F.ex.web_bt_room(BT_OQ - btq.length);
     F.ex.web_render(44); D.ex.web_render(44);
     if (now % 10 === 0) { F.ex.web_render(1); D.ex.web_render(1); }
@@ -121,10 +131,11 @@ const at = now;
 await until("the page's save was never kept on the FM-1", () => kept.includes(1), 30000);
 if (!same(storeOf(F), storeOf(D))) fail("the FM-1 does not hold the page's save");
 if (port.out.dropped) fail(`the page's write queue dropped ${port.out.dropped} sends`);
+if (ringDropped) fail(`the FM-1's ring coming in overflowed: ${ringDropped} messages dropped (the most waiting: ${ringMax})`);
 if (states.includes("lost") || states.includes("damaged")) fail("the link was taken for lost, or a save for damaged: " + states.join(" "));
 if (!remoteOn(F)) fail("the FM-1 left remote mode while the page's save came (a hello missed)");
 if (btDropped) fail(`the FM-1's Bluetooth queue overflowed: ${btDropped} dropped`);
-ok(`the page's save kept on the FM-1 by Bluetooth, byte for byte (${((now - at) / 1000).toFixed(1)} s, one 20-octet write an event)`);
+ok(`the page's save kept on the FM-1 by Bluetooth, byte for byte (${((now - at) / 1000).toFixed(1)} s, ${WRITES} 20-octet write${WRITES > 1 ? "s" : ""} an event, at most ${ringMax} of ${RING} waiting in the FM-1)`);
 
 // 4. let go straight after playing (the page's button): the game saved at once, kept by Bluetooth, then the goodbye
 F.ex.web_buttons(1 << 1); await run(60); F.ex.web_buttons(0); await run(150);   // OCT+ again, not yet saved
@@ -138,4 +149,5 @@ await run(500);
 if (remoteOn(F)) fail("the goodbye did not reach the FM-1");
 if (lang(F) !== 2) fail("the FM-1 did not keep what was played just before letting go (language " + lang(F) + ")");
 ok(`let go straight after playing: the last save kept by Bluetooth (${((now - t0) / 1000).toFixed(1)} s), then goodbye; the FM-1 is itself again`);
-console.log("remote by Bluetooth: all passed");
+if (ringDropped) fail(`the FM-1's ring coming in overflowed: ${ringDropped} dropped`);
+console.log(`remote by Bluetooth${MAC ? " (as a Mac)" : ""}: all passed`);

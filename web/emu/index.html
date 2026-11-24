@@ -22,6 +22,26 @@ main{padding:28px 0 0;display:grid;gap:22px}
 .help div b{font-weight:400;color:var(--text)}
 #status{text-align:center}
 .help[hidden]{display:none}
+/* a save on its way between the FM-1 and this page: over the FM-1's picture, a strip of key-lights that fills from
+   where the save is to where it goes */
+.xfer{position:absolute;inset:0;z-index:2;display:grid;place-items:center;padding:24px;background:rgba(0,0,0,.9);border-radius:4%/6.4%}
+.xfer[hidden]{display:none}
+#fm.big ~ .xfer{position:fixed;z-index:101;border-radius:0}
+.xfer-box{width:min(560px,100%);display:grid;gap:18px;text-align:center}
+.xfer h2{margin:0;font:400 clamp(15px,2.2vw,20px)/1.3 var(--pix);letter-spacing:.1em;color:var(--text);text-wrap:balance}
+.xfer-ends{display:flex;justify-content:space-between;gap:12px;font:400 11px/1 var(--pix);letter-spacing:.08em;color:var(--mute)}
+.xfer-ends b{font-weight:400;color:var(--opal)}
+.xfer-bar{display:grid;grid-template-columns:repeat(32,1fr);gap:3px;height:22px}
+.xfer-bar i{border-radius:2px;background:var(--panel);box-shadow:inset 0 0 0 1px var(--line2);transition:background-color .25s cubic-bezier(.16,1,.3,1),box-shadow .25s cubic-bezier(.16,1,.3,1)}
+.xfer-bar i.lit{background:var(--opal);box-shadow:none}
+.xfer-bar i.head{background:var(--teal);animation:xfer-breathe 1.1s ease-in-out infinite alternate}
+.xfer-bar.wait i:not(.lit){animation:xfer-wait 1.6s ease-in-out infinite;animation-delay:calc(var(--n) * 50ms)}
+@keyframes xfer-breathe{from{opacity:1}to{opacity:.35}}
+@keyframes xfer-wait{0%,100%{background:var(--panel)}40%{background:var(--line2)}}
+@media (prefers-reduced-motion:reduce){.xfer-bar i{transition:none}.xfer-bar i.head,.xfer-bar.wait i{animation:none}}
+.xfer-num{display:flex;justify-content:space-between;gap:12px;margin:0;font:400 12px/1 var(--pix);letter-spacing:.06em;color:var(--text);font-variant-numeric:tabular-nums}
+.xfer-num span:last-child{color:var(--mute)}
+.xfer-note{margin:0;font:400 11px/1.6 var(--pix);letter-spacing:.06em;color:var(--mute);text-wrap:balance}
 </style>
 </head>
 <body>
@@ -34,6 +54,15 @@ main{padding:28px 0 0;display:grid;gap:22px}
   <div class="stage">
     <div id="fm"></div>
     <button id="on" aria-label="Switch on"><span>SWITCH ON</span></button>
+    <div class="xfer" id="xfer" hidden>
+      <div class="xfer-box">
+        <h2 id="xfer-title">READING YOUR FM-1'S SAVE</h2>
+        <div class="xfer-ends"><b id="xfer-from">YOUR FM-1</b><b id="xfer-to">THIS BROWSER</b></div>
+        <div class="xfer-bar" id="xfer-bar" role="progressbar" aria-labelledby="xfer-title" aria-valuemin="0" aria-valuemax="100"></div>
+        <p class="xfer-num"><span id="xfer-pct">0%</span><span id="xfer-bytes"></span></p>
+        <p class="xfer-note" id="xfer-note"></p>
+      </div>
+    </div>
   </div>
   <div id="status" class="status" role="status">The same code that runs on the FM-1, version @VERSION@.</div>
   <div class="bar">
@@ -153,7 +182,7 @@ async function boot(store, status) {
   } catch (err) { $("status").textContent = "Could not start: " + err; }
 }
 function onWorklet(n, m) {
-  if (m.type === "ready") { $("on").hidden = true; $("status").textContent = n.status; window.__fm = { n, last: null }; sendHeld(); }
+  if (m.type === "ready") { if (xfer.end === "start") xferHide(); $("on").hidden = true; $("status").textContent = n.status; window.__fm = { n, last: null }; sendHeld(); }
   else if (m.type === "error") $("status").textContent = "Could not start: " + m.text;
   else if (m.type === "frame") {
     if (m.fb) fm.screen(m.fb);
@@ -222,12 +251,59 @@ function fm1Text() {
   return base + (fm1.kept ? " Last kept on your FM-1 at " + fm1.kept + "." : "");
 }
 function fm1Status() { $("status").textContent = fm1Text(); }
+// the loading screens over the FM-1's picture: its save coming here when it connects ("in"), the game's going back to it
+// when it is let go ("out"). The strip fills from where the save is to where it goes, as remote.progress() says
+const XN = 32, xfer = { on: false, dir: "", title: "", note: "", end: "", segs: [], hideAt: 0 };
+for (let i = 0; i < XN; i++) { const e = document.createElement("i"); e.style.setProperty("--n", i); $("xfer-bar").appendChild(e); xfer.segs.push(e); }
+function xferShow(dir) {
+  Object.assign(xfer, { on: true, dir, end: "", hideAt: 0 });
+  $("xfer-from").textContent = dir === "in" ? "YOUR FM-1" : "THIS BROWSER";
+  $("xfer-to").textContent = dir === "in" ? "THIS BROWSER" : "YOUR FM-1";
+  $("xfer").hidden = false; xferDraw();
+}
+function xferHide() { xfer.on = false; $("xfer").hidden = true; }
+const kb = (n) => (n / 1024).toFixed(1) + " KB";
+function xferDraw() {
+  if (!xfer.on) return;
+  if (xfer.hideAt && performance.now() > xfer.hideAt) { xferHide(); return; }
+  const bt = fm1.via === "bt", p = remote && !xfer.end ? remote.progress() : null;
+  let title, note = bt ? "BY BLUETOOTH: A FEW SECONDS. KEEP YOUR FM-1 SWITCHED ON" : "BY USB. KEEP YOUR FM-1 PLUGGED IN", frac = null, bytes = "";
+  if (xfer.end === "kept") { title = "KEPT ON YOUR FM-1"; note = "IT IS PLAYING ITS OWN GAME AGAIN"; frac = 1; }
+  else if (xfer.end === "start") { title = "STARTING YOUR GAME"; note = "FROM YOUR FM-1'S SAVE"; frac = 1; }
+  else if (xfer.dir === "in") {
+    if (remote && remote.state === "searching") {
+      title = "LOOKING FOR YOUR FM-1";
+      note = bt ? "CONNECTED BY BLUETOOTH. ASKING IT FOR ITS SAVE" : "PLUG IT IN BY USB, SWITCHED ON, WITH FM-ARCAVE RUNNING";
+    } else title = "READING YOUR FM-1'S SAVE";
+    if (p && p.dir === "in") { frac = p.of ? p.got / p.of : 0; bytes = kb(p.got) + " OF " + kb(p.of); }
+  } else {
+    title = "SAVING WHAT YOU PLAYED ON YOUR FM-1";
+    if (p && p.dir === "out") {
+      frac = p.of ? p.got / p.of : 0; bytes = kb(p.got) + " OF " + kb(p.of);
+      if (p.sent) { title = "YOUR FM-1 IS KEEPING IT"; note = "WRITING IT TO ITS MEMORY. KEEP IT SWITCHED ON"; frac = 1; bytes = kb(p.of) + " OF " + kb(p.of); }
+      if (p.tries) note = "IT CAME THROUGH DAMAGED: SENDING IT AGAIN (TRY " + (p.tries + 1) + " OF 3)";
+    }
+  }
+  if (xfer.note) note = xfer.note;
+  if (title !== xfer.title) { xfer.title = title; $("xfer-title").textContent = title; }
+  if ($("xfer-note").textContent !== note) $("xfer-note").textContent = note;
+  const n = frac === null ? 0 : Math.min(XN, Math.floor(frac * XN)), bar = $("xfer-bar");
+  bar.classList.toggle("wait", frac === null);
+  for (let i = 0; i < XN; i++) {
+    xfer.segs[i].classList.toggle("lit", i < n);
+    xfer.segs[i].classList.toggle("head", frac !== null && frac < 1 && i === n);
+  }
+  const pct = frac === null ? "" : Math.floor(frac * 100) + "%";
+  if (frac === null) bar.removeAttribute("aria-valuenow"); else bar.setAttribute("aria-valuenow", Math.floor(frac * 100));
+  $("xfer-pct").textContent = pct; $("xfer-bytes").textContent = bytes;
+}
 function btLetGo() {                              // (after the goodbye has had time to go out)
   const p = btPort; btPort = null; btAcc = null;
   if (p) setTimeout(() => ble.remove(p), 600);
 }
 function fm1Off(text) {
   fm1.on = false; held.fb = 0; held.fk = 0; fm1Button("", false);
+  if (xfer.end !== "kept") xferHide();
   if (fm1.via === "bt") btLetGo();
   if (text) $("status").textContent = text;
 }
@@ -239,10 +315,12 @@ async function fm1Stop() {
   if (fm1.game && remote.state === "connected" && !fm1.older) {
     fm1.leaving = true;
     fm1Button("SAVING ON YOUR FM-1...", true);
+    xferShow("out");
     $("status").textContent = "Saving what you played on your FM-1" + (fm1.via === "bt" ? " by Bluetooth: a few seconds" : "") + "... Keep it switched on.";
     const bytes = await saveNow();
     how = await remote.leave(bytes && bytes.length === fm1.len ? bytes : null);
     fm1.leaving = false;
+    if (how === "kept") { xfer.end = "kept"; xfer.hideAt = performance.now() + 1400; xferDraw(); }
     if (!fm1.on) return;                          // (the link went meanwhile: fm1Off has said so)
   } else remote.stop();
   fm1Off();
@@ -257,11 +335,12 @@ function fm1Start(access, via) {
   const say = (usb, bt) => (via === "bt" ? bt : usb);
   fm1.on = true; fm1.via = via; fm1.len = 0; fm1.older = false; fm1.kept = "";
   fm1Button("LOOKING FOR YOUR FM-1...", true);
+  xfer.note = ""; xferShow("in");
   $("status").textContent = say("Looking for your FM-1: plug it in by USB, switched on, with FM-ARCAVE running.",
     "Connected by Bluetooth to " + (btPort ? btPort.name : "your FM-1") + ". Asking it for its save...");
   remote = new Fm1Remote(access, {
     onState: (s, detail) => {
-      if (detail === "damaged") $("status").textContent = "The save came through damaged. Asking your FM-1 again...";
+      if (detail === "damaged") { $("status").textContent = "The save came through damaged. Asking your FM-1 again..."; xfer.note = "IT CAME THROUGH DAMAGED: ASKING YOUR FM-1 AGAIN"; }
       else if (s === "loading") $("status").textContent = say("Found your FM-1. Reading its save...", "Found your FM-1. Reading its save by Bluetooth: a few seconds...");
       else if (s === "absent") fm1Off(say("No FM-1 answered. Is it plugged in by USB and switched on? It needs this version of FM-ARCAVE (@VERSION@): see INSTALL.",
         "Your FM-1 is connected by Bluetooth but did not answer. It needs this version of FM-ARCAVE (@VERSION@): see INSTALL."));
@@ -275,7 +354,7 @@ function fm1Start(access, via) {
       }
       fm1.len = bytes.length; fm1.older = bytes.length < saveSize;
       fm1Button(say("FM-1: ON", "FM-1: ON (BLUETOOTH)"), true);
-      fm1.game = true; boot(bytes, fm1Text());
+      fm1.game = true; xfer.note = ""; xfer.end = "start"; xferDraw(); boot(bytes, fm1Text());
     },
     onInput: (b, k) => { held.fb = b; held.fk = k; sendHeld(); },
     onKnob: (id, n) => send({ type: "enc", id, n }),
@@ -319,7 +398,7 @@ $("fm1bt").addEventListener("click", async () => {
   btPort = p; btAcc = bleAccess(p);
   fm1Start(btAcc, "bt");
 });
-setInterval(() => { if (remote) remote.tick(); }, 20);
+setInterval(() => { if (remote) remote.tick(); xferDraw(); }, 20);
 addEventListener("pagehide", () => { if (remote) remote.stop(); });
 </script>
 </body>

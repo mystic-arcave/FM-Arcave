@@ -9,7 +9,9 @@
  *   to the FM-1   CC 78 n     hello, every half second (n 1-127: the page's own number); CC 78 0: goodbye
  *                 CC 80..92   the lights, 7 bits each: lit buttons (bit 14 of them PLAY lit, 15 PLAY breathing: 3),
  *                             lit keys (4), glowing keys (4), breathing buttons (2)
- *   from it       CC 70 1     here: the answer to every hello (1: this protocol's version)
+ *   from it       CC 70 2     here: the answer to every hello (this protocol's version: 2 sends CC 69)
+ *                 CC 69 n     a save coming in, read so far: 0 when its length is read, then after every 16th CC 76
+ *                             read, n = how many sixteens (mod 128). The page keeps no more than 40 CC 76 beyond it
  *                 CC 71 v     a button: its number (BTN_...), + 64 pressed
  *                 CC 72 v     a key (0 the lowest), + 64 pressed
  *                 CC 73 v     a knob: its number (ENC_...) * 16 + 8 + the detents turned (-8..7, never 0)
@@ -23,11 +25,12 @@
  * goodbye: the FM-1 is itself again, as after a power-on, with the save it now holds.
  * The save goes out four messages a millisecond at most: the USB ring holds 64 and is emptied at 2 kHz. Over
  * Bluetooth (bt_tx_room) it goes no faster than the radio empties its queue of 64, which a connection event takes a
- * dozen or so of. The page sends its own at two a millisecond by USB, and by Bluetooth a few packets at a time as
- * its writes are taken (remote.js); while one comes in this FM-1 draws nothing, so the ring of 64 coming in is
- * read often enough (a picture can take a while). */
+ * dozen or so of. The page sends its own at two a millisecond by USB; by Bluetooth no faster than CC 69 says this
+ * FM-1 has read it (remote.js): a computer can hand the radio six packets an event or more, and a full ring of 64
+ * coming in drops. While one comes in this FM-1 draws nothing, so the ring is read often (a picture can take a
+ * while). */
 
-#define FMR_PROTO 1u
+#define FMR_PROTO 2u
 #define FMR_BUF 3072u                             /* the largest save taken (the game's is 2616 bytes with the music room) */
 #define FMR_LOST_MS 3000u
 
@@ -44,7 +47,7 @@ static struct {
     uint16_t tx_len, tx_n, tx_sum;
     uint8_t tx_st, tx_k;
     uint32_t tx_ms;
-    uint16_t rx_len, rx_n, rx_sum, rx_ck;        /* a save coming in */
+    uint16_t rx_len, rx_n, rx_sum, rx_ck, rx_m;  /* a save coming in (rx_m: its CC 76 read, for CC 69) */
     uint8_t rx_on, rx_k, rx_hdr, rx_hi, rx_ckn;
 } fmr;
 static uint8_t fmr_rxb[FMR_BUF];
@@ -78,8 +81,10 @@ static int fmr_rx(uint32_t d1, uint32_t d2)
     if (d1 == 74u) { fmr.rx_hi = (uint8_t)d2; fmr.rx_on = 0; }
     else if (d1 == 75u) {
         fmr.rx_len = (uint16_t)((uint32_t)fmr.rx_hi << 7 | d2);
-        fmr.rx_n = 0; fmr.rx_k = 0; fmr.rx_sum = 0; fmr.rx_ckn = 0; fmr.rx_on = 1;
+        fmr.rx_n = 0; fmr.rx_k = 0; fmr.rx_sum = 0; fmr.rx_ckn = 0; fmr.rx_on = 1; fmr.rx_m = 0;
+        midi_send(0xBFu, 69u, 0u);
     } else if (d1 == 76u && fmr.rx_on) {
+        if (!(++fmr.rx_m & 15u)) midi_send(0xBFu, 69u, (uint32_t)(fmr.rx_m >> 4) & 127u);
         if (fmr.rx_k == 0u) fmr.rx_hdr = (uint8_t)d2;
         else {
             uint8_t b = (uint8_t)(d2 | (uint32_t)((fmr.rx_hdr >> (fmr.rx_k - 1u)) & 1u) << 7);

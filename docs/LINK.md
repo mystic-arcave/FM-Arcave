@@ -286,6 +286,12 @@ goodbye sent at once would cut a save still on its way, and what was just played
 unplug the FM-1 instead and within three seconds it is itself again with the last save it had kept. The page then
 goes back to the game saved in the browser.
 
+Both ways a loading screen covers the FM-1's picture on the page while the save is on its way: READING YOUR FM-1'S
+SAVE when it connects, SAVING WHAT YOU PLAYED ON YOUR FM-1 when it is let go, a strip of 32 lights filling from where
+the save is to where it goes, with how much of it has gone (by Bluetooth, as much as the FM-1 says it has read: CC 69).
+Going back, the strip is full while the FM-1 writes it to its flash (YOUR FM-1 IS KEEPING IT), then KEPT ON YOUR FM-1.
+The page's side: `remote.js`'s `progress()`.
+
 Like everything else here it is control changes on channel 16, so it would pass through anything that carries MIDI,
 and the browser build can play the FM-1's part in the tests. The firmware's side is `firmware/src/arcave/ac_remote.h`,
 the page's `web/emu/remote.js`:
@@ -293,7 +299,8 @@ the page's `web/emu/remote.js`:
 | CC | way | value |
 |----|-----|-------|
 | 78 | to the FM-1 | hello, every half second: the page's number, 1-127 (a new number: the save is sent again); 0 goodbye |
-| 70 | from it | here, the answer to every hello: the protocol's version (1) |
+| 70 | from it | here, the answer to every hello: the protocol's version (2; 1 before 0.25, without CC 69) |
+| 69 | from it | how much of a save coming in it has read: 0 when its length is read, then after every 16th CC 76 the number of sixteens (mod 128). By Bluetooth the page keeps no more than 40 CC 76 beyond it |
 | 71 | from it | a button (`BTN_...`), + 64 pressed |
 | 72 | from it | a key (0 the lowest), + 64 pressed |
 | 73 | from it | a knob: its number (`ENC_...`) × 16 + 8 + the detents turned (-8..7, never 0) |
@@ -334,9 +341,14 @@ on some computers), a dozen or so messages each way, so:
 - the page sends its saves seven packets (42 messages) at a time, the next only once the last is written, so a hello
   or the lights never wait more than a few events behind a save and the page's write queue never drops anything. A
   newer save takes the place of one not yet all out. On a slow link a save takes about eight seconds; the FM-1 shows
-  SAVED when it is in.
+  SAVED when it is in;
+- and no further ahead than the FM-1 says it has read (CC 69): 40 of the save's messages at most, its ring coming in
+  holding 64. "Written" only means the computer took it: a Mac takes writes at once and sends six packets an event
+  or more, which overran that ring and every save came in damaged (0.24, on a real FM-1). An FM-1 from before 0.25
+  says nothing, so the page sends it 12 messages each 20 ms.
 
 `tests/remote_ble_test.mjs` plays a slow link (15 ms events, 20-octet packets, two notifications an event from the
 FM-1, one write from the page) through the real packet code on both sides: both saves arrive whole, nothing is
-dropped, no hello is missed. Not yet tried with an FM-1: the radio itself has not run on one yet (the first checks:
-the Bluetooth section above).
+dropped, no hello is missed. `remote_ble_test.mjs mac` plays it as a Mac does: writes taken at once, six packets an
+event, the FM-1's ring of 64 read every 4 ms but now and then not for 40 ms. Without CC 69 the page's save never
+arrives whole there. On a real FM-1 (0.24, a Mac): connecting and the FM-1's save work; the page's saves did not.

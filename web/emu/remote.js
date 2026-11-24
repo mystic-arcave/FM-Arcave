@@ -4,13 +4,16 @@
 // keeps. Plain control changes on MIDI channel 16, as firmware/src/arcave/ac_remote.h describes them.
 //   const r = new Fm1Remote(midiAccess, { onState, onSave, onInput, onKnob, onKept });  r.start(); ... r.stop();
 //   r.tick() about every 20 ms (hello, the save by Bluetooth, noticing the FM-1 gone); r.lights([lit, keys, dim, breath]);
-//   r.sendSave(bytes)
+//   r.sendSave(bytes); r.progress(): how far a save between them has got (for a loading screen)
 // By Bluetooth (web/link/ble.js's BlePorts): new Fm1Remote(bleAccess(port), ...), and the port's messages to access.heard.
 // Everything that takes time comes from opts.now (performance.now in a browser), so a test can run it on its own clock.
-const CH16 = 0xbf, HELLO = 78, HERE = 70, BTN = 71, KEY = 72, KNOB = 73, LEN_HI = 74, LEN_LO = 75, DATA = 76, SUM = 77,
+const CH16 = 0xbf, TAKEN = 69, HELLO = 78, HERE = 70, BTN = 71, KEY = 72, KNOB = 73, LEN_HI = 74, LEN_LO = 75, DATA = 76, SUM = 77,
   KEPT = 79, LIGHTS = 80;
 const HELLO_MS = 500, ABSENT_MS = 4000, LOST_MS = 2500, GAP_MS = 0.5;   // the save: two messages a millisecond
 const CHUNK = 42;                                 // by Bluetooth: seven packets of the save at a time (six to a packet)
+const WINDOW = 40, PER_TAKEN = 16;                // ... and never more than 40 of its bytes' messages beyond what the
+                                                  // FM-1 says it has read (CC 69, every 16th): its ring coming in holds 64
+const SLOW = 12, SLOW_MS = 20;                    // an FM-1 that does not say (protocol 1): 12 messages each 20 ms
 
 export function pack7(bytes) {                    // seven bytes at a time: their top bits, then each byte's low seven
   const out = [];
@@ -45,7 +48,8 @@ export class Fm1Remote {
     this.state = "off"; this.input = null; this.output = null;
     this.nonce = 1 + Math.floor(Math.random() * 127);
     this.btn = 0; this.keys = 0; this.lit = new Array(13).fill(-1);
-    this.rx = null; this.sendAt = 0; this.txq = []; this.leaving = null; this.unanswered = 0; this.lastHello = 0; this.lastHere = 0; this.started = 0;
+    this.rx = null; this.sendAt = 0; this.txq = []; this.txData = 0; this.txTaken = 0; this.txAt = -1e9; this.proto = 1;
+    this.txTotal = 0; this.txStart = 0; this.txEnd = 0; this.txLen = 0; this.leaving = null; this.unanswered = 0; this.lastHello = 0; this.lastHere = 0; this.started = 0;
     this.onMsg = (e) => this.msg(e);
   }
   set(s, detail) { if (s !== this.state || detail) { this.state = s; this.o.onState?.(s, detail); } }
@@ -55,6 +59,7 @@ export class Fm1Remote {
 
   start() {
     this.input = null; this.output = null; this.btn = 0; this.keys = 0; this.lit.fill(-1); this.rx = null; this.txq = []; this.unanswered = 0;
+    this.proto = 1; this.txData = 0; this.txTaken = 0;
     this.started = this.now(); this.lastHere = 0; this.lastHello = -1e9;
     this.access.onstatechange = () => this.listen();
     this.listen();
@@ -98,15 +103,30 @@ export class Fm1Remote {
     let sum = 0; for (const b of bytes) sum += b;
     const m = [[LEN_HI, bytes.length >> 7], [LEN_LO, bytes.length], ...pack7(bytes).map((v) => [DATA, v]),
       [SUM, (sum >> 7) & 127], [SUM, sum & 127]];
+    this.txTotal = m.length - 4; this.txStart = this.now(); this.txLen = bytes.length;
     if (this.outs().some((o) => o.backlog)) {     // Bluetooth: a newer save takes the place of one not yet all out (the
       if (!this.txq.length) this.unanswered++;    // FM-1 drops a save cut short by the next one's length: no answer to it)
-      this.txq = m; this.pump();
+      this.txq = m; this.txData = 0; this.txTaken = 0; this.txEnd = 0; this.pump();
       return;
     }
     this.unanswered++;
     let at = Math.max(this.sendAt, this.now());
     for (const [d1, d2] of m) { at += GAP_MS; this.cc(d1, d2, at); }
-    this.sendAt = at;
+    this.sendAt = at; this.txEnd = at;
+  }
+  // a save on its way: { dir: "in", got, of } bytes of the FM-1's coming here; { dir: "out", got, of, sent, tries } of
+  // the last save going to the FM-1 while it is let go (got: what the FM-1 has read, by Bluetooth as it says; by USB as
+  // timed; sent: all of it out, the answer awaited); null: none
+  progress() {
+    const r = this.rx;
+    if (r && r.len >= 0) return { dir: "in", got: r.bytes.length, of: r.len };
+    const l = this.leaving;
+    if (!l || !this.txTotal) return null;
+    let f;
+    if (this.txEnd) f = Math.min(1, Math.max(0, (this.now() - this.txStart) / Math.max(1, this.txEnd - this.txStart)));
+    else f = (this.proto >= 2 ? this.txTaken : this.txData) / this.txTotal;
+    const sent = this.txEnd ? f >= 1 : !this.txq.length;
+    return { dir: "out", got: Math.round(Math.min(1, f) * this.txLen), of: this.txLen, sent, tries: l.tries };
   }
   // let the FM-1 go, but only once it has kept the game's last save (bytes): the goodbye would cut a save still on its
   // way (by Bluetooth that takes seconds). Resolves to "kept", "refused" (another size), "timeout", "lost" or
@@ -121,20 +141,29 @@ export class Fm1Remote {
   }
   done(how) { const l = this.leaving; if (l) { this.leaving = null; l.res(how); } }
   // by Bluetooth: the save a few packets at a time, the next only once the last is all but written, so a hello or a
-  // light never waits long behind it and nothing piles up to be dropped
+  // light never waits long behind it and nothing piles up to be dropped; and its bytes no further ahead of what the
+  // FM-1 has read than its ring coming in holds. A computer takes writes faster than the radio sends them (a Mac six
+  // packets an event or more): it is the FM-1 that says when there is room
   pump() {
     if (!this.txq.length || this.state !== "connected") return;
-    const o = this.outs()[0];
+    const o = this.outs()[0], says = this.proto >= 2;
+    if (!says) { const t = this.now(); if (t - this.txAt < SLOW_MS) return; this.txAt = t; }
     while (this.txq.length && o.backlog() < 2) {
-      const b = [];
-      for (const [d1, d2] of this.txq.splice(0, CHUNK)) b.push(CH16, d1, d2 & 127);
+      const b = [], most = says ? CHUNK : SLOW;
+      while (this.txq.length && b.length < most * 3) {
+        const [d1, d2] = this.txq[0];
+        if (d1 === DATA) { if (says && this.txData >= this.txTaken + WINDOW) break; this.txData++; }
+        this.txq.shift(); b.push(CH16, d1, d2 & 127);
+      }
+      if (!b.length) return;
       o.send(b);
+      if (!says) return;
     }
   }
 
   msg(e) {
     const d = e.data;
-    if (d.length < 3 || d[0] !== CH16 || d[1] < HERE || d[1] > KEPT) return;
+    if (d.length < 3 || d[0] !== CH16 || d[1] < TAKEN || d[1] > KEPT) return;
     const [, c, v] = d;
     if (!this.input) {                           // the first FM-1 to answer is the one; its output has its name
       if (c !== HERE) return;
@@ -144,11 +173,16 @@ export class Fm1Remote {
       for (const i of this.access.inputs.values()) if (i !== this.input && i.onmidimessage === this.onMsg) i.onmidimessage = null;
     }
     if (c === HERE) {
-      this.lastHere = this.now();
+      this.lastHere = this.now(); this.proto = v;
       if (this.state === "searching") this.set("loading");
       return;
     }
     if (this.state === "searching") return;
+    if (c === TAKEN) {                            // how much of the save going out the FM-1 has read (in sixteens, mod 128)
+      const a = v * PER_TAKEN, read = this.txData - (((this.txData - a) % 2048) + 2048) % 2048;
+      if (read > this.txTaken) { this.txTaken = read; this.pump(); }
+      return;
+    }
     if (c === BTN || c === KEY) {
       const bit = 1 << (v & 63), down = v & 64;
       if (c === BTN) this.btn = down ? this.btn | bit : this.btn & ~bit;
