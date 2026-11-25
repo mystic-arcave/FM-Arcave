@@ -30,8 +30,14 @@
  * coming in drops. While one comes in this FM-1 draws nothing, so the ring is read often (a picture can take a
  * while). */
 
-#define FMR_PROTO 2u
-#define FMR_BUF 3072u                             /* the largest save taken (the game's is 2616 bytes with the music room) */
+/* (protocol 3) The machine bank (ac_slots.h), for the site's MYSTIC MACHINES page, while the FM-1 is the page's:
+ *   to the FM-1   CC 60 k     what the next save-shaped thing sent (CC 74..77) is: 0 a save; 1 + slot a piece of the
+ *                             machine being loaded into that slot (answered with CC 79 like a save: 1 kept, 3 not)
+ *                 CC 61 v     a command for the bank: 0 tell its state; else ac_slots.h's mb_cmd
+ *   from it       CC 62 r     the command's answer (mb_cmd), once it is done (emptying a slot takes half a second)
+ *                 CC 63 k     what the next save-shaped thing from the FM-1 is: 1 the bank's state (mb_info) */
+#define FMR_PROTO 3u
+#define FMR_BUF 4096u                             /* the largest save taken (the game's is 3404 bytes with the room's places' slots) */
 #define FMR_LOST_MS 3000u
 
 static void fmr_game_enter(void);                 /* arcave.c: the game set aside, its save written */
@@ -49,6 +55,8 @@ static struct {
     uint32_t tx_ms;
     uint16_t rx_len, rx_n, rx_sum, rx_ck, rx_m;  /* a save coming in (rx_m: its CC 76 read, for CC 69) */
     uint8_t rx_on, rx_k, rx_hdr, rx_hi, rx_ckn;
+    uint8_t kind, tx_kind;                       /* what comes in (CC 60), what goes out (CC 63) */
+    const uint8_t *sv; uint16_t sv_len;          /* the save, to send again to a new page */
 } fmr;
 static uint8_t fmr_rxb[FMR_BUF];
 
@@ -60,7 +68,7 @@ static void fmr_start(const void *p, uint32_t n)
     fmr.prev_btn = fm1_in.buttons & 0x3FFFu; fmr.prev_keys = fm1_in.notes & ((1u << AC_NKEY) - 1u);
     for (i = 0; i < 13u; i++) fmr.lg[i] = 0;
     for (i = 0; i < 7u; i++) (void)fm1_enc_take(i);   /* (a turn from before is not sent) */
-    fmr.tx = (const uint8_t *)p; fmr.tx_len = (uint16_t)n; fmr.tx_st = 1;
+    fmr.tx = fmr.sv = (const uint8_t *)p; fmr.tx_len = fmr.sv_len = (uint16_t)n; fmr.tx_st = 1; fmr.kind = 0; fmr.tx_kind = 0;
     fb_all = 1;
 }
 
@@ -72,7 +80,14 @@ static int fmr_rx(uint32_t d1, uint32_t d2)
         midi_send(0xBFu, 70u, FMR_PROTO);
         fmr.last_hello = fm1_ms;
         if (!fmr.on) { fmr.nonce = (uint8_t)d2; fmr_game_enter(); }
-        else if (d2 != fmr.nonce) { fmr.nonce = (uint8_t)d2; fmr.tx_st = 1; }   /* (a new page: the save again) */
+        else if (d2 != fmr.nonce) { fmr.nonce = (uint8_t)d2; fmr.tx = fmr.sv; fmr.tx_len = fmr.sv_len; fmr.tx_kind = 0; fmr.kind = 0; fmr.tx_st = 1; }   /* (a new page: the save again) */
+        return 1;
+    }
+    if (d1 == 60u || d1 == 61u) {                /* the machine bank */
+        if (!fmr.on) return 1;
+        if (d1 == 60u) fmr.kind = (uint8_t)d2;
+        else if (!d2) { if (!fmr.tx_st) { fmr.tx_len = (uint16_t)mb_info(); fmr.tx = mb_infob; fmr.tx_kind = 1; fmr.tx_st = 1; } }
+        else { int r = mb_cmd(d2); if (r >= 0) midi_send(0xBFu, 62u, (uint32_t)r); }
         return 1;
     }
     if (d1 < 74u || d1 > 92u || d1 == 78u || d1 == 79u) return 0;
@@ -99,9 +114,11 @@ static int fmr_rx(uint32_t d1, uint32_t d2)
             fmr.rx_ck |= (uint16_t)d2; fmr.rx_on = 0;
             if (fmr.rx_n != fmr.rx_len || (fmr.rx_sum & 0x3FFFu) != fmr.rx_ck) r = 3;
             else if (fmr.rx_len > FMR_BUF) r = 2;
+            else if (fmr.kind) r = mb_chunk(fmr.kind - 1u, fmr_rxb, fmr.rx_len);
             else r = fmr_game_keep(fmr_rxb, fmr.rx_len);
             midi_send(0xBFu, 79u, (uint32_t)r);
-            if (r == 1) { if (fmr.msg != 2u) fmr.msg = 1; fmr.msg_ms = fm1_ms; }
+            if (fmr.kind) ;                      /* (a piece of a machine: nothing to say on the screen) */
+            else if (r == 1) { if (fmr.msg != 2u) fmr.msg = 1; fmr.msg_ms = fm1_ms; }
             else if (r == 2) fmr.msg = 2;
 #ifdef DINGHY_HOST
             printf("%6u ms  remote: a save of %u bytes from the page: %s\n", fm1_ms, fmr.rx_len, r == 1 ? "kept" : r == 2 ? "not this size" : "damaged");
@@ -127,6 +144,7 @@ static void fmr_poll(void)
     uint32_t rel = 0, down, cur, e;
     int32_t budget = 4;
     if (!fmr.on) return;
+    mb_poll();                                   /* (a slot of the machine bank being emptied: a sector a pass) */
     down = fm1_input_edges(&rel);
     cur = fm1_in.buttons & 0x3FFFu;
     fmr_edges(71u, 14u, cur, fmr.prev_btn, down & 0x3FFFu, rel & 0x3FFFu);
@@ -148,11 +166,12 @@ static void fmr_poll(void)
     }
     while (budget > 0 && fmr.tx_st) {
         if (fmr.tx_st == 1u) {
+            if (fmr.tx_kind) { midi_send(0xBFu, 63u, fmr.tx_kind); budget--; }
             midi_send(0xBFu, 74u, (uint32_t)fmr.tx_len >> 7 & 127u); midi_send(0xBFu, 75u, fmr.tx_len & 127u);
             fmr.tx_st = 2; fmr.tx_n = 0; fmr.tx_k = 0; fmr.tx_sum = 0; budget -= 2;
         } else if (fmr.tx_n >= fmr.tx_len) {
             midi_send(0xBFu, 77u, (uint32_t)fmr.tx_sum >> 7 & 127u); midi_send(0xBFu, 77u, fmr.tx_sum & 127u);
-            fmr.tx_st = 0; budget -= 2;
+            fmr.tx_st = 0; fmr.tx_kind = 0; budget -= 2;
         } else if (fmr.tx_k == 0u) {              /* the next seven bytes' top bits */
             uint32_t h = 0, i;
             for (i = 0; i < 7u && fmr.tx_n + i < fmr.tx_len; i++) h |= (uint32_t)(fmr.tx[fmr.tx_n + i] >> 7) << i;

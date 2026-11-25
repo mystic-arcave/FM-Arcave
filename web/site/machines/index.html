@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FM-ARCAVE: mystic machines and instruments</title>
+<meta name="description" content="Choose which machines stand on the three ledges of your Arcave and which instruments in its music room, and load new ones into your FM-1.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Silkscreen&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../site.css">
+<style>
+main{padding:clamp(36px,6vw,72px) 0 0}
+.lead h1{font-size:clamp(28px,4.6vw,48px);margin:14px 0 16px}
+.lead p{color:var(--mute)}
+.cta{display:flex;flex-wrap:wrap;gap:12px;margin-top:28px}
+.cta [hidden]{display:none}
+#status{margin-top:22px;min-height:38px;color:var(--text);max-width:72ch}
+#status.bad{color:var(--amber)}
+.xfer{display:grid;gap:10px;margin-top:22px;max-width:560px}
+.xfer[hidden]{display:none}
+.xfer-ends{display:flex;justify-content:space-between;gap:12px;font:400 11px/1 var(--pix);letter-spacing:.08em;color:var(--opal)}
+.xfer-bar{display:grid;grid-template-columns:repeat(32,1fr);gap:3px;height:18px}
+.xfer-bar i{border-radius:2px;background:var(--panel);box-shadow:inset 0 0 0 1px var(--line2);transition:background-color .25s cubic-bezier(.16,1,.3,1)}
+.xfer-bar i.lit{background:var(--opal);box-shadow:none}
+.xfer-bar.wait i{animation:xfer-wait 1.6s ease-in-out infinite;animation-delay:calc(var(--n) * 50ms)}
+@keyframes xfer-wait{0%,100%{background:var(--panel)}40%{background:var(--line2)}}
+@media (prefers-reduced-motion:reduce){.xfer-bar i{transition:none}.xfer-bar.wait i{animation:none}}
+h2+p{margin-top:16px;color:var(--mute)}
+.kicker+h2{margin-top:14px}
+section[hidden]{display:none}
+/* the three ledges, as they hang in the cave: the high one, the middle one, the low one */
+.ledges{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:22px;margin-top:30px}
+.ledges.places{grid-template-columns:repeat(4,minmax(0,1fr))}
+#arcave h2.next{margin-top:clamp(40px,6vw,64px)}
+.cat h2.next,.cat-h{margin-top:clamp(32px,5vw,48px)}
+.ledge{border-top:2px solid var(--line2);padding-top:18px;display:grid;gap:12px;align-content:start}
+.ledge .n{font:400 11px/1 var(--pix);letter-spacing:.12em;color:var(--mute)}
+.ledge h3{font-size:19px;color:var(--text);overflow-wrap:anywhere}
+.ledge[data-c="0"]{border-top-color:var(--pink)}.ledge[data-c="1"]{border-top-color:var(--violet)}.ledge[data-c="2"]{border-top-color:var(--teal)}
+.ledge[data-c="3"]{border-top-color:var(--opal)}.ledge[data-c="4"]{border-top-color:var(--blue)}
+.ledge .how{font:400 11px/1.5 var(--pix);letter-spacing:.08em;color:var(--opal);margin:0}
+.ledge .how.dim{color:var(--amber)}
+.ledge .pick{display:grid;gap:6px;margin-top:6px}
+.ledge .pick p{font:400 11px/1 var(--pix);letter-spacing:.12em;color:var(--mute);margin:4px 0 2px}
+.ledge .pick .btn{justify-content:space-between;text-align:left;width:100%}
+.ledge .pick .btn small{font:400 10px/1 var(--pix);letter-spacing:.1em;color:var(--mute)}
+.ledge .pick .btn.on small{color:#000}
+.cat{display:grid;gap:0;margin-top:30px}
+.cat article{display:grid;grid-template-columns:220px minmax(0,1fr) auto;gap:8px 32px;align-items:start;padding:22px 0;border-top:1px solid var(--line)}
+.cat article:last-child{border-bottom:1px solid var(--line)}
+.cat h3{font-size:17px;color:var(--text)}
+.cat p{color:var(--mute);font-size:15px;max-width:none}
+.cat .tag{font:400 10px/1.6 var(--pix);letter-spacing:.12em;color:var(--mute);text-align:right;white-space:nowrap}
+.how-t{margin-top:30px}
+.how-t th{width:210px;color:var(--text);padding-top:13px}
+.how-t td{color:var(--mute)}
+@media (max-width:1040px){.ledges.places{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:820px){
+  .ledges,.ledges.places{grid-template-columns:1fr}
+  .cat article{grid-template-columns:1fr}
+  .cat .tag{text-align:left}
+  .how-t th{width:auto;display:block;border-bottom:0;padding-bottom:0}
+  .how-t td{display:block}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="top">
+  <a class="name" href="../">FM-ARCAVE</a>
+  <nav><a href="../emu/">PLAY</a><a href="../install/">INSTALL</a><a href="../link/">LINK</a><a href="./" aria-current="page">MACHINES</a><a href="../save/">SAVES</a><a href="https://github.com/mystic-arcave/FM-Arcave">SOURCE</a></nav>
+</header>
+<main>
+<div class="lead">
+  <p class="kicker">Mystic machines and instruments</p>
+  <h1>Three ledges, four instruments, yours to fill</h1>
+  <p>The Arcave has three ledges with a machine on each, and a music room with four instruments. A new install brings CRYSTAL ROAD, JUICE WORKS and NIGHT BLOOM, and ROOTS, THE GEODE, MUSHROOM RACK and CRYSTAL SEAM. Here you choose what stands where, and load machines and instruments the firmware does not carry into your FM-1, the way presets go into a synth. Nothing in the game changes until you change it here.</p>
+  <div class="cta" id="doors">
+    <button class="btn on" id="d-usb">MY FM-1</button>
+    <button class="btn" id="d-bt">MY FM-1 (BLUETOOTH)</button>
+    <button class="btn" id="d-browser">THE BROWSER'S GAME</button>
+    <button class="btn" id="d-done" hidden>DONE: LET IT GO</button>
+  </div>
+  <div class="xfer" id="xfer" hidden>
+    <div class="xfer-ends"><span>THIS BROWSER</span><span id="xfer-to">YOUR FM-1</span></div>
+    <div class="xfer-bar" id="xfer-bar" role="progressbar" aria-label="The machine on its way" aria-valuemin="0" aria-valuemax="100"></div>
+  </div>
+  <p id="status" class="status" role="status">Whose Arcave? By USB: plug your FM-1 in, switched on, with FM-ARCAVE running. By Bluetooth: switch Bluetooth on in its settings (GLO) first.</p>
+</div>
+
+<section id="arcave" hidden>
+  <p class="kicker" id="whose">Your Arcave</p>
+  <h2>What stands on each ledge</h2>
+  <p id="note">Pick a machine for a ledge. One the firmware carries is there at once; another is sent into that ledge's slot first.</p>
+  <div class="ledges" id="ledges"></div>
+  <div id="room" hidden>
+    <h2 class="next">What stands in the music room</h2>
+    <p id="note2">Pick an instrument for a place. The firmware's own is there at once; another is sent into that place's slot first. Each keeps its own layout and settings, so swapping loses nothing.</p>
+    <div class="ledges places" id="places"></div>
+  </div>
+</section>
+
+<section>
+  <p class="kicker">The catalogue</p>
+  <h2>Machines to choose from</h2>
+  <div class="cat" id="cat"></div>
+  <h2 class="cat-h">Instruments to choose from</h2>
+  <div class="cat" id="cat2"></div>
+</section>
+
+<section>
+  <p class="kicker">How it works</p>
+  <h2>Slots, like presets</h2>
+  <table class="how-t">
+    <tr><th>THREE SLOTS</th><td>Each ledge has a slot in the FM-1's memory, 40 KB of it, for one loaded machine. The three machines the firmware carries need no slot: they are always there, and a ledge can show any of them.</td></tr>
+    <tr><th>THE MUSIC ROOM</th><td>Its four places have a slot each as well, for one loaded instrument. The firmware's instrument of a place is always there, and the loaded one stands in for it when you choose so. Each keeps its own layout, knobs and lesson, so nothing is lost when you swap; that place's part of the loop is wiped, because it is made of the other one's sounds. Friends who play together in the room need the same instruments in the same places.</td></tr>
+    <tr><th>LOADING</th><td>The page sends the machine over the same link PLAY WITH MY FM-1 uses. The FM-1 shows its browser screen meanwhile, checks every byte of what arrived, and starts again with the machine on its ledge. Its best score and tickets are kept with your save.</td></tr>
+    <tr><th>NEVER STUCK</th><td>A machine that arrives damaged, or is made for a newer FM-ARCAVE, is not run: the ledge keeps the firmware's own machine. If the FM-1 ever restarts inside a loaded machine, loaded machines rest until it has been switched off and on.</td></tr>
+    <tr><th>THE BROWSER'S GAME</th><td>The game on the <a href="../emu/">PLAY</a> page has ledges of its own, kept in this browser. Close PLAY before changing them here.</td></tr>
+    <tr><th>YOUR SAVE</th><td>Which machine stands where is part of your save, so a <a href="../save/">backup</a> remembers it. The loaded machines themselves are not in the save: load them again from here.</td></tr>
+    <tr><th>MAKE ONE</th><td>A machine is one small C file, and so is an instrument. <a href="https://github.com/mystic-arcave/FM-Arcave/blob/main/docs/MACHINES.md">docs/MACHINES.md</a> tells how; GLOW CAPS and THE SPRING are the examples to start from.</td></tr>
+  </table>
+</section>
+
+<footer class="foot"><p>FM-ARCAVE is free software, GPL-3.0-only. Loading writes only to the seven slots kept for machines and instruments; one from anywhere but this page is code you run on your FM-1 at your own risk.</p></footer>
+</main>
+</div>
+<script type="module">
+import { parseFile, fits, Fm1Bank, BrowserBank, OWN, OWN_INST, ST, WHY } from "../emu/machines.js";
+import { bleAccess } from "../emu/remote.js";
+import { BlePorts, bleSay } from "../emu/ble.js";
+const $ = (id) => document.getElementById(id);
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
+function say(text, bad) { $("status").textContent = text; $("status").classList.toggle("bad", !!bad); }
+const OWN_CAP = [0, 2, 4], OWN_ABOUT = [
+  "A song comes down the road as crystals: your own, or any tune of the jukebox. Press a key of the lit group as each reaches the line.",
+  "Four taps of mushroom juice, a counter, and orders that keep coming. Pour each drink to its marks and serve it in time.",
+  "Four knobs turn four petals round a flower. Catch each spore on the petal of its own colour."];
+const LEDGE = ["LEDGE 1 · THE LOW ONE, ON THE RIGHT", "LEDGE 2 · THE MIDDLE ONE", "LEDGE 3 · THE HIGH ONE"];
+const INST_CAP = [2, 3, 0, 4], INST_ABOUT = [
+  "Pods hanging on roots in a wind: a drum kit that rattles.",
+  "A shell that turns, with stones loose inside it. Whatever a stone meets, sounds.",
+  "A pod bouncing along a row of caps: an acid bass.",
+  "Crystals that grow, break and rain shards: a lead, and glitter."];
+const PLACE = ["PLACE 1 · ROOTS'", "PLACE 2 · THE GEODE'S", "PLACE 3 · THE RACK'S", "PLACE 4 · THE SEAM'S"];
+
+// ---------------------------------------------------------------- the catalogue (machines the firmware does not carry)
+let cat = [], cat2 = [];                          // machines; instruments
+const files = new Map();                          // a catalogue entry's file, once fetched: by its file name
+fetch("catalog.json").then((r) => (r.ok ? r.json() : null)).then((c) => {
+  if (c && Array.isArray(c.machines)) cat = c.machines;
+  if (c && Array.isArray(c.instruments)) cat2 = c.instruments;
+  draw();
+}).catch(() => draw());
+async function fileOf(m) {
+  if (!files.has(m.file)) files.set(m.file, parseFile(await (await fetch(m.file)).arrayBuffer()));
+  return files.get(m.file);
+}
+function drawCat() {
+  const rows = OWN.map((name, k) => {
+    const a = el("article"); a.append(el("h3", "", name), el("p", "", OWN_ABOUT[k]), el("p", "tag", "IN THE FIRMWARE"));
+    return a;
+  });
+  for (const m of cat) {
+    const a = el("article");
+    a.append(el("h3", "", m.name), el("p", "", m.about || ""), el("p", "tag", (m.fm1 ? "LOADED INTO A SLOT" : "THE BROWSER'S GAME ONLY, IN THIS BUILD") + " · " + (m.bytes / 1024).toFixed(1) + " KB"));
+    rows.push(a);
+  }
+  $("cat").replaceChildren(...rows);
+  const rows2 = OWN_INST.map((name, k) => {
+    const a = el("article"); a.append(el("h3", "", name), el("p", "", INST_ABOUT[k]), el("p", "tag", "IN THE FIRMWARE"));
+    return a;
+  });
+  for (const m of cat2) {
+    const a = el("article");
+    a.append(el("h3", "", m.name), el("p", "", m.about || ""), el("p", "tag", (m.fm1 ? "LOADED INTO A SLOT" : "THE BROWSER'S GAME ONLY, IN THIS BUILD") + " · " + (m.bytes / 1024).toFixed(1) + " KB"));
+    rows2.push(a);
+  }
+  $("cat2").replaceChildren(...rows2);
+}
+
+// ---------------------------------------------------------------- an Arcave: an FM-1's, or the browser game's
+let bank = null, via = "", busy = false, ble = null, btPort = null, btAcc = null, midi = null, wasm = null;
+const XN = 32, segs = [];
+for (let i = 0; i < XN; i++) { const e = el("i"); e.style.setProperty("--n", i); $("xfer-bar").appendChild(e); segs.push(e); }
+function progress(frac) {
+  $("xfer").hidden = frac === undefined;
+  if (frac === undefined) return;
+  const n = frac === null ? 0 : Math.floor(Math.min(1, frac) * XN);
+  $("xfer-bar").classList.toggle("wait", frac === null);
+  if (frac === null) $("xfer-bar").removeAttribute("aria-valuenow"); else $("xfer-bar").setAttribute("aria-valuenow", Math.floor(frac * 100));
+  segs.forEach((s, i) => s.classList.toggle("lit", i < n));
+}
+setInterval(() => { if (bank) bank.tick(); if (bank && via !== "browser" && bank.state === "off" && !busy) lost(); }, 20);
+function lock(on) { busy = on; for (const b of document.querySelectorAll("button")) b.disabled = on; }
+const fm1 = () => via === "usb" || via === "bt";
+function shut(text, bad) {
+  const p = btPort;
+  if (bank) bank.close();
+  bank = null; btPort = null; btAcc = null;
+  if (p) setTimeout(() => ble.remove(p), 600);
+  via = ""; progress();
+  $("arcave").hidden = true; $("d-done").hidden = true;
+  for (const id of ["d-usb", "d-bt", "d-browser"]) $(id).hidden = false;
+  if (text) say(text, bad);
+}
+function lost() { shut("The link to your FM-1 broke. It is playing its own game again, with its ledges as they last were. Connect again to carry on.", true); }
+
+async function connect(how) {
+  if (busy || bank) return;
+  lock(true);
+  try {
+    let access = null;
+    if (how === "browser") {
+      wasm = wasm || await (await fetch("../emu/fm-arcave.wasm")).arrayBuffer();
+      bank = new BrowserBank(wasm, localStorage);
+    } else if (how === "usb") {
+      try { midi = midi || await navigator.requestMIDIAccess(); }
+      catch (e) { say("This browser gave no MIDI access (Chrome and Edge have it; Safari does not). THE BROWSER'S GAME still works here.", true); return; }
+      access = midi;
+      say("Looking for your FM-1: plug it in by USB, switched on, with FM-ARCAVE running.");
+    } else {
+      ble = ble || new BlePorts({ message: (p, d, t) => { if (btAcc && p === btPort) btAcc.heard(d, t); } });
+      if (await bleSay(ble)) { say(!ble.supported ? "This browser has no Web Bluetooth: use Chrome or Edge, or USB." : "Bluetooth is off on this computer, or it has none.", true); return; }
+      say("Pick your FM-1 in the browser's list (FM-ARCAVE and four letters of its own).");
+      let p = null;
+      try { p = await ble.add(); }
+      catch (e) { say(e && e.name === "SecurityError" ? "The browser did not allow Bluetooth on this page." : "Could not connect. Is Bluetooth on in the FM-1's settings, and is it free? An FM-1 holds one Bluetooth link at a time.", true); return; }
+      if (!p) { say("Nothing chosen. Not in the list? Switch Bluetooth on in the FM-1's settings (GLO): the first time, the FM-1 restarts once.", true); return; }
+      btPort = p; btAcc = bleAccess(p); access = btAcc;
+      say("Connected by Bluetooth to " + p.name + ". Asking it about its ledges...");
+    }
+    if (access) bank = new Fm1Bank(access);
+    via = how; progress(null);
+    await bank.open();
+    progress();
+    $("arcave").hidden = false; $("d-done").hidden = false;
+    for (const id of ["d-usb", "d-bt", "d-browser"]) $(id).hidden = true;
+    $("whose").textContent = fm1() ? "Your FM-1's Arcave" : "The browser game's Arcave";
+    $("d-done").textContent = fm1() ? "DONE: LET MY FM-1 GO" : "DONE";
+    $("xfer-to").textContent = fm1() ? "YOUR FM-1" : "THE BROWSER'S GAME";
+    say(fm1() ? "Your FM-1 is listening, its own game set aside. Change its ledges and its music room below; DONE lets it go, and it starts again with them."
+      : "These are the ledges and the music room of the game on the PLAY page, kept in this browser. Close PLAY while you change them.");
+    draw();
+  } catch (e) {
+    const why = e.message;
+    shut(why === "old" ? (how === "browser" ? "This site's game has no machine slots yet." : "Your FM-1 answered, but its FM-ARCAVE is from before the machine slots. Update it on the INSTALL page, then come back. Nothing was changed.")
+      : why === "absent" ? "No FM-1 answered. Is it plugged in and switched on, with FM-ARCAVE running? Nothing was changed."
+      : how === "browser" ? "The browser's game could not be opened here: " + why : "The link to your FM-1 broke before it told its ledges. Nothing was changed. Try again.", true);
+  } finally { lock(false); }
+}
+
+// what a ledge can be given: the firmware's three, then the catalogue's
+function drawLedges() {
+  const info = bank.info, cards = [];
+  for (let i = info.nslot - 1; i >= 0; i--) {      // (the high ledge first, as they hang in the cave)
+    const s = info.slots[i], c = el("div", "ledge");
+    const m = cat.find((x) => x.id === s.id);
+    c.dataset.c = s.shows === "loaded" ? "3" : String(OWN_CAP[s.own]);
+    c.append(el("p", "n", LEDGE[i] || "LEDGE " + (i + 1)), el("h3", "", s.title));
+    let how = s.shows === "loaded" ? "LOADED INTO THIS LEDGE'S SLOT" + (s.ver ? " · VERSION " + s.ver : "") : "THE FIRMWARE'S OWN", dim = false;
+    if (s.shows !== "loaded" && s.st === ST.OK && s.loaded && !info.runs) { how = "ITS LOADED MACHINE (" + s.name + ") RESTS UNTIL THE FM-1 IS SWITCHED OFF AND ON"; dim = true; }
+    else if (s.shows !== "loaded" && s.st === ST.OTHER) { how = "IN ITS SLOT: A MACHINE THIS FM-ARCAVE CANNOT RUN" + (m ? " (" + m.name + ")" : ""); dim = true; }
+    else if (s.shows !== "loaded" && s.st === ST.BAD) { how = "IN ITS SLOT: SOMETHING DAMAGED OR CUT SHORT"; dim = true; }
+    else if (s.shows !== "loaded" && s.st === ST.OK) how = "THE FIRMWARE'S OWN · " + s.name + " WAITS IN ITS SLOT";
+    c.append(el("p", "how" + (dim ? " dim" : ""), how));
+    const pick = el("div", "pick");
+    const btn = (label, small, on, fn) => {
+      const b = el("button", "btn sm" + (on ? " on" : "")); b.type = "button"; b.append(el("span", "", label), el("small", "", small));
+      b.setAttribute("aria-pressed", on); b.addEventListener("click", fn); pick.appendChild(b);
+    };
+    pick.appendChild(el("p", "", "PUT ON THIS LEDGE"));
+    OWN.forEach((name, k) => btn(name, "IN THE FIRMWARE", s.shows === "own" && s.own === k, () => choose(i, k)));
+    const listed = new Set();
+    for (const x of cat) {
+      const here = s.st === ST.OK && s.id === x.id && s.ver === x.ver;
+      listed.add(x.id);
+      btn(x.name, here ? "IN ITS SLOT" : fm1() && !x.fm1 ? "NOT FOR AN FM-1 HERE" : "LOAD · " + (x.bytes / 1024).toFixed(1) + " KB", s.shows === "loaded" && s.id === x.id,
+        () => (here ? choose(i, 3) : load(i, x)));
+    }
+    if (s.st === ST.OK && !listed.has(s.id)) btn(s.name, "IN ITS SLOT", s.shows === "loaded", () => choose(i, 3));   // (a machine loaded from a file)
+    btn("A MACHINE FILE...", "OPEN", false, () => { fileSlot = i; fileKind = "machine"; $("file").click(); });
+    if (s.st !== ST.EMPTY) btn("EMPTY THIS SLOT", s.len ? (s.len / 1024).toFixed(1) + " KB" : "", false, () => empty(i));
+    c.appendChild(pick);
+    cards.push(c);
+  }
+  $("ledges").replaceChildren(...cards);
+  $("note").textContent = info.bank ? "Pick a machine for a ledge. One the firmware carries is there at once; another is sent into that ledge's slot first."
+    : "This FM-1 cannot reach its memory for loaded machines just now, so only the firmware's own three can be placed.";
+}
+// the music room's four places: the firmware's own instrument of each, or one of the catalogue's in its slot
+function drawPlaces() {
+  const info = bank.info, cards = [];
+  $("room").hidden = !info.nplace;
+  for (let j = 0; j < info.nplace; j++) {
+    const s = info.places[j], c = el("div", "ledge");
+    const m = cat2.find((x) => x.id === s.id);
+    c.dataset.c = String(INST_CAP[j] ?? 3);
+    c.append(el("p", "n", PLACE[j] || "PLACE " + (j + 1)), el("h3", "", s.title));
+    let how = s.shows === "loaded" ? "LOADED INTO THIS PLACE'S SLOT" + (s.ver ? " · VERSION " + s.ver : "") : "THE FIRMWARE'S OWN", dim = false;
+    if (s.shows !== "loaded" && s.st === ST.OK && s.loaded && !info.runs) { how = "ITS LOADED INSTRUMENT (" + s.name + ") RESTS UNTIL THE FM-1 IS SWITCHED OFF AND ON"; dim = true; }
+    else if (s.shows !== "loaded" && s.st === ST.OTHER) { how = "IN ITS SLOT: AN INSTRUMENT THIS FM-ARCAVE CANNOT RUN" + (m ? " (" + m.name + ")" : ""); dim = true; }
+    else if (s.shows !== "loaded" && s.st === ST.BAD) { how = "IN ITS SLOT: SOMETHING DAMAGED OR CUT SHORT"; dim = true; }
+    else if (s.shows !== "loaded" && s.st === ST.OK) how = "THE FIRMWARE'S OWN · " + s.name + " WAITS IN ITS SLOT";
+    c.append(el("p", "how" + (dim ? " dim" : ""), how));
+    const pick = el("div", "pick");
+    const btn = (label, small, on, fn) => {
+      const b = el("button", "btn sm" + (on ? " on" : "")); b.type = "button"; b.append(el("span", "", label), el("small", "", small));
+      b.setAttribute("aria-pressed", on); b.addEventListener("click", fn); pick.appendChild(b);
+    };
+    pick.appendChild(el("p", "", "PUT IN THIS PLACE"));
+    btn(OWN_INST[j] || "ITS OWN", "IN THE FIRMWARE", s.shows === "own", () => choosePlace(j, false));
+    const listed = new Set();
+    for (const x of cat2) {
+      const here = s.st === ST.OK && s.id === x.id && s.ver === x.ver;
+      listed.add(x.id);
+      btn(x.name, here ? "IN ITS SLOT" : fm1() && !x.fm1 ? "NOT FOR AN FM-1 HERE" : "LOAD · " + (x.bytes / 1024).toFixed(1) + " KB", s.shows === "loaded" && s.id === x.id,
+        () => (here ? choosePlace(j, true) : loadPlace(j, x)));
+    }
+    if (s.st === ST.OK && !listed.has(s.id)) btn(s.name, "IN ITS SLOT", s.shows === "loaded", () => choosePlace(j, true));   // (an instrument loaded from a file)
+    btn("AN INSTRUMENT FILE...", "OPEN", false, () => { fileSlot = j; fileKind = "instrument"; $("file").click(); });
+    if (s.st !== ST.EMPTY) btn("EMPTY THIS SLOT", s.len ? (s.len / 1024).toFixed(1) + " KB" : "", false, () => emptyPlace(j));
+    c.appendChild(pick);
+    cards.push(c);
+  }
+  $("places").replaceChildren(...cards);
+}
+function draw() { drawCat(); if (bank && bank.info) { drawLedges(); drawPlaces(); } }
+async function act(what, fn) {
+  if (busy || !bank) return;
+  lock(true);
+  try { await fn(); }
+  catch (e) {
+    if (e.message === "lost" || e.message === "timeout") { lock(false); lost(); return; }
+    say(what + ": " + e.message, true);
+  } finally { progress(); lock(false); if (bank) draw(); }
+}
+const told = (i) => "Ledge " + (i + 1) + " now shows " + bank.info.slots[i].title + ".";
+const choose = (i, k) => act("That did not work", async () => {
+  const r = await bank.choose(i, k);
+  say(r ? WHY[r] || "The FM-1 answered " + r + "." : told(i), !!r);
+});
+const empty = (i) => act("That did not work", async () => {
+  progress(null);
+  const r = await bank.empty(i);
+  say(r ? WHY[r] || "The FM-1 answered " + r + "." : "The slot of ledge " + (i + 1) + " is empty. " + told(i), !!r);
+});
+const told2 = (j) => "Place " + (j + 1) + " of the music room now holds " + bank.info.places[j].title + ".";
+const choosePlace = (j, loaded) => act("That did not work", async () => {
+  const r = await bank.choosePlace(j, loaded);
+  say(r ? WHY[r] || "The FM-1 answered " + r + "." : told2(j), !!r);
+});
+const emptyPlace = (j) => act("That did not work", async () => {
+  progress(null);
+  const r = await bank.emptyPlace(j);
+  say(r ? WHY[r] || "The FM-1 answered " + r + "." : "The slot of place " + (j + 1) + " is empty. " + told2(j), !!r);
+});
+// a file into ledge i's slot, or (kind "instrument") into place i's
+async function send(i, file, name, kind = "machine") {
+  if (file.kind !== kind) { say(kind === "machine" ? "This file is an instrument: it goes into a place of the music room, not onto a ledge." : "This file is a machine: it goes onto a ledge, not into the music room.", true); return; }
+  const no = fits(file, bank.info, fm1()), inst = kind === "instrument", where = inst ? "place " + (i + 1) + " of the music room" : "ledge " + (i + 1);
+  if (no) { say(no, true); return; }
+  say("Sending " + name + " into the slot of " + where + (via === "bt" ? " by Bluetooth: it may take a minute or two" : "") + "..." + (fm1() ? " Keep the FM-1 switched on." : ""));
+  progress(0);
+  const r = inst ? await bank.loadPlace(i, file, (n, of) => progress(n / of)) : await bank.load(i, file, (n, of) => progress(n / of));
+  say(r ? WHY[r] || "The FM-1 answered " + r + "." : name + " is loaded. " + (inst ? told2(i) : told(i)) + (fm1() ? " DONE lets your FM-1 go: it starts again with it there." : " Open PLAY to find it there."), !!r);
+}
+const loadPlace = (j, m) => act("Could not load " + m.name, async () => {
+  if (fm1() && !m.fm1) { say("This build of the site has " + m.name + " for the browser's game only: no file for an FM-1 was made.", true); return; }
+  await send(j, await fileOf(m), m.name, "instrument");
+});
+const load = (i, m) => act("Could not load " + m.name, async () => {
+  if (fm1() && !m.fm1) { say("This build of the site has " + m.name + " for the browser's game only: no file for an FM-1 was made.", true); return; }
+  await send(i, await fileOf(m), m.name);
+});
+let fileSlot = 0, fileKind = "machine";
+const input = Object.assign(el("input"), { type: "file", id: "file", hidden: true });
+document.body.appendChild(input);
+input.addEventListener("change", () => {
+  const f = input.files[0], i = fileSlot, kind = fileKind; input.value = "";
+  if (!f) return;
+  act("Could not load " + f.name, async () => {
+    if (f.size > 65536) throw new Error("This is not a mystic machine file.");
+    await send(i, parseFile(await f.arrayBuffer()), f.name, kind);
+  });
+});
+$("d-usb").addEventListener("click", () => connect("usb"));
+$("d-bt").addEventListener("click", () => connect("bt"));
+$("d-browser").addEventListener("click", () => connect("browser"));
+$("d-done").addEventListener("click", () => { if (busy) return; const was = fm1(); shut(was ? "Your FM-1 is starting again, with its ledges as you left them." : "Done. Open PLAY to find the ledges as you left them."); });
+addEventListener("pagehide", () => { if (bank) bank.close(); });
+draw();
+</script>
+</body>
+</html>

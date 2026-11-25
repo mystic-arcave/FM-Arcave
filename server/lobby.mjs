@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // FM-ARCAVE's online lobbies: the rules, shared by the Node server (server/node.mjs) and the Cloudflare Worker
-// (server/worker.mjs). A lobby is private: nobody can list lobbies, one is found only by its code. Up to three
-// computers meet in one, and what each sends (UNDERSONG's control changes, "m") goes to the others as it comes.
+// (server/worker.mjs). A lobby is private: nobody can list lobbies, one is found only by its code. Up to four
+// computers meet in one, and what each sends (UNDERSONG's and the music room's control changes, "m") goes to the
+// others as it comes.
 // Nothing here knows the game: the Link page on each computer passes the messages to its FM-1s and emulators.
 //
 // The wire, JSON text frames over a WebSocket at /new (make a lobby) or /join/CODE:
@@ -16,7 +17,7 @@
 //                                                        ("usb", "emu", "usb+emu" or ""), whether one is in the well
 export const ALPHA = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";  // no I, O, 0 or 1: a code is read aloud and typed
 export const LEN = 6;                                      // 32^6, about a billion
-export const MAX = 3;                                      // UNDERSONG is for two or three
+export const MAX = 4;                                      // UNDERSONG is for two or three, the music room for up to four
 export const IDLE_MS = 15000;                              // a member not heard from for this long is gone
 export const KEEP_MS = 30 * 60000;                         // an empty lobby stays open this long, for whoever comes back
 const MAX_TEXT = 4096, MAX_PER_SEC = 240;

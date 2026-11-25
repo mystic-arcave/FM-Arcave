@@ -1,0 +1,18 @@
+# the music room: GLO held and a station's button goes straight onto it, from the floor or from another station;
+# let go of GLO and the settings do not open; HOME is the room again
+1200 btndown 7
+1400 btn 2
+1700 shot
+1900 btnup 7
+2300 shot
+2600 btndown 7
+2800 btn 4
+3000 btnup 7
+3400 shot
+3600 btndown 7
+3800 btn 6
+4000 btnup 7
+4400 shot
+4600 btn 8
+5400 shot
+5600 end

@@ -135,6 +135,28 @@ static int blob_load(uint32_t i, void *p, uint32_t n) { return i < NBLOB ? host_
 static int blob_save(uint32_t i, const void *p, uint32_t n) { return i < NBLOB ? host_save(host_blob[i], SECTOR_MAX, p, n, "blob", i) : -1; }
 static int slot_load(uint32_t i, void *p, uint32_t n) { return i < NSLOT ? host_load(host_slot[i], SLOT_MAX, p, n) : -1; }
 static int slot_save(uint32_t i, const void *p, uint32_t n) { return i < NSLOT ? host_save(host_slot[i], SLOT_MAX, p, n, "slot", i) : -1; }
+/* the bank of code (platform.c bank_*): here only bytes, erased to 0xFF, written as flash is (bits only cleared) */
+static uint8_t host_bank[7u * 0xA000u], host_bank_up;
+static const uint8_t *bank_at(uint32_t off)
+{
+    if (!host_bank_up) { memset(host_bank, 0xFF, sizeof host_bank); host_bank_up = 1; }
+    return off < sizeof host_bank ? host_bank + off : 0;
+}
+static int bank_erase(uint32_t off)
+{
+    if (!bank_at(0) || off >= sizeof host_bank || (off & 0xFFFu)) return -1;
+    memset(host_bank + off, 0xFF, 0x1000u);
+    return 0;
+}
+static int bank_write(uint32_t off, const void *p, uint32_t n)
+{
+    uint32_t i;
+    if (!bank_at(0) || off > sizeof host_bank || n > sizeof host_bank - off) return -1;
+    for (i = 0; i < n; i++) host_bank[off + i] &= ((const uint8_t *)p)[i];
+    return 0;
+}
+static int bank_runs(void) { return 1; }
+static void bank_mark(int in) { (void)in; }
 
 /* Bluetooth: none on a computer. BT=1 (tests/run_arcave.sh): a pretend radio, to see the settings' line: turned on it
  * "starts" for a second, waits for a computer for three, then one "connects" */

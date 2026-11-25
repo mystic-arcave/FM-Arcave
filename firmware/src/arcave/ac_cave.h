@@ -163,7 +163,6 @@ static const cv_shroom_t CV_SHROOM[] = {
 #define CV_NSHROOM (sizeof CV_SHROOM / sizeof CV_SHROOM[0])
 #define CV_HAT_X 392
 static const int16_t CV_MACH[3][2] = {{740, 344}, {466, 288}, {706, 232}};
-static const char *const MACH_NAME[3] = {"CRYSTAL ROAD", "JUICE WORKS", "NIGHT BLOOM"};
 static int32_t cave_top_q8(uint32_t k, int32_t x)   /* the top of floor k under x (Q8): ledges 1..3 hold the machines
                                                        0..2, each in a slight dip as the jukebox is, to stop in front of */
 {
@@ -986,7 +985,10 @@ static void cave_draw(void)
         gp(x - 6, y - 29, th->caps[3]); gp(x + 5, y - 29, th->caps[3]);
         galpha(256);
     }
-    for (i = 0; i < 3; i++) cave_cabinet(SX(CV_MACH[i][0]), SY(CV_MACH[i][1] + CV_MDIP_D), i, cave_light(CV_MACH[i][0], CV_MACH[i][1] - 20), tm);
+    for (i = 0; i < 3; i++) {                    /* on each ledge: the firmware's own machine its slot names, or the one loaded into it (ac_slots.h) */
+        int32_t lx = SX(CV_MACH[i][0]), ly = SY(CV_MACH[i][1] + CV_MDIP_D), ll = cave_light(CV_MACH[i][0], CV_MACH[i][1] - 20);
+        if (ledge_loaded(i)) mm_cabinet(lx, ly, mb.h[i], on, ll, tm); else cave_cabinet(lx, ly, ledge_which(i), ll, tm);
+    }
     /* the Hat, a little off the ground, watching */
     {
         int32_t x = SX(CV_HAT_X), y = SY(CV_GROUND - 22) + (tsin(tm, 16, 0) >> 12);
@@ -1026,7 +1028,7 @@ static void cave_draw(void)
         int32_t px = SX(cv.x >> 8), py = SY(cv.y >> 8) - 30;
         if (cv.near >= 3 && cv.near <= 5) {      /* a machine: its name over it, and what PLAY does over that (clear of the machine) */
             int32_t ty = SY(CV_MACH[cv.near - 3][1]) - 76 - 5 * ts(1, 3);
-            gfit(SX(CV_MACH[cv.near - 3][0]), ty, 232, MACH_NAME[cv.near - 3], on ? th->caps[(cv.near - 3) * 2 % 5] : th->mute, ts(1, 3));
+            gfit(SX(CV_MACH[cv.near - 3][0]), ty, 232, ledge_name(cv.near - 3), on ? th->caps[ledge_cap(cv.near - 3)] : th->mute, ts(1, 3));
             if (!on) s = TR(T_NOPOWER);
             px = SX(CV_MACH[cv.near - 3][0]); py = ty - TLH(ts(1, 3)) - 4 - 6 + 6 * ts(1, 3);
         }

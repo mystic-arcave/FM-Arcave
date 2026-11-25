@@ -5,9 +5,11 @@
 //   const r = new Fm1Remote(midiAccess, { onState, onSave, onInput, onKnob, onKept });  r.start(); ... r.stop();
 //   r.tick() about every 20 ms (hello, the save by Bluetooth, noticing the FM-1 gone); r.lights([lit, keys, dim, breath]);
 //   r.sendSave(bytes); r.progress(): how far a save between them has got (for a loading screen)
+// The machine bank (the MYSTIC MACHINES page, machines.js; an FM-1 of protocol 3): await r.bankInfo() (its state, bytes),
+//   await r.bank(v) (a command's answer), await r.sendPiece(1 + slot, bytes) (a piece of a machine: 1 kept, 3 not)
 // By Bluetooth (web/link/ble.js's BlePorts): new Fm1Remote(bleAccess(port), ...), and the port's messages to access.heard.
 // Everything that takes time comes from opts.now (performance.now in a browser), so a test can run it on its own clock.
-const CH16 = 0xbf, TAKEN = 69, HELLO = 78, HERE = 70, BTN = 71, KEY = 72, KNOB = 73, LEN_HI = 74, LEN_LO = 75, DATA = 76, SUM = 77,
+const CH16 = 0xbf, KIND = 60, BANK = 61, BANK_SAYS = 62, COMING = 63, TAKEN = 69, HELLO = 78, HERE = 70, BTN = 71, KEY = 72, KNOB = 73, LEN_HI = 74, LEN_LO = 75, DATA = 76, SUM = 77,
   KEPT = 79, LIGHTS = 80;
 const HELLO_MS = 500, ABSENT_MS = 4000, LOST_MS = 2500, GAP_MS = 0.5;   // the save: two messages a millisecond
 const CHUNK = 42;                                 // by Bluetooth: seven packets of the save at a time (six to a packet)
@@ -50,7 +52,25 @@ export class Fm1Remote {
     this.btn = 0; this.keys = 0; this.lit = new Array(13).fill(-1);
     this.rx = null; this.sendAt = 0; this.txq = []; this.txData = 0; this.txTaken = 0; this.txAt = -1e9; this.proto = 1;
     this.txTotal = 0; this.txStart = 0; this.txEnd = 0; this.txLen = 0; this.leaving = null; this.unanswered = 0; this.lastHello = 0; this.lastHere = 0; this.started = 0;
+    this.rxKind = 0; this.bankWait = null; this.blobWait = null; this.pieceWait = null;
     this.onMsg = (e) => this.msg(e);
+  }
+  // ---- the machine bank. Each resolves with the FM-1's answer, or rejects (Error "timeout", or "lost" when the link goes)
+  wait(slot, ms) {
+    return new Promise((res, rej) => {
+      const until = this.now() + ms;
+      this[slot] = { res, rej, until };
+    });
+  }
+  settle(slot, v, err) { const w = this[slot]; if (w) { this[slot] = null; err ? w.rej(new Error(err)) : w.res(v); } }
+  bank(v, ms = 8000) { const p = this.wait("bankWait", ms); this.cc(BANK, v); return p; }
+  bankInfo(ms = 8000) { const p = this.wait("blobWait", ms); this.cc(BANK, 0); return p; }
+  async sendPiece(kind, bytes, ms = 30000) {
+    if (this.state !== "connected") throw new Error("lost");
+    const p = this.wait("pieceWait", ms);
+    this.cc(KIND, kind);
+    this.sendSave(bytes);
+    try { return await p; } finally { if (this.state === "connected") this.cc(KIND, 0); }
   }
   set(s, detail) { if (s !== this.state || detail) { this.state = s; this.o.onState?.(s, detail); } }
   outs() { return this.output ? [this.output] : [...this.access.outputs.values()]; }
@@ -80,11 +100,14 @@ export class Fm1Remote {
     const t = this.now();
     this.pump();
     if (this.leaving && t > this.leaving.until) { this.done("timeout"); this.stop(); return; }   // (no answer: let it go all the same)
+    for (const w of ["bankWait", "blobWait", "pieceWait"]) if (this[w] && t > this[w].until) this.settle(w, 0, "timeout");
     if (t - this.lastHello >= HELLO_MS) { this.lastHello = t; this.cc(HELLO, this.nonce); }
     if (this.state === "searching" && t - this.started > ABSENT_MS) { this.stop(); this.set("absent"); }
     else if (this.state !== "searching" && t - this.lastHere > LOST_MS) {
       for (const i of this.access.inputs.values()) if (i.onmidimessage === this.onMsg) i.onmidimessage = null;
-      this.releaseAll(); this.txq = []; this.done("lost"); this.set("lost"); this.state = "off";
+      this.releaseAll(); this.txq = []; this.done("lost");
+      for (const w of ["bankWait", "blobWait", "pieceWait"]) this.settle(w, 0, "lost");
+      this.set("lost"); this.state = "off";
     }
   }
   releaseAll() {
@@ -163,8 +186,10 @@ export class Fm1Remote {
 
   msg(e) {
     const d = e.data;
-    if (d.length < 3 || d[0] !== CH16 || d[1] < TAKEN || d[1] > KEPT) return;
+    if (d.length < 3 || d[0] !== CH16 || d[1] < BANK_SAYS || d[1] > KEPT) return;
     const [, c, v] = d;
+    if (c === BANK_SAYS) { this.settle("bankWait", v); return; }
+    if (c === COMING) { this.rxKind = v; return; }
     if (!this.input) {                           // the first FM-1 to answer is the one; its output has its name
       if (c !== HERE) return;
       this.input = e.target || e.currentTarget || null;
@@ -189,7 +214,7 @@ export class Fm1Remote {
       else this.keys = down ? this.keys | bit : this.keys & ~bit;
       this.o.onInput?.(this.btn >>> 0, this.keys >>> 0);
     } else if (c === KNOB) this.o.onKnob?.(v >> 4, (v & 15) - 8);
-    else if (c === LEN_HI) this.rx = { hi: v, len: -1 };
+    else if (c === LEN_HI) { this.rx = { hi: v, len: -1, kind: this.rxKind }; this.rxKind = 0; }
     else if (c === LEN_LO && this.rx) Object.assign(this.rx, { len: this.rx.hi << 7 | v, bytes: [], k: 0, hdr: 0, sum: 0, ck: -1 });
     else if (c === DATA && this.rx && this.rx.len >= 0) {
       const r = this.rx;
@@ -201,13 +226,16 @@ export class Fm1Remote {
       if (r.ck < 0) { r.ck = v << 7; return; }
       r.ck |= v; this.rx = null;
       if (r.bytes.length !== r.len || (r.sum & 0x3fff) !== r.ck) {   // damaged on the way: a new number has it sent again
+        if (r.kind) { this.settle("blobWait", 0, "damaged"); return; }
         this.nonce = this.nonce % 127 + 1; this.lastHello = -1e9; this.set(this.state, "damaged"); this.tick(); return;
       }
+      if (r.kind) { this.settle("blobWait", Uint8Array.from(r.bytes)); return; }   // (not a save: the bank's state)
       this.set("connected");
       this.o.onSave?.(Uint8Array.from(r.bytes));
     } else if (c === KEPT) {
-      this.o.onKept?.(v);
       this.unanswered = Math.max(0, this.unanswered - 1);
+      if (this.pieceWait) { this.settle("pieceWait", v); return; }   // (a piece of a machine, not a save)
+      this.o.onKept?.(v);
       const l = this.leaving;
       if (!l || this.unanswered) return;          // (the answer to an earlier save: the last one is still on its way)
       if (v === 3 && ++l.tries < 3) { this.sendSave(l.bytes); return; }   // damaged on the way: once or twice more

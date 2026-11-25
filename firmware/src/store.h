@@ -39,9 +39,10 @@
 #define SETTINGS_AT 0x000FC000u                 /* (Felucca's globals area) */
 #define BLOBS_AT 0x000F4000u
 #define SLOTS_AT 0x00097000u                    /* (Felucca's main store, FL_DATA) */
+#define BANK_HI 0x000E0000u                     /* (a bank of code, platform.c bank_*, may run on past the slots to the end of FL_DATA) */
 #define FL_RANGE_OK(off, n) (FL_IN(off, n, FL_OTA_LO, FL_OTA_HI) || FL_IN(off, n, SETTINGS_AT, SETTINGS_AT + 0x1000u) || \
                              FL_IN(off, n, BLOBS_AT, BLOBS_AT + NBLOB * 0x1000u) || \
-                             FL_IN(off, n, SLOTS_AT, SLOTS_AT + NSLOT * SLOT_SECT * 0x1000u))
+                             FL_IN(off, n, SLOTS_AT, BANK_HI))
 #endif
 #include "fm1_flash_map.h"
 #define SECTOR_MAX (4096u - 12u)                /* settings, a blob: the sector minus the header */

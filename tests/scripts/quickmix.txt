@@ -1,0 +1,30 @@
+# the music room: GLO held is the quick mix (mute, solo, stop, a level), gone when let go; a tap is the settings,
+# MUSIC ROOM their first line: Rock's sounds, the metronome, the count-in
+1200 btndown 7
+1700 shot
+1800 keys 0x1
+1900 keys 0
+2000 keys 0x4
+2100 keys 0
+2200 keys 0x800
+2300 keys 0
+2400 enc 5 -5
+2700 shot
+2800 btnup 7
+3200 shot
+3400 btn 7
+3900 shot
+4000 btn 12
+4400 shot
+4500 enc 6 1
+4700 enc 0 1
+4900 btn 12
+5100 enc 0 1
+5300 btn 12
+5600 shot
+5700 btn 7
+6000 btn 4
+6600 btn 13
+7000 shot
+9500 shot
+10000 end

@@ -281,6 +281,54 @@ static int blob_save(uint32_t i, const void *p, uint32_t n) { return i < NBLOB -
 #define SLOT_MAGIC 0x544F4C53u                  /* "SLOT" */
 static int slot_load(uint32_t i, void *p, uint32_t n) { return i < NSLOT ? area_load(SLOTS_AT + i * SLOT_SECT * 0x1000u, SLOT_MAX, SLOT_MAGIC ^ STORE_MAGIC, p, n) : -1; }
 static int slot_save(uint32_t i, const void *p, uint32_t n) { return i < NSLOT ? area_save(SLOTS_AT + i * SLOT_SECT * 0x1000u, SLOT_SECT, SLOT_MAGIC ^ STORE_MAGIC, p, n) : -1; }
+/* ---- a bank of code (FM-ARCAVE's mystic machines and instruments, arcave/ac_slots.h): BANK_LEN bytes from the start
+ * of the slots' area (the app says how many; on the FM-1 it may run on past the slots to the end of the data area,
+ * store.h BANK_HI), for an app that keeps nothing else there, erased and written by the sector and RUN IN PLACE.
+ *   bank_at     the bank as the CPU sees it, through the plain (unencrypted) XIP window, which is set up at the
+ *               first call; 0: no flash. hal/fm1_guard.h's PC limit must reach its end (FM1_PC_XIP_END)
+ *   bank_runs   0 when this start followed a reset INSIDE the bank's code (bank_mark(1) when it is entered, (0) when
+ *               it is left; .noinit keeps the mark over a reset, a power-on forgets it): nothing in the bank is run
+ *               until the FM-1 has been switched off and on, so a machine that hangs cannot keep it from starting */
+#ifndef BANK_LEN
+#define BANK_LEN (3u * 0xA000u)
+#endif
+#define BANK_CRUMB 0x4B434D4Du
+#if BOARD_SMK37
+_Static_assert(BANK_LEN <= NSLOT * SLOT_SECT * 0x1000u, "the bank is larger than the slots' area");
+#else
+_Static_assert(SLOTS_AT + BANK_LEN <= BANK_HI && BANK_HI == FL_DATA_HI, "the bank is larger than the FM-1's data area");
+#endif
+static uint32_t bank_crumb __attribute__((section(".noinit_tail")));
+static uint8_t bank_win, bank_seen, bank_blocked;
+static const uint8_t *bank_at(uint32_t off)
+{
+    if (!flash_ok || off >= BANK_LEN) return 0;
+    if (!bank_win) { fl_plain_window_init(); bank_win = 1; }
+    return (const uint8_t *)FL_XIP(SLOTS_AT + off);
+}
+static int bank_erase(uint32_t off)
+{
+    uint32_t took;
+    if (!flash_ok || off >= BANK_LEN || (off & 0xFFFu)) return -1;
+    fm1_wdt_feed();
+    return fl_erase4k(SLOTS_AT + off, &took);
+}
+static int bank_write(uint32_t off, const void *p, uint32_t n)
+{
+    if (!flash_ok || off > BANK_LEN || n > BANK_LEN - off) return -1;
+    return fl_write(SLOTS_AT + off, p, n);
+}
+static int bank_runs(void)
+{
+    if (!bank_seen) {
+        uint32_t p3 = fm1_boot.p3_rst;
+        bank_seen = 1;
+        bank_blocked = !((p3 & 1u) && !(p3 & (4u | 0x40u))) && bank_crumb == BANK_CRUMB;
+        bank_crumb = 0;
+    }
+    return !bank_blocked;
+}
+static void bank_mark(int in) { (void)bank_runs(); bank_crumb = in ? BANK_CRUMB : 0u; }
 #if BOARD_SMK37
 /* the store's owner (the kit's convention, store.h): our tag, load as ever; anything else (the stock settings,
  * another port's data) is cleared once and the tag written, before the audio starts */

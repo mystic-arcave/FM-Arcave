@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FM-ARCAVE: your saves</title>
+<meta name="description" content="Back up your FM-ARCAVE save from an FM-1 or from the browser game, keep it as a file, and put it back.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Silkscreen&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../site.css">
+<style>
+main{padding:clamp(36px,6vw,72px) 0 0}
+.lead h1{font-size:clamp(28px,4.6vw,48px);margin:14px 0 16px}
+.lead p{color:var(--mute)}
+.cta{display:flex;flex-wrap:wrap;gap:12px;margin-top:28px}
+#status{margin-top:22px;min-height:38px;color:var(--text);max-width:72ch}
+#status.bad{color:var(--amber)}
+/* a save on its way: the strip of key-lights of the PLAY page's loading screen */
+.xfer{display:grid;gap:10px;margin-top:22px;max-width:560px}
+.xfer[hidden]{display:none}
+.xfer-ends{display:flex;justify-content:space-between;gap:12px;font:400 11px/1 var(--pix);letter-spacing:.08em;color:var(--opal)}
+.xfer-bar{display:grid;grid-template-columns:repeat(32,1fr);gap:3px;height:18px}
+.xfer-bar i{border-radius:2px;background:var(--panel);box-shadow:inset 0 0 0 1px var(--line2);transition:background-color .25s cubic-bezier(.16,1,.3,1)}
+.xfer-bar i.lit{background:var(--opal);box-shadow:none}
+.xfer-bar.wait i{animation:xfer-wait 1.6s ease-in-out infinite;animation-delay:calc(var(--n) * 50ms)}
+@keyframes xfer-wait{0%,100%{background:var(--panel)}40%{background:var(--line2)}}
+@media (prefers-reduced-motion:reduce){.xfer-bar i{transition:none}.xfer-bar.wait i{animation:none}}
+h2+p{margin-top:16px;color:var(--mute)}
+.kicker+h2{margin-top:14px}
+.bks{list-style:none;margin:30px 0 0;padding:0}
+.bk{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 28px;align-items:start;padding:22px 0;border-top:1px solid var(--line)}
+.bk:last-child{border-bottom:1px solid var(--line)}
+.bk h3{font-size:17px;color:var(--text);display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;overflow-wrap:anywhere}
+.bk .tag{font:400 10px/1 var(--pix);letter-spacing:.12em;color:var(--mute);border:1px solid var(--line2);padding:4px 6px}
+.bk .facts{font:400 12px/1.6 var(--pix);letter-spacing:.06em;color:var(--opal);margin-top:10px;max-width:none}
+.bk .facts.dim{color:var(--amber)}
+.bk .when{color:var(--mute);font-size:15px;margin-top:6px;max-width:none}
+.bk .note{margin-top:12px;width:min(100%,420px);background:transparent;border:0;border-bottom:1px solid var(--line2);color:var(--text);font:400 15px/1.4 var(--body);padding:6px 0;border-radius:0}
+.bk .note::placeholder{color:var(--mute)}
+.bk .note:focus-visible{outline:0;border-bottom-color:var(--opal)}
+.bk .acts{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}
+.bk .ask{grid-column:1/-1;display:grid;gap:14px;padding:18px;background:var(--panel);border:1px solid var(--line2)}
+.bk .ask[hidden]{display:none}
+.bk .ask p{max-width:72ch;font-size:15px}
+.bk .ask div{display:flex;flex-wrap:wrap;gap:8px}
+.btn.warn:hover{border-color:var(--amber);color:var(--amber)}
+.none{margin-top:30px;padding:26px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);color:var(--mute)}
+.how{margin-top:30px}
+.how th{width:210px;color:var(--text);padding-top:13px}
+.how td{color:var(--mute)}
+@media (max-width:720px){
+  .bk{grid-template-columns:1fr}
+  .bk .acts{justify-content:flex-start}
+  .how th{width:auto;display:block;border-bottom:0;padding-bottom:0}
+  .how td{display:block}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="top">
+  <a class="name" href="../">FM-ARCAVE</a>
+  <nav><a href="../emu/">PLAY</a><a href="../install/">INSTALL</a><a href="../link/">LINK</a><a href="../machines/">MACHINES</a><a href="./" aria-current="page">SAVES</a><a href="https://github.com/mystic-arcave/FM-Arcave">SOURCE</a></nav>
+</header>
+<main>
+<div class="lead">
+  <p class="kicker">Saves</p>
+  <h1>Keep your game safe</h1>
+  <p>Your story, scores, tickets, Rock's wardrobe and your music room live in one small save: on your FM-1, or in this browser for the game on the PLAY page. Copy it here, keep the file somewhere safe, and put it back whenever you need to, on the same FM-1 or another one.</p>
+  <div class="cta">
+    <button class="btn on" id="b-usb">BACK UP MY FM-1</button>
+    <button class="btn" id="b-bt">BACK UP MY FM-1 (BLUETOOTH)</button>
+    <button class="btn" id="b-browser">BACK UP THE BROWSER'S GAME</button>
+    <button class="btn" id="b-open">OPEN A SAVE FILE</button>
+    <input type="file" id="file" accept=".json,application/json" hidden>
+  </div>
+  <div class="xfer" id="xfer" hidden>
+    <div class="xfer-ends"><span id="xfer-from">YOUR FM-1</span><span id="xfer-to">THIS BROWSER</span></div>
+    <div class="xfer-bar" id="xfer-bar" role="progressbar" aria-label="The save on its way" aria-valuemin="0" aria-valuemax="100"></div>
+  </div>
+  <p id="status" class="status" role="status">By USB: plug your FM-1 in, switched on, with FM-ARCAVE running. By Bluetooth: switch Bluetooth on in its settings (GLO) first.</p>
+</div>
+
+<section>
+  <p class="kicker">In this browser</p>
+  <h2>Your backups</h2>
+  <p>Kept in this browser only. Clearing the browser's site data removes them, so DOWNLOAD the ones that matter.</p>
+  <ul class="bks" id="list"></ul>
+  <p class="none" id="none" hidden>No backups yet. Back up your FM-1 or the browser's game above, or open a save file you downloaded before.</p>
+</section>
+
+<section>
+  <p class="kicker">How it works</p>
+  <h2>Nothing is lost by trying</h2>
+  <table class="how">
+    <tr><th>BACK UP</th><td>The page asks your FM-1 for its save, the way PLAY WITH MY FM-1 does, and lets it go again. For a moment the FM-1 shows its browser screen; nothing on it changes.</td></tr>
+    <tr><th>PUT BACK</th><td>Replaces the save on your FM-1, or the browser game's. What was there is copied into this list first, marked AUTOMATIC, so a put-back can itself be undone. The FM-1 starts again from the save it was given.</td></tr>
+    <tr><th>AUTOMATIC</th><td>A copy is also made each time an FM-1 joins the PLAY page, and before FORGET THE SAVE there. The newest eight automatic copies are kept; the ones you make yourself stay until you delete them.</td></tr>
+    <tr><th>OTHER VERSIONS</th><td>A backup from an older FM-ARCAVE goes onto a newer one: it is brought up to date on the way, as the FM-1 does itself after an update. A backup from a newer version needs the FM-1 updated first, on the <a href="../install/">INSTALL</a> page.</td></tr>
+    <tr><th>ON THE FM-1 ITSELF</th><td>An FM-1 with an FM-ARCAVE newer than 0.28 also keeps a spare copy of its save, made each time it is switched on. If a save is ever cut short by the power going, it starts from the spare and says so.</td></tr>
+    <tr><th>THE FILE</th><td>A small text file (JSON) that holds the save and a checksum. It is yours: copy it, send it to another computer, open it here again.</td></tr>
+  </table>
+</section>
+
+<footer class="foot"><p>FM-ARCAVE is free software, GPL-3.0-only. Backups never leave your computer: this page talks only to your FM-1 and to this browser's own storage.</p></footer>
+</main>
+</div>
+<script type="module">
+import { Backups, Game, Fm1Save, fit, toFile, fromFile, fileName, b64, unb64, looksLikeSave, SAVE_KEY, STORY, played } from "../emu/saves.js";
+import { bleAccess } from "../emu/remote.js";
+import { BlePorts, bleSay } from "../emu/ble.js";
+const $ = (id) => document.getElementById(id);
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
+let store = null;
+try { localStorage.getItem(SAVE_KEY); store = new Backups(localStorage); } catch (e) {}
+let VERSION = "";
+fetch("../firmware/versions.json").then((r) => r.json()).then((v) => { VERSION = String(v.latest.version || ""); }).catch(() => {});
+let game = null;
+async function theGame() {
+  if (!game) game = new Game(await (await fetch("../emu/fm-arcave.wasm")).arrayBuffer());
+  return game;
+}
+function say(text, bad) { $("status").textContent = text; $("status").classList.toggle("bad", !!bad); }
+const same = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+const when = (ms) => new Date(ms).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+const who = (a) => (a && a.name ? a.name.toUpperCase() : "ROCK");
+const FROM = { fm1: "From an FM-1", browser: "From the browser's game", file: "From a file" };
+
+// ---------------------------------------------------------------- the list
+function facts(a) {
+  if (!a || !a.ok) return a && a.newer ? ["FROM A NEWER FM-ARCAVE THAN THIS PAGE: KEPT WHOLE, NOT READ"] : ["THIS PAGE CANNOT READ WHAT IS IN IT"];
+  const f = [STORY[a.story] || STORY[0], played(a.played) + " PLAYED", a.tickets + (a.tickets === 1 ? " TICKET" : " TICKETS")];
+  if (a.crystals) f.push(a.crystals + (a.crystals === 1 ? " CRYSTAL" : " CRYSTALS"));
+  if (a.well) f.push("UNDERSONG: " + a.well + " OF 4");
+  return f;
+}
+function row(b) {
+  const li = el("li", "bk"), a = b.about;
+  const left = el("div"), h = el("h3", "", who(a));
+  if (b.auto) h.appendChild(el("span", "tag", "AUTOMATIC"));
+  left.appendChild(h);
+  left.appendChild(el("p", "facts" + (a && a.ok ? "" : " dim"), facts(a).join(" · ")));
+  left.appendChild(el("p", "when", [FROM[b.from] || FROM.file, when(b.made), b.auto || "", a && a.older ? "from an older FM-ARCAVE" : ""].filter(Boolean).join(" · ")));
+  const note = el("input", "note"); note.type = "text"; note.maxLength = 60; note.placeholder = "Add a note"; note.value = b.note || "";
+  note.setAttribute("aria-label", "A note for this backup");
+  note.addEventListener("change", () => { try { store.note(b.id, note.value); } catch (e) {} });
+  left.appendChild(note);
+  const acts = el("div", "acts"), ask = el("div", "ask"); ask.hidden = true;
+  const btn = (text, cls, fn) => { const x = el("button", "btn sm" + (cls ? " " + cls : ""), text); x.type = "button"; x.addEventListener("click", fn); return x; };
+  const panel = (text, choices) => {
+    ask.replaceChildren(el("p", "", text));
+    const d = el("div");
+    for (const [label, cls, fn] of choices) d.appendChild(btn(label, cls, () => { ask.hidden = true; if (fn) fn(); }));
+    ask.appendChild(d); ask.hidden = false; d.firstChild.focus();
+  };
+  acts.appendChild(btn("PUT BACK", "", () => panel("Put this save back where? What is there now is copied into this list first. An FM-1 starts again from the save it is given; close the PLAY page before putting one into the browser's game.", [
+    ["ON MY FM-1", "", () => putBack(b.id, "usb")], ["ON MY FM-1 (BLUETOOTH)", "", () => putBack(b.id, "bt")],
+    ["INTO THE BROWSER'S GAME", "", () => putBack(b.id, "browser")], ["CANCEL", "", null]])));
+  acts.appendChild(btn("DOWNLOAD", "", () => download(b)));
+  acts.appendChild(btn("DELETE", "warn", () => panel("Delete this backup from this browser? It cannot be brought back, unless you downloaded it.", [
+    ["KEEP IT", "", null], ["DELETE IT", "warn", () => { try { store.remove(b.id); } catch (e) {} draw(); say("Deleted."); }]])));
+  li.append(left, acts, ask);
+  return li;
+}
+function draw() {
+  const l = store ? store.list() : [];
+  $("list").replaceChildren(...l.map(row));
+  $("none").hidden = l.length > 0; $("list").hidden = !l.length;
+  if (!store) { $("none").hidden = false; $("none").textContent = "This browser keeps nothing for this page (its storage is shut, as in some private windows): backups cannot be kept here."; }
+}
+// a save kept in the list; what to tell of it
+async function keep(bytes, opts) {
+  const about = await (await theGame()).about(bytes);
+  if (!about.ok && !about.newer) throw new Error("unread");
+  const r = store.add(bytes, { ...opts, game: opts.game || VERSION, about });
+  draw();
+  return r;
+}
+const told = (b) => who(b.about) + (b.about && b.about.ok ? " (" + played(b.about.played).toLowerCase() + " played)" : "");
+// where what was there before a put-back now is: a new automatic copy, or the copy of it the list already had
+const before = (r) => (r.fresh ? "What was there before is in the list, marked AUTOMATIC." : "What was there before was already in the list (" + when(r.b.made) + ").");
+function download(b) {
+  const a = el("a"); a.href = URL.createObjectURL(new Blob([toFile(b)], { type: "application/json" })); a.download = fileName(b);
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  say("Downloaded " + a.download + ". Keep it somewhere safe; OPEN A SAVE FILE brings it back.");
+}
+
+// ---------------------------------------------------------------- an FM-1, by USB or by Bluetooth
+let busy = false, link = null, ble = null, btPort = null, btAcc = null, midi = null;
+const XN = 32, segs = [];
+for (let i = 0; i < XN; i++) { const e = el("i"); e.style.setProperty("--n", i); $("xfer-bar").appendChild(e); segs.push(e); }
+function xfer(dir) {
+  $("xfer").hidden = !dir;
+  if (dir) { $("xfer-from").textContent = dir === "in" ? "YOUR FM-1" : "THIS BROWSER"; $("xfer-to").textContent = dir === "in" ? "THIS BROWSER" : "YOUR FM-1"; }
+}
+setInterval(() => {
+  if (!link) return;
+  link.tick();
+  const p = link.progress(), f = p && p.of ? Math.min(1, p.got / p.of) : null, n = f === null ? 0 : Math.floor(f * XN);
+  $("xfer-bar").classList.toggle("wait", f === null);
+  if (f === null) $("xfer-bar").removeAttribute("aria-valuenow"); else $("xfer-bar").setAttribute("aria-valuenow", Math.floor(f * 100));
+  segs.forEach((s, i) => s.classList.toggle("lit", i < n));
+}, 20);
+function lock(on) { busy = on; for (const b of document.querySelectorAll("button")) b.disabled = on; }
+// the FM-1's save, read: { f, bytes } with the link still open (f.close(), or f.write()), or null (said why)
+async function fm1Open(via) {
+  let access;
+  if (via === "usb") {
+    try { midi = midi || await navigator.requestMIDIAccess(); }
+    catch (e) { say("This browser gave no MIDI access (Chrome and Edge have it; Safari does not). OPEN A SAVE FILE and the browser's game still work here.", true); return null; }
+    access = midi;
+    say("Looking for your FM-1: plug it in by USB, switched on, with FM-ARCAVE running.");
+  } else {
+    ble = ble || new BlePorts({ message: (p, d, t) => { if (btAcc && p === btPort) btAcc.heard(d, t); } });
+    if (await bleSay(ble)) { say(!ble.supported ? "This browser has no Web Bluetooth: use Chrome or Edge, or USB." : "Bluetooth is off on this computer, or it has none.", true); return null; }
+    say("Pick your FM-1 in the browser's list (FM-ARCAVE and four letters of its own).");
+    let p = null;
+    try { p = await ble.add(); }
+    catch (e) { say(e && e.name === "SecurityError" ? "The browser did not allow Bluetooth on this page." : "Could not connect. Is Bluetooth on in the FM-1's settings, and is it free? An FM-1 holds one Bluetooth link at a time: close any other page or app that has it.", true); return null; }
+    if (!p) { say("Nothing chosen. Not in the list? Switch Bluetooth on in the FM-1's settings (GLO): the first time, the FM-1 restarts once.", true); return null; }
+    btPort = p; btAcc = bleAccess(p); access = btAcc;
+    say("Connected by Bluetooth to " + p.name + ". Asking it for its save: a few seconds...");
+  }
+  const f = new Fm1Save(access, { onState: (s, d) => { if (d === "damaged") say("The save came through damaged. Asking your FM-1 again..."); else if (s === "loading") say("Found your FM-1. Reading its save..."); } });
+  link = f; xfer("in");
+  try { return { f, bytes: await f.read() }; }
+  catch (e) {
+    fm1Shut(via);
+    say(e.message === "absent" ? (via === "usb" ? "No FM-1 answered. Is it plugged in by USB and switched on, with FM-ARCAVE 0.22 or newer running? Nothing was changed."
+        : "Your FM-1 is connected by Bluetooth but did not answer. It needs FM-ARCAVE 0.23 or newer. Nothing was changed.")
+      : "The link to your FM-1 broke before its save was read. Nothing was changed. Try again.", true);
+    return null;
+  }
+}
+function fm1Shut(via) {
+  link = null; xfer("");
+  if (via === "bt") { const p = btPort; btPort = null; btAcc = null; if (p) setTimeout(() => ble.remove(p), 600); }
+}
+async function backupFm1(via) {
+  if (busy || !store) return;
+  lock(true);
+  try {
+    const o = await fm1Open(via);
+    if (!o) return;
+    o.f.close(); fm1Shut(via);
+    const r = await keep(o.bytes, { from: "fm1" });
+    say(r.fresh ? "Backed up: " + told(r.b) + ". Your FM-1 is back at its title, its save untouched. DOWNLOAD the backup to keep a copy outside this browser."
+      : "This very save is already backed up here (" + when(r.b.made) + "). Your FM-1 is back at its title, its save untouched.");
+  } catch (e) { say(sorry(e), true); }
+  finally { lock(false); }
+}
+const sorry = (e) => e.message === "full" ? "This list is full (sixty backups). Delete some, after downloading the ones that matter."
+  : e.message === "unread" ? "That is not a save this page's FM-ARCAVE can read. Nothing was kept."
+  : /quota|storage/i.test(e.name + e.message) ? "The browser's storage for this page is full. Delete some backups, after downloading the ones that matter."
+  : e.message || String(e);
+const browserSave = () => { try { const s = localStorage.getItem(SAVE_KEY); if (s) { const b = unb64(s); if (looksLikeSave(b)) return b; } } catch (e) {} return null; };
+
+async function putBack(id, where) {
+  if (busy || !store) return;
+  const bytes = store.bytes(id), b = store.get(id);
+  if (!bytes) return;
+  lock(true);
+  try {
+    const g = await theGame();
+    if (where === "browser") {
+      const up = await g.upgrade(bytes);
+      if (!up) { say("This backup is from a newer FM-ARCAVE than this page, or is damaged: the browser's game cannot start from it. Nothing was changed.", true); return; }
+      const cur = browserSave();
+      if (cur && same(cur, up)) { say("The browser's game already holds exactly this save. Nothing was changed."); return; }
+      const was = cur ? await keep(cur, { from: "browser", auto: "before a save was put back" }) : null;
+      localStorage.setItem(SAVE_KEY, b64(up));
+      say("Done: " + told(b) + " is the browser's game now. Open PLAY to carry on from it." + (was ? " " + before(was) : ""));
+      return;
+    }
+    const o = await fm1Open(where);
+    if (!o) return;
+    if (same(o.bytes, bytes)) { o.f.close(); fm1Shut(where); say("Your FM-1 already holds exactly this save. Nothing was changed."); return; }
+    const r = await fit(bytes, o.bytes.length, g);
+    if (r.why) {
+      o.f.close(); fm1Shut(where);
+      say(r.why === "update" ? "This backup is from a newer FM-ARCAVE than your FM-1 runs. Update the FM-1 on the INSTALL page, then put it back. Nothing was changed."
+        : r.why === "page" ? "Your FM-1 runs a newer FM-ARCAVE than this page, and this backup is from an older one: this page cannot bring it up to date. Nothing was changed."
+        : "This backup is damaged. Nothing was changed.", true);
+      return;
+    }
+    let was;
+    try { was = await keep(o.bytes, { from: "fm1", auto: "before a save was put back" }); }
+    catch (e) { o.f.close(); fm1Shut(where); say("What is on your FM-1 now could not be copied into this list first, so nothing was changed. " + sorry(e), true); return; }
+    xfer("out");
+    say("Putting " + told(b) + " on your FM-1" + (where === "bt" ? " by Bluetooth: a few seconds" : "") + "... Keep it switched on.");
+    const how = await o.f.write(r.bytes);
+    fm1Shut(where);
+    if (how === "kept") say("Done: " + told(b) + " is on your FM-1, and it is starting from it. " + before(was));
+    else if (how === "refused") say("Your FM-1 would not take it: its FM-ARCAVE is another version than this page's. Update it on the INSTALL page, then try again. Its own save is untouched.", true);
+    else say("Your FM-1 did not confirm it kept the save. Back it up again to see what it holds now, and put this one back once more if needed.", true);
+  } catch (e) { fm1Shut(where); say(sorry(e), true); }
+  finally { lock(false); }
+}
+
+$("b-usb").addEventListener("click", () => backupFm1("usb"));
+$("b-bt").addEventListener("click", () => backupFm1("bt"));
+$("b-browser").addEventListener("click", async () => {
+  if (busy || !store) return;
+  const cur = browserSave();
+  if (!cur) { say("The browser's game has no save yet: play a little on the PLAY page first.", true); return; }
+  lock(true);
+  try {
+    const r = await keep(cur, { from: "browser" });
+    say(r.fresh ? "Backed up the browser's game: " + told(r.b) + "." : "This very save is already backed up here (" + when(r.b.made) + ").");
+  } catch (e) { say(sorry(e), true); }
+  finally { lock(false); }
+});
+$("b-open").addEventListener("click", () => $("file").click());
+$("file").addEventListener("change", async () => {
+  const file = $("file").files[0]; $("file").value = "";
+  if (!file || busy || !store) return;
+  lock(true);
+  try {
+    if (file.size > 65536) throw new Error("This is not an FM-ARCAVE save file.");
+    const f = fromFile(await file.arrayBuffer());
+    const r = await keep(f.bytes, { from: "file", made: f.made, note: f.note, game: f.game });
+    say(r.fresh ? "Opened " + file.name + ": " + told(r.b) + ". It is in the list; PUT BACK sends it to an FM-1 or into the browser's game."
+      : "This very save is already in the list (" + when(r.b.made) + ").");
+  } catch (e) { say(sorry(e), true); }
+  finally { lock(false); }
+});
+addEventListener("pagehide", () => { if (link) link.close(); });
+addEventListener("storage", draw);
+draw();
+</script>
+</body>
+</html>

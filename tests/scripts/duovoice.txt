@@ -1,0 +1,42 @@
+# UNDERSONG, ONE VOICE (DUO=0, CATCH=1): the list's last line (a knob, two on); its card opens on its opening (the pool,
+# the drop, the Hum, Pink's note and Teal's, the tunnel), which runs to its end by itself; how it is played; both ready;
+# the sixteen walls, both halves played by themselves, the swap after the eighth; the result
+500 shot
+900 enc 2 1
+1100 enc 2 1
+1300 shot
+1500 btn 12
+2500 shot
+4500 shot
+6000 shot
+7500 shot
+9000 shot
+10500 shot
+12000 shot
+13500 shot
+15500 shot
+16700 shot
+17000 btn 12
+21000 shot
+24000 shot
+27000 shot
+30000 shot
+33000 shot
+36000 shot
+39000 shot
+42000 shot
+45000 shot
+46500 shot
+48000 shot
+51000 shot
+54000 shot
+57000 shot
+60000 shot
+63000 shot
+66000 shot
+69000 shot
+72000 shot
+75000 shot
+78000 shot
+81000 shot
+84000 end

@@ -4,7 +4,7 @@
  *
  * The platform under it (Dinghy's platform.c on the FM-1, tests/host.c on a computer, web/emu/web_host.c in a
  * browser) supplies: fm1_ms, fm1_in, fm1_input_edges, fm1_input_note_edges, fm1_enc_take, fm1_led_key,
- * fm1_led_key_glow, fm1_led_key_breathe, fm1_play_led, lcd_blit, lcd_sync, midi_get, midi_send, settings_load, settings_save. */
+ * fm1_led_key_glow, fm1_led_key_breathe, fm1_play_led, lcd_blit, lcd_sync, midi_get, midi_send, settings_load, settings_save, blob_load, blob_save, bank_at, bank_erase, bank_write, bank_runs, bank_mark (the machine bank: ac_slots.h). */
 #include "arcave_tab.h"
 
 #define AC_W 240

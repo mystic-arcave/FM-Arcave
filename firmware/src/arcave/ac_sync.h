@@ -13,6 +13,7 @@
  *   CC 108 n      a ping from the hub; the FM-1 answers CC 109 n at once (the hub measures the delay from it)
  * A plain MIDI clock (F8, FA) is followed too, when no hub speaks.
  * CC 110..118 are UNDERSONG's, the game for two (ac_duo.h); its leader speaks as sender 5 with "follow".
+ * CC 20..27 are the music room's, played together (ac_roomnet.h); its seat 0 speaks as sender 5 too.
  * CC 70..92 are the remote's: this FM-1 as the controller of the game in a browser (ac_remote.h). */
 
 enum { LK_ALONE, LK_FOLLOW, LK_LEAD, LK_CLOCK };
@@ -38,9 +39,10 @@ static void link_poll(void)
     uint8_t st, d1, d2;
     uint32_t now = fm1_ms;
     while (midi_get(&st, &d1, &d2)) {
-        if (st == 0xBFu && d1 >= 74u && d1 <= 92u && fmr_rx(d1, d2)) ;   /* the page that plays with this FM-1 (ac_remote.h) */
+        if (st == 0xBFu && ((d1 >= 74u && d1 <= 92u) || d1 == 60u || d1 == 61u) && fmr_rx(d1, d2)) ;   /* the page that plays with this FM-1 (ac_remote.h) */
         else if (st == 0xBFu && d1 >= 110u && d1 <= 118u) duo_rx(d1, d2);   /* UNDERSONG's own messages (ac_duo.h) */
-        else if (st == 0xBFu && (link_id || duo_follows())) {
+        else if (st == 0xBFu && d1 >= 20u && d1 <= 27u) rn_rx(d1, d2);   /* the music room with friends (ac_roomnet.h) */
+        else if (st == 0xBFu && (link_id || duo_follows() || rn_follows())) {
             if (d1 == 102u) lk.tempo = (uint32_t)d2 << 7;
             else if (d1 == 103u) lk.tempo |= d2;
             else if (d1 == 104u) lk.pos = (uint32_t)d2 << 14;
@@ -48,7 +50,7 @@ static void link_poll(void)
             else if (d1 == 106u) lk.pos |= d2;
             else if (d1 == 107u) {
                 /* (sender 5: the leader of a game of UNDERSONG, followed by its second seat only) */
-                if ((d2 & 8u) && ((d2 & 7u) == 5u ? duo_follows() : link_id && (d2 & 7u) != link_id)) {
+                if ((d2 & 8u) && ((d2 & 7u) == 5u ? duo_follows() || rn_follows() : link_id && (d2 & 7u) != link_id)) {
                     int32_t mine = (int32_t)((tr_now_q8() >> 6) & 0x1FFFFFu), d = (int32_t)lk.pos - mine;
                     if (d > 0x100000) d -= 0x200000;
                     if (d < -0x100000) d += 0x200000;
@@ -89,7 +91,7 @@ static void link_poll(void)
         midi_send(0xBFu, 104u, (p >> 14) & 127u); midi_send(0xBFu, 105u, (p >> 7) & 127u); midi_send(0xBFu, 106u, p & 127u);
         midi_send(0xBFu, 107u, link_id);
     }
-    if (duo_leads() && now - lk.last_duo >= 250u) {   /* UNDERSONG: seat 0's clock, for seat 1 to follow */
+    if ((duo_leads() || rn_leads()) && now - lk.last_duo >= 250u) {   /* (and the music room's seat 0) */   /* UNDERSONG: seat 0's clock, for seat 1 to follow */
         uint32_t t = tr_bpm_q8 >> 3, p;
         lk.last_duo = now;
         midi_send(0xBFu, 102u, (t >> 7) & 127u); midi_send(0xBFu, 103u, t & 127u);

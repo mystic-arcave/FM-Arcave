@@ -39,7 +39,7 @@ input[type=number]{width:84px}
 <div class="wrap">
 <header class="top">
   <a class="name" href="../">FM-ARCAVE</a>
-  <nav><a href="../emu/">PLAY</a><a href="../install/">INSTALL</a><a href="./" aria-current="page">LINK</a><a href="https://github.com/mystic-arcave/FM-Arcave">SOURCE</a></nav>
+  <nav><a href="../emu/">PLAY</a><a href="../install/">INSTALL</a><a href="./" aria-current="page">LINK</a><a href="../machines/">MACHINES</a><a href="../save/">SAVES</a><a href="https://github.com/mystic-arcave/FM-Arcave">SOURCE</a></nav>
 </header>
 <main>
   <div>
@@ -71,13 +71,14 @@ input[type=number]{width:84px}
     <div><h3>WHAT STAYS IN TIME</h3><p>Tempo, beat and bar. A follower slides into place over a beat or two, never jumps mid-note. Change the tune on the leader (ALGORITHM) and every FM-1 takes its tempo. With LINK on, all of FM-ARCAVE's tunes play in one shared key, so different tunes on different machines still agree.</p></div>
     <div><h3>HOW CLOSE</h3><p>The page measures each FM-1's delay with a ping and sends each one the clock moved ahead by that much. "OFF BY" shows how far each FM-1 is from the leader. Bluetooth takes longer than a cable and not the same time twice, so the page pings a Bluetooth FM-1 more often and goes by the quickest answers. These numbers come from the emulator so far, not from four FM-1s on a table.</p></div>
     <div><h3>UNDERSONG, FOR TWO OR THREE</h3><p>The game for two or three FM-1s, down the well in the Arcave's floor. Bring them all in here, by USB or by Bluetooth, start the hub, and roll each Rock to the well: this page passes what each player does to the others, and the clock of the one that leads. With three in the well, every game is played for three. LINK does not have to be on for it. Friends on other computers: the <a href="online/">ONLINE</a> tab.</p></div>
+    <div><h3>THE MUSIC ROOM, FOR UP TO FOUR</h3><p>With the hub started, every FM-1 whose Rock is in the music room shares one room: the room of whoever was there first. Each player takes an instrument of their own (or the pool), sees the others' rocks, and hears what they change. Nothing to choose: go into the room. To keep a room to yourself, turn TOGETHER off in the room's settings (GLO in the music room).</p></div>
     <div><h3>WITHOUT THIS PAGE</h3><p>An FM-1 with LINK on also follows a plain MIDI clock (USB, Bluetooth or the TRS jack) from a DAW or a drum machine, and START sets it to bar one. A computer's own Bluetooth MIDI settings can connect an FM-1 too (on a Mac: Audio MIDI Setup); it then comes in here as a MIDI port, like a USB one.</p></div>
   </div>
 </main>
-<footer class="foot"><p>The messages are control changes 102 to 118 on MIDI channel 16; <a href="https://github.com/mystic-arcave/FM-Arcave/blob/main/docs/LINK.md">docs/LINK.md</a> has the whole protocol. Nothing leaves this computer.</p></footer>
+<footer class="foot"><p>The messages are control changes 20 to 27 and 102 to 118 on MIDI channel 16; <a href="https://github.com/mystic-arcave/FM-Arcave/blob/main/docs/LINK.md">docs/LINK.md</a> has the whole protocol. Nothing leaves this computer.</p></footer>
 </div>
 <script type="module">
-import { Gather, outFor as pairOf, holdTheLink } from "./undersong.js";
+import { Gather, outFor as pairOf, holdTheLink, passes } from "./undersong.js";
 import { BlePorts, Twins, rankOf, bleRows, bleAdd, bleSay } from "./ble.js";
 // The hub. Time is performance.now() milliseconds; the clock is in quarter ticks (384 to a beat), modulo 2^21, as on the wire.
 // A port is where one FM-1 is heard: a Web MIDI input (USB, or Bluetooth through the computer's own MIDI) or an FM-1
@@ -124,7 +125,8 @@ function repair() {                                         // the MIDI ports ch
 // UNDERSONG, the game for two or three: its messages (control changes 110 to 118, and the clock of the FM-1 that leads
 // the game, 102 to 107 with sender 5) are passed from each FM-1 in the game to the others, as they come, gathered by
 // undersong.js: a message with numbers (115, 116, 118, then its op 117) goes on in one piece, so with three FM-1s two
-// players' messages never mix on the way to the third
+// players' messages never mix on the way to the third. The music room played together (control changes 20 to 27, up to
+// four FM-1s in one room) goes the same way
 const duo = new Map();                                      // port id -> { out, seen, ble }
 function relay(port, d) {
   for (const [id, x] of duo)
@@ -135,8 +137,8 @@ function onMsg(port, data, t) {
   if (st !== 0xBF || data.length < 3 || !running) return;
   if (twins.take(port.id, rankOf(port), d1, d2, t)) return; // a second road to an FM-1 already heard: left out
   const p = (port.acc ||= { tempo: 0, pos: 0 }), g = (port.gather ||= new Gather());
-  if ((d1 >= 110 && d1 <= 118) || (d1 === 107 && d2 === 13)) {   // UNDERSONG's, and its leader's clock: on to the friends
-    if (d1 === 110) { const o = duo.get(port.id)?.out || outOf(port); if (o) duo.set(port.id, { out: o, seen: performance.now(), ble: isBle(port) }); }
+  if (passes(d1, d2)) {                                     // UNDERSONG's, the music room's, and their leader's clock: on to the friends
+    if (d1 === 110 || d1 === 20) { const o = duo.get(port.id)?.out || outOf(port); if (o) duo.set(port.id, { out: o, seen: performance.now(), ble: isBle(port) }); }
     const d = g.take(d1, d2); if (d) relay(port, d);
     return;
   }

@@ -12,7 +12,6 @@ static const course_t *co = &CO_SHORT;
 #define CO_XE (co->xe)
 #define CO_XSTOP (co->xstop)
 #define CO_HN (co->hn)
-#define CO_HT (co->ht)
 #define CO_YEND_Q4 (co->yend_q4)
 #define CO_SHROOM (co->shroom)
 #define CO_NSHROOM (co->nshroom)
@@ -77,18 +76,29 @@ static uint8_t race_new, race_save_due;
 #define RACING (G.race == 1 || G.race == 2)     /* on the race course, rolling (not yet over the finish) */
 static uint32_t in_time;                         /* ms since the intro began: what its little animations run on */
 
+/* the land's height at pixel i of the course's list, in 1/16 px: every sixteenth is kept whole, the fifteen after it
+ * as a byte's step each from the one before (tools/gen_course.py: half the room of a list of whole heights) */
+static int32_t land_h(int32_t i)
+{
+    int32_t j = i + co->hoff, n = j & 15, v = co->ha[j >> 4];
+    const int8_t *d = co->hd + (j >> 4) * 15;
+    while (n--) v += *d++;
+    return v;
+}
 static int32_t land_y(int32_t x)
 {
     int32_t i = (x >> 8) - CO_HX0, f = x & 255;
     if (i < 0) { i = 0; f = 0; }
     if (i > CO_HN - 2) { i = CO_HN - 2; f = 256; }
-    return (CO_HT[i] * (256 - f) + CO_HT[i + 1] * f) >> 4;
+    return (land_h(i) * (256 - f) + land_h(i + 1) * f) >> 4;
 }
 static int32_t land_sl(int32_t x) { return iclamp(land_y(x + 128) - land_y(x - 128), -768, 768); }
 
 #define GR Q8(520)
 #define TQ 480
 #define VK Q8(215)
+#define VROLL 430                                /* over this (px/s) the opening roll eases him back: on the course, not the race */
+#define ROLL_EASE(s) (!G.race && (s)->x > Q8(CO_XS))   /* (nor the loop behind the start, which throws him out fast) */
 #define JMIN 60
 #define JMAX 300
 #define CAMMAX Q8(CO_L + 50 - 240)
@@ -102,10 +112,11 @@ static void rock_phys(rock_t *s, int32_t knob, int32_t jump)
         if ((knob > 0 && vt > 0) || (knob < 0 && vt < 0)) push = (push * imax(0, 256 - iabs(vt) * 256 / VK)) >> 8;
         lump = -513 * (rock_rad(s->th + 209) - rock_rad(s->th - 209));
         fr = -vt / 5 - (iabs(vt) > 512 ? (vt > 0 ? Q8(5) : -Q8(5)) : 0);
+        if (ROLL_EASE(s) && iabs(vt) > Q8(VROLL)) fr -= (vt > 0 ? vt - Q8(VROLL) : vt + Q8(VROLL)) * 2;   /* the opening roll: fast, not frantic */
         a = push + lump + fr;
         s->vx += ((a * tx) >> 8) >> 7;
         s->vy += ((a * ty) >> 8) >> 7;
-    }
+    } else if (ROLL_EASE(s) && iabs(s->vx) > Q8(VROLL)) s->vx -= ((s->vx > 0 ? s->vx - Q8(VROLL) : s->vx + Q8(VROLL)) * 2) >> 7;   /* (in the air too) */
     s->vy += GR >> 7;
     if (s->g) s->coy = 13; else if (s->coy > 0) s->coy--;
     if (jump >= 0 && s->coy > 0) {
@@ -154,6 +165,60 @@ static int32_t pad_plan(int32_t px, int32_t far, int32_t speed, int32_t d)   /* 
         if (sc > best_sc) { best_sc = sc; best = k; }
     }
     return best;
+}
+
+/* a hollow Rock cannot roll out of (Ben, 2026-11-25: a pad up a steep slope should see him coming from further away and
+ * help him over): the crest ahead (Q8 x) when what he has (his speed, the knob's push up to it, less the rub) will not
+ * take him up to it, else 0. The land ahead is followed down to its lowest and up to its highest, ripples under 6 px
+ * passed over. Then every key calls, and any key hops him over that crest (climb_hop) */
+static int32_t climb_crest(const rock_t *s, int32_t knob, int32_t d)
+{
+    int32_t x = s->x, y, yb = land_y(x), xt = 0, yt = 0, up = 0, i, h, v, dist, have;
+    v = (int32_t)isqrt((uint32_t)((s->vx >> 8) * (s->vx >> 8) + (s->vy >> 8) * (s->vy >> 8)));   /* px/s */
+    if (v > 360) return 0;                       /* (more than any hill on the course needs) */
+    for (i = 0; i < 130; i++) {                  /* (520 px at most) */
+        x += d * Q8(4); y = land_y(x);
+        if (!up) { if (y > yb) yb = y; else if (yb - y > Q8(6)) { up = 1; xt = x; yt = y; } }
+        else if (y < yt) { yt = y; xt = x; }
+        else if (y - yt > Q8(6)) break;
+    }
+    if (!up || i == 130) return 0;
+    h = (s->y - (yt - ROCK_RM)) >> 8;            /* px up from where he is to on top */
+    if (h < 3) return 0;
+    dist = iabs(xt - s->x) >> 8;
+    have = v * v / 2 + (d * knob > 0 ? iabs(knob) * TQ / 512 * imax(0, 215 - v) / 215 * dist : 0) - (v / 5 + 5) * dist;   /* (the
+                                                    knob's push counted half: slow, his lumps and the ripples take the rest) */
+    return have < 520 * (h + 4) ? xt : 0;
+}
+/* the hop over it, the softest of a few: for each speed on (70..385 px/s) the least hop that takes him 5 px over the
+ * crest; not one that meets the slope before it; of the rest the one whose hardest touch, as he comes down and rolls on
+ * 160 px past the crest (flying off again where the land falls away faster than he does), is the softest */
+static void climb_hop(rock_t *s, int32_t xt, int32_t d)
+{
+    int32_t dist = iabs(xt - s->x) >> 8, dy = land_y(xt) - ROCK_RM - Q8(5) - s->y, c, best_vx = 0, best_vy = 0, best = 0x7FFFFFFF;
+    for (c = 0; c < 22; c++) {
+        int32_t vx = 70 + c * 15, tc = imax(20, dist * 1000 / vx), hg, vy0, vy, x = s->x, y = s->y, t, sl, n, tx, ty, vn, vt, worst = -1;
+        if (tc > 1500 || vx < ((d * s->vx) >> 8)) continue;   /* (not slower than he is going) */
+        hg = ((520 * tc / 1000) * tc / 2) * 256 / 1000;           /* Q8 px: how far he falls in tc ms */
+        vy = vy0 = imax(-Q8(480), imin(-Q8(40), (dy - hg) * 10 / tc * 100));   /* Q8 px/s */
+        vx = d * Q8(vx);
+        for (t = 0; t < 384 && (worst < 0 || d * (x - xt) < Q8(160)); t++) {   /* (as rock_phys: steps of 1/128 s) */
+            vy += GR >> 7; x += vx >> 7; y += vy >> 7;
+            if (t > 2 && y >= land_y(x) - ROCK_RM) {
+                if (d * (x - xt) < 0) break;     /* (into the slope before the crest) */
+                sl = land_sl(x); n = (int32_t)isqrt((uint32_t)(65536 + sl * sl)); tx = 65536 / n; ty = sl * 256 / n;
+                vn = (-vx * ty + vy * tx) >> 8; vt = (vx * tx + vy * ty) >> 8;
+                worst = imax(worst, imax(vn, 0));
+                y = land_y(x) - ROCK_RM; vx = (vt * tx) >> 8; vy = (vt * ty) >> 8;
+            }
+        }
+        if (worst < 0 || d * (x - xt) < Q8(160) || worst >= best) continue;   /* (down and rolled on, or not at all) */
+        best = worst; best_vx = 70 + c * 15; best_vy = vy0;
+    }
+    if (!best_vx) { best_vx = imax(200, (d * s->vx) >> 8); best_vy = -Q8(300); }   /* (none fits: up and on, as a pad's biggest) */
+    s->vx = d * Q8(best_vx); s->vy = best_vy;
+    s->g = 0; s->coy = 0; s->jumped = 1;
+    deco_jump(KEY_ZONE[imax(in.hikey, 0)], s->x, s->y);
 }
 
 static void intro_setcam(int32_t z, int32_t sx, int32_t sy)   /* the rock at screen (sx, sy), zoom z (Q8) */
@@ -238,7 +303,7 @@ static void intro_sky_hits(int32_t dt)
     }
 }
 
-/* the place of the roll's piece (ac_rollmus.h) Rock is in: twenty-four along the course, start to cave; before the
+/* the place of the roll's piece (ac_rollmus.h) Rock is in: twenty-eight along the course, start to cave; before the
  * start, the cave's mouth and the hollow have their own. The race back plays it through again, the other way home */
 static int intro_place(void)
 {
@@ -248,8 +313,13 @@ static int intro_place(void)
     if (px < CO_WALLX - 16) return RM_HOLLOW;
     if (px < CO_XS) return RM_START;
     if (px > CO_L - 64) return RM_END;
-    return iclamp((px - CO_XS) * RM_NPLACE / (CO_L - 64 - CO_XS), 0, RM_NPLACE - 1);
+    {                                            /* (laid out by time, not length: gen_course.py's PLACE_X) */
+        int k = 0;
+        while (k < RM_NPLACE - 1 && px >= CO_PLACEX[k + 1]) k++;
+        return k;
+    }
 }
+typedef char co_placex_ok[sizeof CO_PLACEX / sizeof CO_PLACEX[0] == RM_NPLACE + 1 ? 1 : -1];
 /* how far Rock is off the platform he woke on, 0..256: the pictures' beat comes in with it (ac_rollmus.h). The platform
  * is the flat stretch from the wall to where the land first drops (CO_XS); the hollow behind the wall is "off" too */
 static int32_t intro_away(void)
@@ -310,7 +380,7 @@ static int intro_tick(int32_t dt)
         if (t >= 3500) { G.phase = IP_PLAY; G.t = 0; G.eyes = 256; G.cam_y = r->y - Q8(130); }
     } else if (G.phase == IP_PLAY || G.phase == IP_OUT) {
         int live = G.phase == IP_PLAY, lock = 0, first = 1;
-        int32_t knob, jump = -1, pad = -1, ahead = Q8(999), win, i, bt, d = I_DIR;
+        int32_t knob, jump = -1, pad = -1, ahead = Q8(999), win, i, bt, d = I_DIR, climb;
         const co_pad_t *pads = I_PAD;
         if (live && G.fade > 0) G.fade = imax(0, G.fade - dt * 256 / 900);   /* (out of the door: in from black) */
         if (live && in.any_knob) G.drag = iclamp(G.drag + in.any_knob * 115, -384, 384);
@@ -334,6 +404,15 @@ static int intro_tick(int32_t dt)
             int32_t k = pad_plan(r->x, Q8(pads[pad].far), (int32_t)isqrt((uint32_t)((r->vx >> 4) * (r->vx >> 4) + (r->vy >> 4) * (r->vy >> 4))) << 4, d);
             G.exact = (jump == HOP_BIG) == (k >= 13);   /* the row that suits this pad: a bonus on landing */
             jump = k * 256 / 18; lock = 1; G.pad_used[pad] = 1;
+        } else if (live && !G.race && !G.loop_on && r->coy > 0 && r->x > Q8(CO_XS)
+                   && (climb = climb_crest(r, knob, d)) != 0) {   /* in a hollow he will not roll out of: every key calls */
+            for (i = 0; i < CO_NPAD; i++)        /* (a pad on that crest: the key is its jump) */
+                if (!G.pad_used[i] && iabs(Q8(pads[i].x + 24 * d) - climb) < Q8(40)) break;
+            G.on_pad = 1; G.near = 256;
+            if (jump >= 0) {
+                climb_hop(r, climb, d); jump = -1;
+                if (i < CO_NPAD) { lock = 1; G.pad_used[i] = 1; G.exact = 0; }
+            }
         }
         if (live && !G.loop_on && r->x < Q8(CO_LOOPX + 6) && r->y > land_y(Q8(CO_LOOPX)) - Q8(26)) {
             G.loop_on = 1; G.loop_a = 0; G.loop_w = imax(Q8(4), iabs(r->vx) * 10 / 244);   /* rad/s Q8 */

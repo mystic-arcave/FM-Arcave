@@ -1,0 +1,112 @@
+# GLOW CAPS, the machine loaded into the first ledge's slot (MOD=1): its start card over its own picture, HOME: its own
+# words, HOME again; PLAY: a game, keys pressed along the bottom row (some caps sung, most missed), the hearts gone, the
+# card after it with the tickets; REC: back to the Arcave, where its cabinet stands on the first ledge
+900 shot
+1100 btn 8
+1600 shot
+1800 btn 8
+2200 btn 12
+3300 shot
+3400 keys 0x1
+3460 keys 0
+3530 keys 0x200
+3590 keys 0
+3660 keys 0x40000
+3720 keys 0
+3790 keys 0x4000000
+3850 keys 0
+3920 keys 0x80
+3980 keys 0
+4050 keys 0x10000
+4110 keys 0
+4180 keys 0x1000000
+4240 keys 0
+4310 keys 0x40
+4370 keys 0
+4440 keys 0x4000
+4500 keys 0
+4570 keys 0x800000
+4630 keys 0
+4700 keys 0x10
+4760 keys 0
+4830 keys 0x1000
+4890 keys 0
+4960 keys 0x200000
+5020 keys 0
+5095 shot
+5090 keys 0x4
+5150 keys 0
+5220 keys 0x800
+5280 keys 0
+5350 keys 0x80000
+5410 keys 0
+5480 keys 0x1
+5540 keys 0
+5610 keys 0x200
+5670 keys 0
+5740 keys 0x40000
+5800 keys 0
+5870 keys 0x4000000
+5930 keys 0
+6000 keys 0x80
+6060 keys 0
+6130 keys 0x10000
+6190 keys 0
+6260 keys 0x1000000
+6320 keys 0
+6390 keys 0x40
+6450 keys 0
+6520 keys 0x4000
+6580 keys 0
+6650 keys 0x800000
+6710 keys 0
+6780 keys 0x10
+6840 keys 0
+6910 keys 0x1000
+6970 keys 0
+7045 shot
+7040 keys 0x200000
+7100 keys 0
+7170 keys 0x4
+7230 keys 0
+7300 keys 0x800
+7360 keys 0
+7430 keys 0x80000
+7490 keys 0
+7560 keys 0x1
+7620 keys 0
+7690 keys 0x200
+7750 keys 0
+7820 keys 0x40000
+7880 keys 0
+7950 keys 0x4000000
+8010 keys 0
+8080 keys 0x80
+8140 keys 0
+8210 keys 0x10000
+8270 keys 0
+8340 keys 0x1000000
+8400 keys 0
+8470 keys 0x40
+8530 keys 0
+8600 keys 0x4000
+8660 keys 0
+8730 keys 0x800000
+8790 keys 0
+8860 keys 0x10
+8920 keys 0
+8990 keys 0x1000
+9050 keys 0
+9100 btn 13
+9500 shot
+9700 btn 12
+16000 shot
+24000 shot
+30000 shot
+30500 btn 12
+32500 shot
+33000 btn 13
+33400 shot
+33600 btn 13
+35000 shot
+35500 end

@@ -1,0 +1,13 @@
+# ONE VOICE by hand (DUO=0), beside a friend who never misses: PLAY skips the opening; you are how high first. A yellow
+# key held for the first wall (wrong unless it is yellow's), then a white one held on
+900 enc 2 1
+1100 enc 2 1
+1500 btn 12
+2500 btn 12
+3200 btn 12
+9000 keys 4
+13000 shot
+14500 keys 1024
+16000 shot
+20000 shot
+24000 end

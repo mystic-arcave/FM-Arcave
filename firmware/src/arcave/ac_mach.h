@@ -14,7 +14,7 @@ enum { MS_TITLE, MS_PLAY, MS_OVER };
 static struct { uint8_t which, state; int32_t t, score, lives, combo, msg_t, flash, ask; uint8_t msg, hb; int32_t hb_t, hb_rest, hb_al; } mc;
 /* ask: REC once in a game, the box up; hb: a machine new to the player (pf_home_new), its HOME shown in a box: hb_t how
  * long, hb_rest set aside for so long yet, hb_al how much of it shows */
-static uint32_t best[3];
+static uint32_t best[4];                         /* the firmware's three; [MACH_MM]: the loaded machine's, while it is played */
 static uint8_t save_dirty;
 
 /* REC once in any game: a box over it, REC again to leave for the Arcave. stay: the game holds still under it, and
@@ -60,7 +60,7 @@ static void mach_hud(void)
     num_str(b, mc.score);
     gtextr(234, 8, b, th->text, 2);
     for (i = 0; i < imin(mc.lives, 8); i++) gtext(8 + i * 9, 8, "\xE2\x99\xA5", th->caps[0], 1);
-    if (mc.msg_t > 0) { galpha(imin(256, mc.msg_t * 256 / 300)); gfit(120, 40 - (700 - mc.msg_t) / 60, 232, TR(mc.msg), mc.msg == T_MISS ? th->caps[0] : th->pad, ts(2, 4)); galpha(256); }
+    if (mc.msg_t > 0) { galpha(imin(256, mc.msg_t * 256 / 300)); gfit(120, 40 - (700 - mc.msg_t) / 60, 232, mc.which == MACH_MM && mb.say ? mb.say : TR(mc.msg), mc.msg == T_MISS ? th->caps[0] : th->pad, ts(2, 4)); galpha(256); }
 }
 /* the start (and the end) of a machine: its name; PLAY starts; HOME shows how it is played; REC goes back */
 static void mach_card(const char *name, col_t c)
@@ -131,6 +131,12 @@ static void mach_over(void)
     if ((uint32_t)mc.score > best[mc.which]) { best[mc.which] = (uint32_t)mc.score; save_dirty = 1; }
     sfx(60, 0, 500, W_TRI, 3000, 5, 150); sfx(55, 180, 500, W_TRI, 3000, 5, 150); sfx(48, 360, 1200, W_TRI, 3000, 5, 150);
     /* the tickets: JUICE WORKS one for every 25 points, NIGHT BLOOM one for every 8, and one for having played */
+    if (mc.which == MACH_MM) {                   /* a loaded machine: its best is kept with its slot, its tickets as its header says */
+        const mm_head_t *h = mb.h[mb.cur];
+        if (ms.rec[mb.cur].best != best[MACH_MM]) { ms.rec[mb.cur].best = best[MACH_MM]; save_dirty = 1; }
+        tix_pay(1 + (h->per_ticket ? mc.score / h->per_ticket : 0), th->caps[h->cap % 5u]);
+        return;
+    }
     pf_round_done(mc.which);
     tix_pay(1 + mc.score / (mc.which == 1 ? 25 : 8), th->caps[mc.which * 2 % 5]);
 }
@@ -1294,13 +1300,17 @@ static void bloom_draw(void)
     if (mc.flash > 0 && mc.msg == T_MISS && mc.msg_t > 0) { galpha(mc.flash * 110 / 300); grect(0, 0, 240, 240, th->caps[0]); galpha(256); }
 }
 
-/* ---------------------------------------------------------------- all three */
+#include "ac_mmrun.h"
+
+/* ---------------------------------------------------------------- all three, and a loaded one (mc.which == MACH_MM) */
 static void mach_start(void)
 {
     uint32_t i, now = tr_now_q8() >> 8;
     mc.state = MS_PLAY; mc.score = 0; mc.combo = 0; mc.t = 0; mc.msg_t = 0; mc.flash = 0; mc.ask = 0; tix.on = 0;
-    pf_home_read(mc.which); mc.hb = 0;           /* (played once: the HOME box is done with, its line back) */
-    if (mc.which == 0) gh_start();
+    if (mc.which != MACH_MM) pf_home_read(mc.which);
+    mc.hb = 0;                                   /* (played once: the HOME box is done with, its line back) */
+    if (mc.which == MACH_MM) mm_start();
+    else if (mc.which == 0) gh_start();
     else if (mc.which == 1) {
         for (i = 0; i < sizeof jw; i++) ((uint8_t *)&jw)[i] = 0;
         mc.lives = 5; jw.seed = now * 31u + 7u; jw.spawn_t = 1800; jw.prev_keys = in.keys;   /* (the first order once ORDER UP! goes) */
@@ -1321,7 +1331,7 @@ static void mach_enter(int which)
 {
     uint32_t i;
     mc.which = (uint8_t)which; mc.state = MS_TITLE; mc.t = 0; mc.msg_t = 0; mc.flash = 0; mc.score = 0; mc.lives = 0; mc.ask = 0; tix.on = 0;
-    mc.hb = (uint8_t)pf_home_new(which); mc.hb_t = 0; mc.hb_rest = 0; mc.hb_al = 0;
+    mc.hb = (uint8_t)(which != MACH_MM && pf_home_new(which)); mc.hb_t = 0; mc.hb_rest = 0; mc.hb_al = 0;
     gh.card_track = (uint8_t)(mus_track % JUKE_N); gh.swap_t = -10000; gh.demo_track = 255;
     (void)i;
 #ifdef AC_TEST_SCENE
@@ -1335,7 +1345,15 @@ static int mach_tick(int32_t dt)
     mc.t += dt;
     if (mc.msg_t > 0) mc.msg_t -= dt;
     if (mc.flash > 0) mc.flash -= dt;
-    if (BDOWN(BTN_HOME)) { pf_home_read(mc.which); mc.hb = 0; return 1; }
+    if (mc.which == MACH_MM) {                   /* a loaded machine: HOME is its own words, over it */
+        if (BDOWN(BTN_HOME)) { mb.help ^= 1u; snd_ui(mb.help ? 74 : 67); return 0; }
+        if (mb.help) {
+            if (BDOWN(BTN_REC)) { mb.help = 0; return -1; }
+            if (BDOWN(BTN_PLAY)) { mb.help = 0; snd_ui(67); }
+            led_btn_want |= 1u << BTN_HOME; led_breathe_want |= 1u << BTN_REC;
+            return 0;
+        }
+    } else if (BDOWN(BTN_HOME)) { pf_home_read(mc.which); mc.hb = 0; return 1; }
     if (mc.hb && !pf_home_new(mc.which)) mc.hb = 0;   /* (a round finished: not new any more) */
     if (mc.state != MS_PLAY) {
         if (mc.hb && !tix.on && mc.state == MS_TITLE) {   /* the HOME box: in after a moment; a touch sets it aside */
@@ -1373,17 +1391,19 @@ static int mach_tick(int32_t dt)
         return 0;
     }
     if (BDOWN(BTN_REC)) { mc.ask = 1; snd_ui(74); return 0; }
-    if (mc.which == 0) road_tick(dt); else if (mc.which == 1) juice_tick(dt); else bloom_tick(dt);
+    if (mc.which == 0) road_tick(dt); else if (mc.which == 1) juice_tick(dt); else if (mc.which == 2) bloom_tick(dt); else mm_tick(dt);
     return 0;
 }
 static void mach_draw(void)
 {
     if (mc.which == 0) { road_draw(); if (mc.state != MS_PLAY) gh_card(); }
     else {
-        if (mc.which == 1) juice_draw(); else bloom_draw();
+        if (mc.which == 1) juice_draw(); else if (mc.which == 2) bloom_draw(); else mm_draw();
         if (mc.state == MS_PLAY) mach_hud();
+        else if (mc.which == MACH_MM) mach_card(mm_h()->name, th->caps[mm_h()->cap % 5u]);
         else mach_card(MACH_NAME[mc.which], th->caps[mc.which * 2 % 5]);
     }
     if (mc.state != MS_PLAY) { home_big_draw((uint32_t)fm1_ms); tix_draw(); }
     if (mc.state == MS_PLAY && mc.ask) rec_box_draw(1, (uint32_t)fm1_ms);
+    if (mc.which == MACH_MM && mb.help) mm_help_draw();
 }

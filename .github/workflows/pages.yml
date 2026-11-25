@@ -52,6 +52,8 @@ jobs:
             sleep 20
           done
           sh build.sh --release "${VER:-0.1}"
+      - name: The loadable machines (with the FM-1 toolchain: files for an FM-1; without: for the browser game only)
+        run: python3 tools/mm_build.py
       - name: The site
         run: |
           P="$(ls build/fm-arcave-[0-9]*.fwsc 2>/dev/null | head -1 || true)"

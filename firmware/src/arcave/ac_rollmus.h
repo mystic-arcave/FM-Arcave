@@ -274,7 +274,8 @@ static void roll_tick(int32_t dt, int32_t x, int32_t y, int32_t vx, int g, int p
     rm_want = (uint8_t)place;
     rv.bonus = imax(0, rv.bonus - dt * 256 * 14 / 1000);
     tgt = imin(Q8(255), sp * 150 + rv.bonus);    /* speed alone: as far as the melody's outline and the kick; the rest is earned */
-    if (tgt > rv.flow) rv.flow = imin(tgt, rv.flow + imax(1, (tgt - rv.flow) * imin(dt, 200) / 900));
+    if (tgt > rv.flow) rv.flow = imin(tgt, rv.flow + imax(1, (tgt - rv.flow) * imin(dt, 200) / 2000));   /* (it builds up over a
+                                                    couple of seconds: a burst of speed brings the parts in one by one) */
     else rv.flow -= (rv.flow - tgt) * imin(dt, 200) / 2600;
     f = rv.flow >> 8;
     rm_flow = (uint8_t)f;

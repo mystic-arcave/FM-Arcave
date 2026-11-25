@@ -4,7 +4,8 @@
 
     tools/make_site.py VERSION [PACKAGE.fwsc] [OUT]      (after web/emu/build.sh; OUT defaults to build/site)
 
-    /                 web/site (index.html, site.css, img/)
+    /                 web/site (index.html, site.css, img/, save/: the SAVES page, machines/: the MYSTIC MACHINES page)
+    /machines/        with build/machines (tools/mm_build.py): catalog.json and the machines' files
     /emu/             build/emu (fm-arcave.wasm, the page, worklet.js, panel.js)
     /install/         web/install, with the version and the package's identity written in
     /link/            web/link
@@ -45,6 +46,13 @@ def main():
     shutil.copytree(emu, out / "emu")
     shutil.copytree(ROOT / "web" / "link", out / "link")
     shutil.copytree(ROOT / "web" / "lib", out / "lib")
+    mm = ROOT / "build" / "machines"             # the loadable machines (tools/mm_build.py), beside their page
+    if (mm / "catalog.json").exists():
+        for f in [mm / "catalog.json", *sorted(mm.glob("*.mmach")), *sorted(mm.glob("*.minst"))]:
+            shutil.copy(f, out / "machines" / f.name)
+        print(f"site: {len(list(mm.glob('*.mmach')))} loadable machine(s), {len(list(mm.glob('*.minst')))} instrument(s) from build/machines")
+    else:
+        print("site: no build/machines (tools/mm_build.py): the MACHINES page offers the firmware's own three only")
     (out / "firmware").mkdir()
     shutil.copy(ROOT / "LICENSE", out / "firmware" / "LICENSE")
     (out / ".nojekyll").write_text("")

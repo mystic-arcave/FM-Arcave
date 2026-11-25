@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // FM-ARCAVE's emulator, the audio side: the WebAssembly FM-1 runs here, clocked by the sound the browser asks for.
-// It gets { type: "load", wasm, store, big } and answers "ready"; then "buttons", "keys", "enc", "midi", "big" (BIG
+// It gets { type: "load", wasm, store, bank, big } and answers "ready"; then "buttons", "keys", "enc", "midi", "big" (BIG
 // SCREEN on or off: the text a size smaller) come in and
 // "frame" (the screen when it changed, the lights, MIDI out, the settings when they were saved) goes out, and "midi"
 // (MIDI out between two frames, so a link to another FM-1 is not held up by the picture).
@@ -20,6 +20,8 @@ class FmArcave extends AudioWorkletProcessor {
           new Uint8Array(ex.memory.buffer, ex.web_store(), m.store.length).set(m.store);
           ex.web_store_set(m.store.length);
         }
+        if (m.bank && m.bank.length && ex.web_bank && m.bank.length <= ex.web_bank_len())   // (the machine bank, as the browser keeps it)
+          new Uint8Array(ex.memory.buffer, ex.web_bank(), m.bank.length).set(m.bank);
         ex.web_boot();
         ex.web_big(m.big ? 1 : 0);
         this.gen = ex.web_store_gen(); this.draws = -1;   // (started again from another save: the whole picture)

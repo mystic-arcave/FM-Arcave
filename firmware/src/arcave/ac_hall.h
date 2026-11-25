@@ -15,7 +15,16 @@
  *   SEQ         the loop plays or rests. Held: KNOB 1 its length in bars, KNOB 2 how recording is tidied (the sieve)
  *   FX          held: KNOB 1 the echo's time, KNOB 2 how long it goes on
  *   ENV         held: KNOB 1-4 the tone of each       REC   record; held: wipe the whole loop
- *   EDIT        its menu: every setting of the room in one list (SELECT a row, KNOB 1-4 set it) */
+ *   EDIT        its menu: every setting of the room in one list (SELECT a row, KNOB 1-4 set it)
+ *   under the pool, a strip of the sixteen keys: which are MUTE, SOLO, STOP and WIPE, and which are on
+ *
+ * Anywhere in the room:
+ *   GLO held    THE QUICK MIX, gone again when GLO is let go: the same sixteen keys (mute, solo, stop, wipe), KNOB 1-4
+ *               the four levels, PLAY everything stops or starts; FX, SCL, ENV, LFO or EDIT goes straight to that
+ *               one (room_jump; a friend's is watched: ac_roomnet.h). A tap on GLO is still the settings, whose first
+ *               line in here is MUSIC ROOM: the room's own settings (rset, ac_room.h)
+ *   HOME held   HOW IT WORKS: the lessons by topic (ac_rtutor.h)
+ *   with friends, up to four in one room, each on an instrument of their own: ac_roomnet.h */
 
 #define RH_W 560
 #define RH_FLOOR 186
@@ -85,6 +94,16 @@ static void room_echo_set(void)
     sy_echo_len = n > SY_DLN ? SY_DLN : n < 400u ? 400u : n;
     sy_echo_fb = 40 + rm.efb * 24;
 }
+/* what stands in the room's four places: the firmware's own instrument, or the one loaded into the place's slot
+ * (ac_slots.h, ac_mirun.h). Its short names, for where there is little room */
+static const rdesc_t *const RD_OWN[RI_N] = {&ROOTS_DESC, &GE_DESC, &RACK_DESC, &SEAM_DESC};
+static void room_kit(void)
+{
+    int j;
+    for (j = 0; j < RI_N; j++) { const rdesc_t *d = mi_set(j, place_loaded(j)); RD[j] = d ? d : RD_OWN[j]; }
+}
+static const char *ri_short(int i) { static const char *const NM[RI_N] = {"ROOTS", "GEODE", "RACK", "SEAM"}; return mi_on(i) ? mb.ih[i]->shortn : NM[i]; }
+static const char *ri_tag(int i) { static const char *const NM[RI_N] = {"RT", "GE", "MR", "CS"}; return mi_on(i) ? mb.ih[i]->tag : NM[i]; }
 static void room_defaults(void)
 {
     int i;
@@ -108,39 +127,86 @@ typedef struct {
     uint16_t loop_n;
     rev_t loop[RL_N];
 } room_save_t;
-#define ROOM_VER 1
+#define ROOM_VER 2                               /* (1: before the room's settings; still read) */
 static room_save_t *room_sv;                     /* (arcave.c points it at its place in the save) */
+static int rn_guest(void);                       /* (ac_roomnet.h: the room on this FM-1 just now is a friend's) */
+static int rn_follows(void);
+/* the room's settings, in the four bytes of the mixer's that were never read back (its menu, row and stop) */
+static void rset_pack(uint8_t *m)
+{
+    m[8] = (uint8_t)(rset.rock | rset.metro << 2 | rset.countin << 4 | rset.silent << 5 | rset.nolesson << 6);
+    m[9] = rset.vol; m[10] = (uint8_t)(rset.alone | rset.mine << 1); m[11] = 0;
+}
+static void rset_defaults(void) { int i; for (i = 0; i < (int)sizeof rset; i++) ((uint8_t *)&rset)[i] = 0; rset.vol = 8; }
+static void rset_unpack(const uint8_t *m)
+{
+    rset.rock = (uint8_t)imin(m[8] & 3u, 2); rset.metro = (uint8_t)imin(m[8] >> 2 & 3u, 2); rset.countin = m[8] >> 4 & 1u;
+    rset.silent = m[8] >> 5 & 1u; rset.nolesson = m[8] >> 6 & 1u; rset.vol = (uint8_t)imin(m[9], 8); rset.alone = m[10] & 1u; rset.mine = m[10] >> 1 & 1u;
+}
 static void room_pack(void)
 {
     room_save_t *s = room_sv;
     int i, k;
     if (!s || !rm.on) return;
+    if (rn_guest()) {                            /* in a friend's room: only this FM-1's own settings are kept, its own room stays as it was */
+        if (s->ver == ROOM_VER) rset_pack(s->mixer);
+        return;
+    }
     s->ver = ROOM_VER; s->scale = rm.scale; s->root = rm.root; s->bars = rm.bars; s->quant = rm.quant; s->etime = rm.etime; s->efb = rm.efb; s->bpm = rm.bpm;
     s->seen = room_seen; s->sc_mask = rm.sc_mask;
     for (i = 0; i < SCR_N; i++) s->scv[i] = rm.scv[i];
     for (i = 0; i < 12; i++) s->mixer[i] = ((const uint8_t *)&mx)[i];
+    rset_pack(s->mixer);
     for (i = 0; i < RI_N; i++) { for (k = 0; k < 8; k++) s->strip[i][k] = ((const uint8_t *)&rmx[i])[k]; s->inst[i] = ri[i]; }
     s->loop_n = rm.loop_n;
     for (i = 0; i < RL_N; i++) s->loop[i] = rm.loop[i];
 }
 static void room_unpack(void)                    /* a saved room back into the room (anything out of range: its default) */
 {
-    const room_save_t *s = room_sv;
-    int i, k;
-    room_defaults();
-    if (!s || s->ver != ROOM_VER) return;
+    room_save_t *s = room_sv;
+    int i, k, wipe = 0;
+    room_kit();
+    room_defaults(); rset_defaults();
+    if (!s || (s->ver != ROOM_VER && s->ver != 1)) {   /* no room in the save: what stands there now, as new */
+        for (i = 0; i < RI_N; i++) is_.act[i] = (uint16_t)place_kind(i);
+        return;
+    }
+    if (s->ver == ROOM_VER) rset_unpack(s->mixer);
     room_seen = s->seen;
     rm.scale = s->scale % RSC_N; rm.root = s->root % 12u; rm.bars = s->bars == 1 || s->bars == 2 || s->bars == 8 ? s->bars : 4; rm.quant = s->quant % 3u;
     rm.etime = s->etime & 3u; rm.efb = (uint8_t)imin(s->efb, 8); rm.bpm = (uint8_t)iclamp(s->bpm, 50, 200); rm.sc_mask = s->sc_mask;
     for (i = 0; i < SCR_N; i++) rm.scv[i] = (uint8_t)imin(s->scv[i], SCR_MAX[i]);
     for (i = 0; i < 12; i++) ((uint8_t *)&mx)[i] = s->mixer[i];
-    mx.stir = (uint8_t)imin(mx.stir, 8); mx.stir_rate &= 3u; mx.dive_every &= 3u; mx.dive_max = (uint8_t)imin(mx.dive_max, 2); mx.sel &= 3u; mx.menu = 0; mx.row = 0; mx.dive_mask = 0; mx.all_stop = 0;
+    mx.rsv = 0; mx.stir = (uint8_t)imin(mx.stir, 8); mx.stir_rate &= 3u; mx.dive_every &= 3u; mx.dive_max = (uint8_t)imin(mx.dive_max, 2); mx.sel &= 3u; mx.menu = 0; mx.row = 0; mx.dive_mask = 0; mx.all_stop = 0;
     for (i = 0; i < RI_N; i++) {
         const rdesc_t *d = RD[i];
         rinst_t *r = &ri[i];
         for (k = 0; k < 8; k++) ((uint8_t *)&rmx[i])[k] = s->strip[i][k];
         rmx[i].lvl = (uint8_t)imin(rmx[i].lvl, 16); rmx[i].pan = (uint8_t)imin(rmx[i].pan, 16); rmx[i].echo = (uint8_t)imin(rmx[i].echo, 8); rmx[i].rev = (uint8_t)imin(rmx[i].rev, 8);
         rmx[i].drv = (uint8_t)imin(rmx[i].drv, 8); rmx[i].tone = (uint8_t)imin(rmx[i].tone, 8); rmx[i].mute &= 1u; rmx[i].solo &= 1u;
+        /* whose layout and laws the save holds for this place (is_.act), and who stands there now. Another: the one put
+           by, if it is theirs (the two change places); else what the save holds is put by (a loaded instrument's never
+           in place of the firmware's own) and whoever stands there starts as new. Its part of the loop is another's
+           sounds: wiped. Its lesson is as unseen as when it last stood here */
+        if (is_.act[i] != place_kind(i)) {
+            uint16_t want = (uint16_t)place_kind(i);
+            uint8_t seen = room_seen >> i & 1u, oseen = is_.rsv[0] >> i & 1u;
+            wipe |= 1 << i;
+            if (is_.oid[i] == want) {
+                rinst_t t = s->inst[i];
+                s->inst[i] = is_.other[i]; is_.other[i] = t; is_.oid[i] = is_.act[i]; is_.act[i] = want;
+                room_seen = (uint8_t)((room_seen & ~(1u << i)) | oseen << i); is_.rsv[0] = (uint8_t)((is_.rsv[0] & ~(1u << i)) | seen << i);
+            } else {
+                if (!(is_.act[i] & IK_LOADED) || is_.oid[i] == IK_NONE || (is_.oid[i] & IK_LOADED)) {
+                    is_.other[i] = s->inst[i]; is_.oid[i] = is_.act[i]; is_.rsv[0] = (uint8_t)((is_.rsv[0] & ~(1u << i)) | seen << i);
+                }
+                is_.act[i] = want; room_seen &= (uint8_t)~(1u << i);
+                s->inst[i] = *r;                 /* (as new: room_defaults has it so) */
+                s->seen = room_seen;
+                continue;
+            }
+            s->seen = room_seen;
+        }
         *r = s->inst[i];
         for (k = 0; k < RP_N; k++) {
             r->p[k].what %= d->nkind; r->p[k].size &= 7u; r->p[k].qual &= 7u; r->p[k].note = (uint8_t)imin(r->p[k].note, 20);
@@ -157,12 +223,15 @@ static void room_unpack(void)                    /* a saved room back into the r
         d->init();
     }
     rm.loop_n = (uint16_t)imin(s->loop_n, RL_N);
-    for (i = 0; i < RL_N; i++) { rm.loop[i] = s->loop[i]; if ((rm.loop[i].ik >> 4) >= RI_N || (rm.loop[i].ik & 15u) >= SK_N) rm.loop_n = (uint16_t)imin(rm.loop_n, i); }
+    for (i = 0; i < RL_N; i++) { rm.loop[i] = s->loop[i]; if ((rm.loop[i].ik >> 4) >= RI_N || (int)(rm.loop[i].ik & 15u) >= ri_nsnd(rm.loop[i].ik >> 4)) rm.loop_n = (uint16_t)imin(rm.loop_n, i); }
+    if (wipe) {
+        uint16_t n = 0;
+        for (i = 0; i < rm.loop_n; i++) if (!(wipe >> (rm.loop[i].ik >> 4) & 1)) rm.loop[n++] = rm.loop[i];
+        rm.loop_n = n;
+        s->loop_n = n; for (i = 0; i < n; i++) s->loop[i] = rm.loop[i];
+    }
 }
 static void room_save_now(void) { room_pack(); save_dirty = 1; }
-
-/* ---------------------------------------------------------------- the lessons (HOME by an instrument; the first time it is opened) */
-#include "ac_rtutor.h"
 
 /* ---------------------------------------------------------------- THE POOL */
 enum { MR_TEMPO, MR_SCALE, MR_ROOT, MR_BARS, MR_SIEVE, MR_ETIME, MR_EFB, MR_STIR, MR_STIRRATE, MR_DIVE, MR_DIVEMAX,
@@ -172,6 +241,43 @@ static const char *const MR_NAME[MR_N] = {"TEMPO", "SCALE", "ROOT", "LOOP BARS",
 static const char *const MX_BARS[4] = {"1 BAR", "2 BARS", "4 BARS", "8 BARS"}, *const MX_SIEVE[3] = {"OFF", "SIXTEENTHS", "EIGHTHS"}, *const MX_ET[4] = {"AN EIGHTH", "3 SIXTEENTHS", "A QUARTER", "3 EIGHTHS"};
 static uint8_t *mx_chan(int row, int i) { return row == MR_LEVEL ? &rmx[i].lvl : row == MR_PAN ? &rmx[i].pan : row == MR_ECHO ? &rmx[i].echo : row == MR_REVERB ? &rmx[i].rev : row == MR_DRIVE ? &rmx[i].drv : &rmx[i].tone; }
 static void mx_bars_step(int d) { static const uint8_t B[4] = {1, 2, 4, 8}; int i = rm.bars == 1 ? 0 : rm.bars == 2 ? 1 : rm.bars == 8 ? 3 : 2; rm.bars = B[iclamp(i + d, 0, 3)]; }
+/* a key of the bottom row, at the pool and in the quick mix: four to a stone */
+static void mix_key(int i)
+{
+    int who = i / 4, k;
+    mx.sel = (uint8_t)who;
+    switch (i % 4) {
+    case 0: rmx[who].mute = !rmx[who].mute; rm_say(RD[who]->name, rmx[who].mute ? "MUTED" : "HEARD"); break;
+    case 1: rmx[who].solo = !rmx[who].solo; rm_say(RD[who]->name, rmx[who].solo ? "ALONE" : "WITH THE REST"); break;
+    case 2: ri[who].run = !ri[who].run; RD[who]->play(ri[who].run); rm_say(RD[who]->name, ri[who].run ? "PLAYS" : "STOPS"); break;
+    default: { uint16_t n = 0; for (k = 0; k < rm.loop_n; k++) if ((rm.loop[k].ik >> 4) != who) rm.loop[n++] = rm.loop[k]; rm.loop_n = n; rm_say(RD[who]->name, "ITS LOOP WIPED"); rn_wipe_tx(who); break; }
+    }
+    snd_ui(72 + who * 3);
+#ifdef DINGHY_HOST
+    printf("%6u ms  mix key %d: %s mute %d solo %d run %d\n", fm1_ms, i, RD[who]->name, rmx[who].mute, rmx[who].solo, ri[who].run);
+#endif
+}
+static void mix_all(void)                        /* PLAY: everything stops, or starts */
+{
+    int i;
+    mx.all_stop = !mx.all_stop;
+    for (i = 0; i < RI_N; i++) { ri[i].run = !mx.all_stop; RD[i]->play(ri[i].run); }
+    rm_say("EVERYTHING", mx.all_stop ? "STOPS" : "PLAYS");
+}
+/* the sixteen keys of the bottom row as the pool has them, drawn: for each instrument MUTE, SOLO, STOP, WIPE, in its
+   colour; the ones that are on are filled. cw, ch: a key's size */
+static void mix_keymap(int32_t x0, int32_t y, int32_t cw, int32_t ch, int32_t gap)
+{
+    int g, k;
+    for (g = 0; g < RI_N; g++) for (k = 0; k < 4; k++) {
+        int32_t x = x0 + g * (4 * cw + gap) + k * cw, cx = x + (cw - 1) / 2, cy = y + ch / 2;
+        int on = k == 0 ? rmx[g].mute : k == 1 ? rmx[g].solo : k == 2 ? !ri[g].run : 0;
+        col_t c = ri_col(g), ink = on ? th->bg : c;
+        if (on) grect(x, y, cw - 1, ch, c); else { galpha(k == 3 ? 90 : 150); gbox(x, y, cw - 1, ch, c); galpha(256); }
+        if (k == 2) grect(cx - 2, cy - 2, 4, 4, ink);   /* (stop: a square) */
+        else gtextc(cx + 1, cy - 2, k == 0 ? "M" : k == 1 ? "S" : "W", ink, 1);
+    }
+}
 static int mix_tick(int32_t dt)
 {
     int32_t kn[4], i, any = 0, d;
@@ -180,23 +286,25 @@ static int mix_tick(int32_t dt)
     if (rm.note_t > 0) rm.note_t -= dt;
     for (i = 0; i < RI_N; i++) { mx.ripple[i] += dt; if (rm.pulse[i] > 120 && mx.ripple[i] > 220) mx.ripple[i] = 0; }
     if (BDOWN(BTN_LFO) || BDOWN(BTN_ENV) || BDOWN(BTN_FX) || BDOWN(BTN_SEQ) || BDOWN(BTN_ARP) || BDOWN(BTN_SEL)) rm.held_used = 0;
-    if (BDOWN(BTN_HOME)) { snd_ui(67); if (mx.menu) mx.menu = 0; else return 1; }
-    if (BDOWN(BTN_SAVE)) { room_save_now(); rm_say("SAVED", "THE WHOLE ROOM"); snd_chime(0); }
+    i = rm_home(dt);
+    if (i == 2) { rtopics_open(RI_MIX, RI_MIX); return 0; }   /* held: how the pool works, topic by topic */
+    if (i == 1) { snd_ui(67); if (mx.menu) mx.menu = 0; else return 1; }
+    if (BDOWN(BTN_SAVE)) { room_keep(); rm_say("SAVED", "THE WHOLE ROOM"); snd_chime(0); }
     if (BDOWN(BTN_EDIT)) { mx.menu = !mx.menu; snd_ui(mx.menu ? 79 : 67); }
     {
         static int32_t rec_t;
         if (BDOWN(BTN_REC)) rec_t = 0;
-        if (BHELD(BTN_REC)) { rec_t += dt; if (rec_t >= 900 && rec_t - dt < 900) { rm.loop_n = 0; rm.rec = 0; rm_say("LOOP", "ALL OF IT WIPED"); snd_ui(55); } }
-        else if ((in.bup >> BTN_REC & 1u) && rec_t < 900) { rm.rec = !rm.rec; rm_say("REC", rm.rec ? "ON THE LOOP" : "OFF"); snd_ui(rm.rec ? 84 : 72); }
+        if (BHELD(BTN_REC)) { rec_t += dt; if (rec_t >= 900 && rec_t - dt < 900) { rm.loop_n = 0; rm.rec = 0; rm.arm = 0; rm_say("LOOP", "ALL OF IT WIPED"); snd_ui(55); rn_wipe_tx(RI_N); } }
+        else if ((in.bup >> BTN_REC & 1u) && rec_t < 900) rm_rec_tap();
     }
-    if (in.enc[ENC_ALGORITHM] && !tr_follow) { rm.bpm = (uint8_t)iclamp(rm.bpm + in.enc[ENC_ALGORITHM] * 2, 50, 200); rm_say_n("TEMPO", rm.bpm); room_echo_set(); }
+    if (in.enc[ENC_ALGORITHM] && (!tr_follow || rn_follows())) {   /* (together: the tempo is the room's, anyone at the pool sets it) */ rm.bpm = (uint8_t)iclamp(rm.bpm + in.enc[ENC_ALGORITHM] * 2, 50, 200); rm_say_n("TEMPO", rm.bpm); room_echo_set(); }
     if (mx.menu) {                               /* the menu: every setting, a row each */
         if (in.enc[ENC_SELECT]) mx.row = (uint8_t)iclamp(mx.row + (in.enc[ENC_SELECT] > 0 ? 1 : -1), 0, MR_N - 1);
         d = kn[0] + kn[1] + kn[2] + kn[3]; d = d > 0 ? 1 : d < 0 ? -1 : 0;
         if (mx.row >= MR_LEVEL && mx.row <= MR_TONE) { for (i = 0; i < 4; i++) if (kn[i]) { uint8_t *p = mx_chan(mx.row, i); *p = (uint8_t)iclamp(*p + kn[i], 0, mx.row <= MR_PAN ? 16 : 8); } }
         else if (mx.row == MR_OCT) { for (i = 0; i < 4; i++) if (kn[i]) ri[i].oct = (int8_t)iclamp(ri[i].oct + kn[i], -2, 2); }
         else if (d) switch (mx.row) {
-        case MR_TEMPO: if (!tr_follow) rm.bpm = (uint8_t)iclamp(rm.bpm + d, 50, 200); break;
+        case MR_TEMPO: if (!tr_follow || rn_follows()) rm.bpm = (uint8_t)iclamp(rm.bpm + d, 50, 200); break;
         case MR_SCALE: rm.scale = (uint8_t)((rm.scale + RSC_N + d) % RSC_N); break;
         case MR_ROOT: rm.root = (uint8_t)((rm.root + 12 + d) % 12); break;
         case MR_BARS: mx_bars_step(d); break;
@@ -211,8 +319,8 @@ static int mix_tick(int32_t dt)
         }
         if (any) room_echo_set();
         if (BDOWN(BTN_PLAY)) {
-            if (mx.row == MR_WIPE) { rm.loop_n = 0; rm.rec = 0; rm_say("LOOP", "ALL OF IT WIPED"); snd_ui(55); }
-            else if (mx.row == MR_RESET) { uint8_t seen = room_seen; room_defaults(); room_seen = seen; rm.focus = RI_MIX; mx.menu = 1; mx.row = MR_RESET; room_echo_set(); rm_say("THE ROOM", "AS NEW"); snd_chime(0); }
+            if (mx.row == MR_WIPE) { rm.loop_n = 0; rm.rec = 0; rm.arm = 0; rm_say("LOOP", "ALL OF IT WIPED"); snd_ui(55); rn_wipe_tx(RI_N); }
+            else if (mx.row == MR_RESET) { uint8_t seen = room_seen; rn_wipe_tx(RI_N); room_defaults(); room_seen = seen; rm.focus = RI_MIX; mx.menu = 1; mx.row = MR_RESET; room_echo_set(); rm_say("THE ROOM", "AS NEW"); snd_chime(0); }
         }
         return 0;
     }
@@ -232,18 +340,8 @@ static int mix_tick(int32_t dt)
     if ((in.bup >> BTN_SEQ & 1u) && !rm.held_used) { rm.loop_off = !rm.loop_off; rm_say("THE LOOP", rm.loop_off ? "RESTS" : "PLAYS"); }
     if ((in.bup >> BTN_SEL & 1u) && !rm.held_used) { rm.scale = (uint8_t)((rm.scale + 1) % RSC_N); rm_say("SCALE", RSC_NAME[rm.scale]); snd_ui(79); }
     if (BDOWN(BTN_OCT_DOWN) || BDOWN(BTN_OCT_UP)) { for (i = 0; i < RI_N; i++) ri[i].oct = (int8_t)iclamp(ri[i].oct + (BDOWN(BTN_OCT_UP) ? 1 : -1), -2, 2); rm_say("OCTAVE", BDOWN(BTN_OCT_UP) ? "ALL UP" : "ALL DOWN"); }
-    if (BDOWN(BTN_PLAY)) { mx.all_stop = !mx.all_stop; for (i = 0; i < RI_N; i++) { ri[i].run = !mx.all_stop; RD[i]->play(ri[i].run); } rm_say("EVERYTHING", mx.all_stop ? "STOPS" : "PLAYS"); }
-    for (i = 0; i < 16; i++) if (in.kdown >> R_LOW[i] & 1u) {
-        int who = i / 4, k;
-        mx.sel = (uint8_t)who;
-        switch (i % 4) {
-        case 0: rmx[who].mute = !rmx[who].mute; rm_say(RD[who]->name, rmx[who].mute ? "MUTED" : "HEARD"); break;
-        case 1: rmx[who].solo = !rmx[who].solo; rm_say(RD[who]->name, rmx[who].solo ? "ALONE" : "WITH THE REST"); break;
-        case 2: ri[who].run = !ri[who].run; RD[who]->play(ri[who].run); rm_say(RD[who]->name, ri[who].run ? "PLAYS" : "STOPS"); break;
-        default: { uint16_t n = 0; for (k = 0; k < rm.loop_n; k++) if ((rm.loop[k].ik >> 4) != who) rm.loop[n++] = rm.loop[k]; rm.loop_n = n; rm_say(RD[who]->name, "ITS LOOP WIPED"); break; }
-        }
-        snd_ui(72 + who * 3);
-    }
+    if (BDOWN(BTN_PLAY)) mix_all();
+    for (i = 0; i < 16; i++) if (in.kdown >> R_LOW[i] & 1u) mix_key(i);
     return 0;
 }
 /* dives: once every so many bars one stone goes under, or one comes back up */
@@ -251,7 +349,7 @@ static void mix_step(void)
 {
     static const uint16_t EV[4] = {384, 768, 1536, 3072};
     int i, n = 0;
-    if (!mx.dive_on || !rm_cross(EV[mx.dive_every & 3u], 0, 0)) return;
+    if (!mx.dive_on || !rn_auth(RI_MIX) || !rm_cross(EV[mx.dive_every & 3u], 0, 0)) return;   /* (together: one FM-1 draws the dives, the rest are told) */
     for (i = 0; i < RI_N; i++) n += mx.dive_mask >> i & 1;
     i = (int)(ac_rnd() % RI_N);
     if (n > mx.dive_max || ((mx.dive_mask >> i & 1u) && n)) { for (i = 0; i < RI_N; i++) if (mx.dive_mask >> i & 1u) { mx.dive_mask &= (uint8_t)~(1u << i); break; } }
@@ -273,7 +371,7 @@ static void mix_draw(void)
     garc(120, 104, 112, 84, 0, 65536, th->rim, 1);
     for (k = 1; k < 4; k++) { galpha(40); garc(120, 104, 112 - k * 26, 84 - k * 20, 0, 65536, th->mute, 0); }
     galpha(256);
-    gtextc(120, 22, "QUIET", th->mute, 1); gtextc(120, 182, "LOUD", th->mute, 1); gtext(12, 101, "L", th->mute, 1); gtextr(228, 101, "R", th->mute, 1);
+    gtextc(120, 22, "QUIET", th->mute, 1); gtextc(120, 178, "LOUD", th->mute, 1); gtext(12, 101, "L", th->mute, 1); gtextr(228, 101, "R", th->mute, 1);
     if (mx.stir_on && mx.stir) for (k = 0; k < 6; k++) {   /* the current: marks going round */
         static const uint16_t PER[4] = {384, 768, 1536, 3072};
         uint32_t per = PER[mx.stir_rate & 3u];
@@ -294,12 +392,13 @@ static void mix_draw(void)
         galpha(256);
         if (i == mx.sel) gfit(x, y + r + 6, 90, RD[i]->name, th->text, 1);
     }
+    mix_keymap(2, 189, 14, 10, 4);               /* what the bottom row does, and what is on */
     if (mx.menu) {
         int32_t top = iclamp(mx.row - 5, 0, MR_N - 11), x = 14, y = 18, wd = 212, h = 172;
         char nb[8];
         grect(x, y, wd, h, th->panel); gbox(x, y, wd, h, th->pad);
         gtext(x + 6, y + 5, "THE POOL", th->text, 1);
-        for (i = 0; i < RI_N; i++) gfit(x + 104 + i * 27, y + 5, 26, i == 0 ? "RT" : i == 1 ? "GE" : i == 2 ? "MR" : "CS", ri_col(i), 1);
+        for (i = 0; i < RI_N; i++) gfit(x + 104 + i * 27, y + 5, 26, ri_tag(i), ri_col(i), 1);
         for (k = 0; k < 11; k++) {
             int row = top + k;
             int32_t ry = y + 18 + k * 13;
@@ -328,15 +427,15 @@ static void mix_draw(void)
     }
     for (i = 0; i < 4; i++) { n[i] = RD[i]->name; v[i] = rmx[i].lvl; m[i] = 16; }
     if (!mx.menu) {
-        if (BHELD(BTN_LFO)) { for (i = 0; i < 4; i++) n[i] = LFN[i]; v[0] = mx.stir; m[0] = 8; v[1] = mx.stir_rate; m[1] = 3; w[1] = MX_BARS[mx.stir_rate & 3u]; hint = "LFO: THE CURRENT"; }
-        else if (BHELD(BTN_ARP)) { for (i = 0; i < 4; i++) n[i] = ARN[i]; v[0] = mx.dive_every; m[0] = 3; w[0] = MX_BARS[mx.dive_every & 3u]; v[1] = mx.dive_max + 1; m[1] = 3; hint = "ARP: DIVES"; }
-        else if (BHELD(BTN_SEQ)) { for (i = 0; i < 4; i++) n[i] = SQN[i]; v[0] = rm.bars; m[0] = 8; w[0] = MX_BARS[rm.bars == 1 ? 0 : rm.bars == 2 ? 1 : rm.bars == 8 ? 3 : 2]; v[1] = rm.quant; m[1] = 2; w[1] = MX_SIEVE[rm.quant % 3u]; hint = "SEQ: THE LOOP"; }
-        else if (BHELD(BTN_FX)) { for (i = 0; i < 4; i++) n[i] = FXN[i]; v[0] = rm.etime; m[0] = 3; w[0] = MX_ET[rm.etime & 3u]; v[1] = rm.efb; m[1] = 8; hint = "FX: THE ECHO"; }
-        else if (BHELD(BTN_ENV)) { for (i = 0; i < 4; i++) { v[i] = rmx[i].tone; m[i] = 8; } hint = "ENV: THE TONE OF EACH"; }
+        if (RHELD(BTN_LFO)) { for (i = 0; i < 4; i++) n[i] = LFN[i]; v[0] = mx.stir; m[0] = 8; v[1] = mx.stir_rate; m[1] = 3; w[1] = MX_BARS[mx.stir_rate & 3u]; hint = "LFO: THE CURRENT"; }
+        else if (RHELD(BTN_ARP)) { for (i = 0; i < 4; i++) n[i] = ARN[i]; v[0] = mx.dive_every; m[0] = 3; w[0] = MX_BARS[mx.dive_every & 3u]; v[1] = mx.dive_max + 1; m[1] = 3; hint = "ARP: DIVES"; }
+        else if (RHELD(BTN_SEQ)) { for (i = 0; i < 4; i++) n[i] = SQN[i]; v[0] = rm.bars; m[0] = 8; w[0] = MX_BARS[rm.bars == 1 ? 0 : rm.bars == 2 ? 1 : rm.bars == 8 ? 3 : 2]; v[1] = rm.quant; m[1] = 2; w[1] = MX_SIEVE[rm.quant % 3u]; hint = "SEQ: THE LOOP"; }
+        else if (RHELD(BTN_FX)) { for (i = 0; i < 4; i++) n[i] = FXN[i]; v[0] = rm.etime; m[0] = 3; w[0] = MX_ET[rm.etime & 3u]; v[1] = rm.efb; m[1] = 8; hint = "FX: THE ECHO"; }
+        else if (RHELD(BTN_ENV)) { for (i = 0; i < 4; i++) { v[i] = rmx[i].tone; m[i] = 8; } hint = "ENV: THE TONE OF EACH"; }
     }
     {
         static const char *const NM[4] = {"ROOTS", "GEODE", "RACK", "SEAM"};
-        if (!hint || BHELD(BTN_ENV)) for (i = 0; i < 4; i++) n[i] = NM[i];
+        if (!hint || RHELD(BTN_ENV)) for (i = 0; i < 4; i++) n[i] = NM[i];
         rm_knobs(n, v, m, 0, w, th->pad, rm_turned_t > 0 ? rm_turned : 0);
     }
     grect(0, RSTRIP_Y, AC_W, 10, th->bg);
@@ -355,7 +454,7 @@ static void mix_draw(void)
         rm_head("THE POOL", tb, th->pad);
     }
 }
-static void mix_leds(void)
+static void mix_key_leds(void)
 {
     int i;
     for (i = 0; i < RI_N; i++) {
@@ -364,6 +463,10 @@ static void mix_leds(void)
         if (ri[i].run) led_key_want |= 1u << R_LOW[i * 4 + 2];
         led_key_dim_want |= 1u << R_LOW[i * 4 + 3];
     }
+}
+static void mix_leds(void)
+{
+    mix_key_leds();
     if (mx.stir_on) led_btn_want |= 1u << BTN_LFO;
     if (mx.dive_on) led_btn_want |= 1u << BTN_ARP;
     if (!rm.loop_off && rm.loop_n) led_btn_want |= 1u << BTN_SEQ;
@@ -371,6 +474,140 @@ static void mix_leds(void)
     if (rm.rec) led_btn_want |= 1u << BTN_REC;
     if (!mx.all_stop && (rm.tq8 >> 8) % TICKS_BEAT < 20u) led_btn_want |= 1u << BTN_PLAY;
 }
+
+
+/* ---------------------------------------------------------------- THE QUICK MIX: GLO held, anywhere in the room.
+ * rq_tick is called by arcave.c every frame in the room, before it reads GLO's tap: it answers 1 on the frame GLO is
+ * let go if this press was a hold (so the settings do not open). Up after 140 ms, or at once with the first key. */
+#define RQ_UP 140
+#define RQ_TAP 300
+static struct { uint8_t on, used, demo, held; int32_t t; } rq;   /* demo: shown by a lesson (ac_rtutor.h) */
+static struct { uint8_t on, row; } rsm;          /* the room's settings are up */
+static void room_jump(int st);
+static int rq_tick(int32_t dt)
+{
+    int32_t i, kn;
+    if (rt.on || rsm.on || rh.leave) { rq.on = 0; rq.held = 0; return 0; }
+    if (BDOWN(BTN_GLO)) { rq.held = 1; rq.t = 0; rq.used = 0; rq.on = 0; }
+    if (!rq.held) return 0;
+    if (!BHELD(BTN_GLO)) {                       /* let go: gone */
+        int was = rq.used || rq.t >= RQ_TAP;
+        rq.on = 0; rq.held = 0;
+        if (was) snd_ui(67);
+        return was;
+    }
+    rq.t += dt;
+    for (i = 0; i < 16; i++) if (in.kdown >> R_LOW[i] & 1u) { mix_key(i); rq.used = 1; }
+    for (i = 0; i < 4; i++) if ((kn = in.enc[ENC_KNOB1 + i]) != 0) { rmx[i].lvl = (uint8_t)iclamp(rmx[i].lvl + kn, 0, 16); mx.sel = (uint8_t)i; rq.used = 1; }
+    if (BDOWN(BTN_PLAY)) { mix_all(); rq.used = 1; }
+    for (i = 0; i < 5; i++) if (BDOWN(RH_BTN[i])) room_jump(i + 1);   /* (used 2: gone off the screen while GLO is still held) */
+    if (!rq.on && (rq.used || rq.t >= RQ_UP)) { rq.on = 1; snd_ui(79); }
+    if (rq.on) { mix_key_leds(); led_btn_want |= 1u << BTN_GLO; if (!mx.all_stop && (rm.tq8 >> 8) % TICKS_BEAT < 20u) led_btn_want |= 1u << BTN_PLAY; }
+    return 0;
+}
+static void rq_draw(int32_t y)
+{
+    int32_t x = 4, w = 232, h = 175, g, any = 0;
+    for (g = 0; g < RI_N; g++) any |= rmx[g].solo;
+    gveil(th->bg, 20);
+    grect(x, y, w, h, th->panel); gbox(x, y, w, h, th->pad);
+    gtext(x + 7, y + 7, "QUICK MIX", th->text, 2);
+    gtextr(x + w - 7, y + 10, "LET GO OF GLO: BACK", th->mute, 1);
+    for (g = 0; g < RI_N; g++) {                 /* a row each: its name, its level, what it is doing */
+        int32_t ry = y + 24 + g * 25, heard = !(rmx[g].mute || (any && !rmx[g].solo)), fill = rm_lvl_eff(g) * 46 / 18;
+        col_t c = ri_col(g), cc = heard ? c : th->mute;
+        const char *st = rmx[g].mute ? "MUTED" : rmx[g].solo ? "SOLO" : any ? "SILENT" : !ri[g].run ? "STOPPED" : "PLAYING";
+        if (heard) { galpha(26 + rm.pulse[g] * 70 / 256); grect(x + 4, ry, w - 8, 23, c); galpha(256); }
+        gbox(x + 4, ry, w - 8, 23, g == mx.sel ? th->text : cc);
+        gtext(x + 10, ry + 7, ri_short(g), cc, 2);
+        gbox(x + 76, ry + 7, 50, 9, th->mute); grect(x + 78, ry + 9, fill, 5, cc);
+        gtextr(x + w - 10, ry + 7, st, heard ? th->text : th->mute, 2);
+    }
+    mix_keymap(x + 5, y + 128, 13, 12, 4);
+    gtext(x + 7, y + 146, "FOUR KEYS EACH: MUTE  SOLO  STOP  WIPE", th->text, 1);
+    gtext(x + 7, y + 155, "KNOB 1-4: LEVELS    " PB ": ALL STOP, OR START", th->mute, 1);
+    gtext(x + 7, y + 164, "FX SCL ENV LFO EDIT: GO STRAIGHT THERE", th->mute, 1);
+}
+
+/* ---------------------------------------------------------------- the room's own settings (GLO: the settings; MUSIC
+ * ROOM is their first line in here). The room plays on under them, so the click can be heard being set. SELECT or
+ * KNOB 1: the line; PRESETS, KNOB 2, PLAY or OCT+: change it; GLO or HOME: close. Kept with the room. */
+enum { RS_ROCK, RS_METRO, RS_COUNT, RS_VOL, RS_ENTER, RS_LESSON, RS_TOGETHER, RS_HEAR, RS_N };
+static const char *const RS_NAME[RS_N] = {"ROCK'S SOUNDS", "METRONOME", "COUNT-IN", "VOLUME", "COMING IN", "LESSONS", "TOGETHER", "I HEAR"};
+static const char *const RS_HELP[RS_N] = {
+    "THE NOTES OF THE FLOOR, THE CAPS, THE CHIMES AND THE BUBBLES AS ROCK ROLLS ABOUT THE ROOM, AND THE KEYS UNDER YOUR HANDS.",
+    "A CLICK ON EVERY BEAT, HIGHER ON THE FIRST OF THE BAR. IT IS NEVER RECORDED.",
+    "REC WAITS FOR THE NEXT BAR LINE AND CLICKS YOU IN, SO A RECORDING STARTS ON THE ONE.",
+    "HOW LOUD THE ROOM'S INSTRUMENTS ARE, ALL TOGETHER.",
+    "WHETHER THE INSTRUMENTS ARE PLAYING WHEN ROCK COMES IN, OR WAIT FOR " PB " AT THE POOL.",
+    "THE FIRST TIME AN INSTRUMENT IS OPENED ITS LESSON PLAYS. HOME HELD SHOWS THEM ANY TIME.",
+    "WITH A LINK PAGE OPEN, FRIENDS IN THEIR MUSIC ROOMS SHARE ONE ROOM: UP TO FOUR, AN INSTRUMENT EACH.",
+    "PLAYING TOGETHER: THE WHOLE ROOM ON EVERY FM-1, OR ON EACH ONLY THE INSTRUMENT ITS PLAYER IS ON.",
+};
+static const char *rs_val(int row)
+{
+    static const char *const RK[3] = {"ON", "SOFT", "OFF"}, *const MT[3] = {"OFF", "ON", "REC ONLY"};
+    switch (row) {
+    case RS_ROCK: return RK[rset.rock % 3u];
+    case RS_METRO: return MT[rset.metro % 3u];
+    case RS_COUNT: return rset.countin ? "ON" : "OFF";
+    case RS_ENTER: return rset.silent ? "STOPPED" : "PLAYING";
+    case RS_LESSON: return rset.nolesson ? "OFF" : "ON";
+    case RS_TOGETHER: return rset.alone ? "OFF" : "ON";
+    case RS_HEAR: return rset.mine ? "MY OWN" : "ALL";
+    default: return 0;
+    }
+}
+static void rsm_open(void) { rsm.on = 1; rsm.row = 0; rq.on = 0; rq.held = 0; snd_ui(76); }
+static void rsm_tick(void)
+{
+    int32_t mv = in.enc[ENC_SELECT] + in.enc[ENC_KNOB1], ch = in.enc[ENC_PRESETS] + in.enc[ENC_KNOB2], d;
+    if (BDOWN(BTN_GLO) || BDOWN(BTN_HOME)) { rsm.on = 0; rhome.down = 0; room_save_now(); snd_ui(67); return; }
+    if (mv) { rsm.row = (uint8_t)iclamp(rsm.row + (mv > 0 ? 1 : -1), 0, RS_N - 1); snd_ui(64 + rsm.row); }
+    if (BDOWN(BTN_PLAY) || BDOWN(BTN_OCT_UP)) ch = 1;
+    if (BDOWN(BTN_OCT_DOWN)) ch = -1;
+    led_btn_want |= 1u << BTN_GLO; led_play_breathe = 1;
+    if (!ch) return;
+    d = ch > 0 ? 1 : -1;
+    switch (rsm.row) {
+    case RS_ROCK: rset.rock = (uint8_t)((rset.rock + 3 + d) % 3); break;
+    case RS_METRO: rset.metro = (uint8_t)((rset.metro + 3 + d) % 3); break;
+    case RS_COUNT: rset.countin = !rset.countin; if (!rset.countin) rm.arm = 0; break;
+    case RS_VOL: rset.vol = (uint8_t)iclamp(rset.vol + d, 0, 8); break;
+    case RS_ENTER: rset.silent = !rset.silent; break;
+    case RS_LESSON: rset.nolesson = !rset.nolesson; break;
+    case RS_TOGETHER: rset.alone = !rset.alone; break;
+    default: rset.mine = !rset.mine; break;
+    }
+    snd_ui(79);
+#ifdef DINGHY_HOST
+    printf("%6u ms  room setting %s -> %s\n", fm1_ms, RS_NAME[rsm.row], rs_val(rsm.row) ? rs_val(rsm.row) : "(volume)");
+#endif
+}
+static void rsm_draw(void)
+{
+    int32_t x = 6, y = 8, w = 228, h = 224, i, hh;
+    gveil(th->bg, 22);
+    grect(x, y, w, h, th->panel); gbox(x, y, w, h, th->pad);
+    gfit(120, y + 8, w - 12, "MUSIC ROOM SETTINGS", th->text, 2);
+    for (i = 0; i < RS_N; i++) {
+        int32_t ry = y + 26 + i * 18, sel = i == rsm.row, sc = 2;
+        const char *v = rs_val(i);
+        while (sc > 1 && gtextw(RS_NAME[i], sc) + (v ? gtextw(v, sc) : 60) + 18 > w - 12) sc--;
+        if (sel) { grect(x + 3, ry, w - 6, 17, th->bg); gbox(x + 3, ry, w - 6, 17, th->pad); }
+        gtext(x + 9, ry + (sc == 2 ? 4 : 6), RS_NAME[i], sel ? th->text : th->mute, sc);
+        if (v) gtextr(x + w - 9, ry + (sc == 2 ? 4 : 6), v, sel ? th->pad : th->mute, sc);
+        else rm_bar(x + w - 70, ry + 6, 60, rset.vol, 8, 0, sel ? th->pad : th->mute);
+    }
+    hh = gblock_h(w - 16, RS_HELP[rsm.row], 1);
+    gblock(x + 8, y + h - 16 - hh, w - 16, RS_HELP[rsm.row], th->text, 1, 0);
+    gfit(120, y + h - 11, w - 10, "SELECT: LINE   PRESETS: SET   GLO: CLOSE", th->mute, 1);
+}
+
+/* ---------------------------------------------------------------- the lessons; playing together */
+static void room_back(void);
+#include "ac_rtutor.h"
+#include "ac_roomnet.h"
 
 /* ---------------------------------------------------------------- the room, Rock loose in it */
 static void room_enter(void)
@@ -383,14 +620,46 @@ static void room_enter(void)
     if (!tr_follow) tr_bpm_q8 = (uint32_t)rm.bpm << 8;
     take_bus(0);                                 /* (the player's song's echo and reverb off: the room's own) */
     room_echo_set();
+    rq.on = 0; rq.held = 0; rsm.on = 0; rt.on = 0; rt.list = 0; rhome.down = 0; rm.tut = 0; rm.arm = 0;
+    if (rset.silent) { int i; mx.all_stop = 1; for (i = 0; i < RI_N; i++) { ri[i].run = 0; RD[i]->play(0); } }   /* (COMING IN: STOPPED) */
+    rn_enter();
     sfx(57, 0, 900, W_SINE, 2400, 60, 200); sfx(64, 120, 900, W_SINE, 2000, 60, 200); sfx(72, 260, 1400, W_SINE, 2000, 60, 220);
 }
-static void room_leave(void) { sy_echo_len = SY_DLN; sy_echo_fb = 115; sy_x.fmode = 0; sy_x.gl = 0; }
+static void room_leave(void) { rn_leave(); sy_echo_len = SY_DLN; sy_echo_fb = 115; sy_x.fmode = 0; sy_x.gl = 0; }
+static void room_back(void) { rm.focus = RI_WALK; rm.edit = 0; rm.menu = 0; mx.menu = 0; rh.zoom = 260; rh.closing = 1; }   /* out of an instrument, to the room */
+/* what stands in a place of the room was changed (the site's MACHINES page: ac_slots.h mb_cmd). The room as it is
+   goes into the save under the names of what stood there, and comes out again for what stands there now */
+static void room_rekit(void)
+{
+    if (!rm.on) { room_kit(); return; }
+    if (rt.on) rtutor_close();
+    if (!rn_guest()) room_pack();
+    room_unpack(); room_echo_set();
+    rh.zoom = 0; rh.closing = 0; rh.want = 0; rq.on = 0; rq.held = 0; rsm.on = 0;
+}
 /* teleported in (the settings, arcave.c): Rock still in the middle of the floor, not rolling in at the door; how much
    of him there is yet (256: all), and where he is on the screen */
 static int32_t room_rock_a = 256;
 static void room_tele_in(void) { rh.x = Q8(RH_DOOR_X + 96); rh.vx = 0; rh.intro = 0; rh.drag = 0; room_rock_a = 0; }
 static void room_rock_xy(int32_t *x, int32_t *y) { *x = (rh.x >> 8) - (rh.camx >> 8); *y = rh.y >> 8; }
+/* GLO held and a station's button (rq_tick): straight onto it, from anywhere in the room, Rock set down by it. No
+   lesson on the way (it waits for the station's first ordinary opening); a friend's is watched (rn_jumped) */
+static void room_jump(int st)
+{
+    int who = RH_WHO[st - 1];
+    rq.used = 2;
+    if (rm.focus == who) return;
+    if (rm.edit && rm.focus < RI_N) ri[rm.focus].run = 1;
+    rm.edit = 0; rm.menu = 0; mx.menu = 0; rhome.down = 0; rm_turned_t = 0; rm.note_t = 0;
+    rh.zoom = 0; rh.closing = 0; rh.want = 0; rh.intro = 0; rh.ride = -1;
+    rh.x = Q8(RH_ST[st - 1]); rh.y = Q8(RH_FLOOR) - rock_rad(0); rh.vx = 0; rh.vy = 0; rh.g = 1;
+    rm.focus = (uint8_t)who;
+    rn_jumped(st);
+    sfx(79, 0, 200, W_TRI, 2000, 4, 120); sfx(84, 60, 300, W_TRI, 2000, 4, 160);
+#ifdef DINGHY_HOST
+    printf("%6u ms  GLO + %s: station %d%s\n", fm1_ms, RH_BTN_NAME[st - 1], st, rn.vw ? ", watching" : "");
+#endif
+}
 static void room_open(int st)                    /* a station opens (1..5): the picture goes in on it first */
 {
     rh.want = (uint8_t)st; rh.zoom = 1; rh.closing = 0;
@@ -401,12 +670,21 @@ static int room_tick(int32_t dt)
 {
     int32_t i, knob, hx;
     if (!tr_follow) tr_bpm_q8 = (uint32_t)rm.bpm << 8;
+    rn_frame(dt);
     if (rt.on) { rtutor_tick(dt); rm_frame(dt); return 0; }
     rm_frame(dt);
+    if (rsm.on) { rsm_tick(); return 0; }        /* its settings: the room plays on under them */
+    if (rq.on) return 0;                         /* the quick mix has the keys and the knobs (rq_tick) */
+    if (rn_tuning()) return 0;                   /* (a friend's room is on its way here) */
     if (rm.focus != RI_WALK) {
-        int back = rm.focus == RI_MIX ? mix_tick(dt) : ri_tick(rm.focus, dt);
-        if (rm.focus == RI_MIX) mix_leds(); else ri_leds(rm.focus);
-        if (back) { rm.focus = RI_WALK; rm.edit = 0; rm.menu = 0; mx.menu = 0; rh.zoom = 260; rh.closing = 1; }
+        int back;
+        rn_chord();                              /* (OCT- and OCT+ together: a swap with whoever watches, or plays) */
+        if (rn.vw) { back = rm_home(dt) != 0; led_breathe_want |= 1u << BTN_OCT_DOWN | 1u << BTN_OCT_UP; }   /* watching: only HOME */
+        else {
+            back = rm.focus == RI_MIX ? mix_tick(dt) : ri_tick(rm.focus, dt);
+            if (!rt.on) { if (rm.focus == RI_MIX) mix_leds(); else if (rm.focus < RI_N) ri_leds(rm.focus); }
+        }
+        if (back) room_back();
         return 0;
     }
     if (rh.intro) { rh.intro += dt; if (rh.intro > 1100) rh.intro = 0; }
@@ -415,8 +693,9 @@ static int room_tick(int32_t dt)
         rh.zoom += dt;
         if (rh.zoom >= 260) {
             int who = RH_WHO[rh.want - 1];
-            rm.focus = (uint8_t)who; rm_turned_t = 0; rm.note_t = 0;
-            if (who != RI_MIX && !(room_seen >> who & 1u)) { room_seen |= (uint8_t)(1u << who); rtutor_open(who, who); }
+            if (!rn_sit(rh.want)) { rh.closing = 1; rh.zoom = 259; return 0; }   /* (a friend got there first) */
+            rm.focus = (uint8_t)who; rm_turned_t = 0; rm.note_t = 0; rhome.down = 0;
+            if (who != RI_MIX && !(room_seen >> who & 1u) && !rset.nolesson) { room_seen |= (uint8_t)(1u << who); rtutor_open(who, who); }
         }
         return 0;
     }
@@ -426,7 +705,7 @@ static int room_tick(int32_t dt)
     if (i) rh.drag = iclamp(rh.drag + i * 115, -384, 384);
     knob = iclamp(rh.drag, -256, 256);
     rh.drag -= rh.drag * imin(dt, 100) / 250;
-    if (in.kdown) snd_keys(in.kdown, 0);
+    if (in.kdown && rset.rock < 2) snd_keys(in.kdown, 0);
     if (in.hikey >= 0) deco_key_fx(KEY_ZONE[in.hikey], rh.x, rh.y);
     pfx_tick(dt); deco_jump_tick(dt, rh.g, rh.x, rh.y);
     if (rh.g) deco_trail(rh.x, rh.y + rock_rad(rh.th), rh.vx, dt);
@@ -451,12 +730,12 @@ static int room_tick(int32_t dt)
                 rh.x = rh.bub[i].x; rh.y = rh.bub[i].y; rh.vx = knob * 60; rh.vy = 0; rh.g = 0; rh.th += knob * dt / 30;
                 if (in.hop >= 0) { rh.bub[i].y = 0; rh.vy = -Q8(170); in.hop = -1; }
             } else if (rh.ride < 0 && rh.bub[i].t > 250 && iabs(rh.x - rh.bub[i].x) < Q8(13) && iabs(rh.y - rh.bub[i].y) < Q8(14)) {
-                rh.ride = (int8_t)i; sfx(72, 0, 200, W_SINE, 1800, 20, 200);
+                rh.ride = (int8_t)i; if (rset.rock < 2) sfx(72, 0, 200, W_SINE, rkv(1800), 20, 200);
             }
             if (rh.bub[i].y < Q8(64)) {          /* pop */
                 rh.bub[i].on = 0;
                 if (rh.ride == i) { rh.ride = -1; rh.vy = imin(rh.vy, -Q8(60)); }
-                if (iabs((rh.bub[i].x >> 8) - (rh.camx >> 8) - 120) < 140) { sfx(rh_scale_note(10 + i * 2), 0, 260, W_SINE, 1400, 0, 220); sfx(100, 0, 30, W_HAT, 500, 0, 100); }
+                if (rset.rock < 2 && iabs((rh.bub[i].x >> 8) - (rh.camx >> 8) - 120) < 140) { sfx(rh_scale_note(10 + i * 2), 0, 260, W_SINE, rkv(1400), 0, 220); sfx(100, 0, 30, W_HAT, rkv(500), 0, 100); }
             }
         }
     }
@@ -474,7 +753,7 @@ static int room_tick(int32_t dt)
                 if (px > RH_W - 110) a -= GR * (px - (RH_W - 110)) / 56;   /* the ramp pulls back in */
                 if (px > RH_W - 84 && px < RH_W - 58 && rh.vx > Q8(50)) {   /* the booster: up and back, onto the right slide */
                     rh.vy = -Q8(372); rh.vx = -Q8(84); rh.g = 0; rh.boost_t = 500; rh.drag = 0; knob = 0; a = 0;
-                    snd_whoosh(); sfx_ex(50, 0, 500, W_SAW, 2400, 3, 200, 0, 0, 65530);
+                    if (rset.rock < 2) { if (!rset.rock) snd_whoosh(); sfx_ex(50, 0, 500, W_SAW, rkv(2400), 3, 200, 0, 0, 65530); }
                 }
                 for (i = 0; i < 5; i++) {        /* a slight dip in front of each station: Rock settles there */
                     int32_t dx = px - RH_ST[i];
@@ -499,9 +778,9 @@ static int room_tick(int32_t dt)
                 rh.y = top - rad;
                 if (k >= 2) {                    /* a cap throws you up, and sings a chord of the room's scale */
                     rh.vy = -Q8(372); rh.sq[k - 2] = 250;
-                    sfx(rh_scale_note(k == 2 ? 0 : 2), 0, 800, W_SINE, 3000, 4, 220); sfx(rh_scale_note(k == 2 ? 4 : 6), 60, 600, W_SINE, 1800, 4, 220);
+                    if (rset.rock < 2) { sfx(rh_scale_note(k == 2 ? 0 : 2), 0, 800, W_SINE, rkv(3000), 4, 220); sfx(rh_scale_note(k == 2 ? 4 : 6), 60, 600, W_SINE, rkv(1800), 4, 220); }
                 } else {
-                    if (rh.vy > Q8(150)) { sfx_ex(38, 0, 200, W_SINE, 3000, 2, 200, 0, 0, 64600); sfx(96, 0, 60, W_NOISE, 400, 1, 160); }
+                    if (rh.vy > Q8(150) && rset.rock < 2) { sfx_ex(38, 0, 200, W_SINE, rkv(3000), 2, 200, 0, 0, 64600); sfx(96, 0, 60, W_NOISE, rkv(400), 1, 160); }
                     rh.vy = 0; rh.g = 1;
                 }
                 break;
@@ -512,13 +791,13 @@ static int room_tick(int32_t dt)
     hx = rh.x >> 8;
     if (rh.g && rh.y > Q8(RH_FLOOR - 30) && hx / 16 != rh.last_tile && hx / 16 < 36) {   /* the floor: a soft note where he rolls onto it */
         rh.last_tile = (uint8_t)(hx / 16); rh.tile[rh.last_tile] = 255;
-        sfx(rh_scale_note(rh.last_tile % 10), 0, 220, W_SINE, 700, 2, 160);
+        if (rset.rock < 2) sfx(rh_scale_note(rh.last_tile % 10), 0, 220, W_SINE, rkv(700), 2, 160);
     }
     for (i = 0; i < 7; i++)                      /* the chimes under the roof */
         if (rh.chime_t[i] <= 0 && iabs(hx - RH_CHIME_X(i)) < 12 && iabs((rh.y >> 8) - RH_CHIME_Y(i) - 6) < 16) {
             rh.chime_t[i] = 500; rh.chimes |= (uint8_t)(1u << i);
-            sfx(rh_scale_note(7 + i), 0, 1500, W_SINE, 3000, 2, 230); sfx(rh_scale_note(7 + i) + 12, 0, 600, W_SINE, 1000, 2, 230);
-            if (rh.chimes == 127u) { rh.chimes = 0; rh.fete = 2600; for (knob = 0; knob < 12; knob++) sfx(rh_scale_note(5 + knob), (uint32_t)knob * 90u, 500, W_TRI, 1500, 2, 220); }
+            if (rset.rock < 2) { sfx(rh_scale_note(7 + i), 0, 1500, W_SINE, rkv(3000), 2, 230); sfx(rh_scale_note(7 + i) + 12, 0, 600, W_SINE, rkv(1000), 2, 230); }
+            if (rh.chimes == 127u) { rh.chimes = 0; rh.fete = 2600; if (rset.rock < 2) for (knob = 0; knob < 12; knob++) sfx(rh_scale_note(5 + knob), (uint32_t)knob * 90u, 500, W_TRI, rkv(1500), 2, 220); }
         }
     {
         int32_t tx = iclamp(rh.x - Q8(120) + rh.vx / 3, 0, Q8(RH_W - 240));
@@ -531,16 +810,22 @@ static int room_tick(int32_t dt)
     }
     for (i = 0; i < 5; i++) {                    /* each has its button, wherever Rock is: he is taken there */
         led_btn_want |= 1u << RH_BTN[i];
-        if (BDOWN(RH_BTN[i])) { rh.x = Q8(RH_ST[i]); rh.vx = 0; rh.camx = iclamp(rh.x - Q8(120), 0, Q8(RH_W - 240)); rh.near = (uint8_t)(i + 1); room_open(i + 1); return 0; }
+        if (BDOWN(RH_BTN[i]) && rn_free(i + 1)) { rh.x = Q8(RH_ST[i]); rh.vx = 0; rh.camx = iclamp(rh.x - Q8(120), 0, Q8(RH_W - 240)); rh.near = (uint8_t)(i + 1); room_open(i + 1); return 0; }
     }
     if (rh.near) led_play_breathe = 1;
     if (rh.near && rh.near <= 5 && RH_WHO[rh.near - 1] != RI_MIX) led_breathe_want |= 1u << BTN_HOME;
     if (BDOWN(BTN_PLAY) && rh.near) {
         if (rh.near == 6) { rh.leave = 1; snd_ui(67); }
-        else room_open(rh.near);
+        else if (rn_free(rh.near)) room_open(rh.near);
+        else { banner_show(rn_who(rh.near), "IS PLAYING IT", 0); snd_ui(55); }
     }
-    if (BDOWN(BTN_HOME) && rh.near && rh.near <= 5 && RH_WHO[rh.near - 1] != RI_MIX) { room_seen |= (uint8_t)(1u << RH_WHO[rh.near - 1]); rtutor_open(RH_WHO[rh.near - 1], RI_WALK); }
-    if (BDOWN(BTN_SAVE)) { room_save_now(); banner_show("", "SAVED", 0); snd_chime(0); }
+    i = rm_home(dt);                             /* HOME by one: a tap, its whole lesson; held, the lessons by topic */
+    if (i && rh.near && rh.near <= 5) {
+        int who = RH_WHO[rh.near - 1];
+        if (i == 2) rtopics_open(who, RI_WALK);
+        else if (who != RI_MIX) { room_seen |= (uint8_t)(1u << who); rtutor_open(who, RI_WALK); }
+    }
+    if (BDOWN(BTN_SAVE)) { room_keep(); banner_show("", "SAVED", 0); snd_chime(0); }
     led_key_want |= in.keys;
     return 0;
 }
@@ -552,7 +837,8 @@ static void room_station(int st, int32_t x, int32_t fy)
     col_t c = ri_col(who);
     int32_t pu = who < RI_N ? rm.pulse[who] : 0;
     if (pu > 20) { galpha(pu / 5); gdisc(x, fy - 40, 34, c); galpha(256); }
-    if (who == RI_GEODE) {
+    if (who < RI_N && mi_on(who)) mi_small(who, x, fy);   /* (a loaded instrument draws itself) */
+    else if (who == RI_GEODE) {
         gline(x - 12, fy, x - 6, fy - 12, th->rim); gline(x + 12, fy, x + 6, fy - 12, th->rim);   /* its cradle */
         ge_draw_at(x, fy - 36, 26, 0);
     } else if (who == RI_ROOTS) {                /* roots down from the roof, a pod on each */
@@ -590,7 +876,7 @@ static void room_station(int st, int32_t x, int32_t fy)
         }
     }
 }
-static void room_draw(void)
+static void room_draw_in(void)
 {
     int32_t cx = rh.camx >> 8, i, k, fy = RH_FLOOR;
     uint32_t tm = rm.t;
@@ -693,12 +979,14 @@ static void room_draw(void)
         int32_t x = SX(RH_ST[i]);
         if (x < -60 || x > 300) continue;
         room_station(i, x, fy);
+        rn_station_draw(i, x, fy);               /* (a friend is on it) */
         if (rh.near != i + 1) {                  /* its button, on a little plate over it */
             int32_t w = gtextw(RH_BTN_NAME[i], 1) + 8;
             grect(x - w / 2, fy + 18, w, 11, th->panel); gbox(x - w / 2, fy + 18, w, 11, ri_col(RH_WHO[i]));
             gtextc(x, fy + 21, RH_BTN_NAME[i], th->text, 1);
         }
     }
+    rn_rocks_draw(cx);                           /* (friends, loose in the room) */
     pfx_draw(cx * 256, 0, 256);
     { uint32_t a0 = ga; ga = a0 * (uint32_t)room_rock_a >> 8;
       prock_live(SX(rh.x >> 8), rh.y >> 8, 256, rh.th, (tm % 3700u) < 160u ? iabs((int32_t)(tm % 3700u) - 80) * 256 / 80 : 256); ga = a0; }
@@ -732,4 +1020,18 @@ static void room_draw(void)
     }
     if (rh.leave) gfade(rh.leave * 256 / 700);
 #undef SX
+}
+static void room_draw(void)
+{
+    room_draw_in();
+    if (rt.on) return;
+    if (rhome.down && rhome.t > 150 && (rm.focus != RI_WALK || (rh.near && rh.near <= 5))) {   /* HOME held: how long still, and what for */
+        int32_t w = gtextw("HOME: HOW IT WORKS", 1) + 12, x = 120 - w / 2;
+        grect(x, 14, w, 16, th->panel); gbox(x, 14, w, 16, th->pad);
+        gtextc(120, 17, "HOME: HOW IT WORKS", th->text, 1);
+        grect(x + 3, 25, (w - 6) * imin(rhome.t, RHOME_MS) / RHOME_MS, 2, th->pad);
+    }
+    rn_draw();
+    if (rq.on && rq.used < 2) rq_draw(30);
+    if (rsm.on) rsm_draw();
 }

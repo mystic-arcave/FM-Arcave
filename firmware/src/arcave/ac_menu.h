@@ -6,19 +6,21 @@
  * firmware's version. START UNDERSONG OVER asks which, in a box over the list: OCT- its chapters back to none (the
  * story's first chapter is the one played again; with a friend, the lowest of the two is), OCT+ its best scores
  * cleared too; GLO, HOME or SELECT: neither. BLUETOOTH is shown where there is a radio. TELEPORT TO MUSIC ROOM, once the tunnel to it is
- * mended and Rock is not in it already: there at once, in a beam of light (arcave.c). */
+ * mended and Rock is not in it already: there at once, in a beam of light (arcave.c). In the music room the first line
+ * is MUSIC ROOM: the room's own settings (ac_hall.h), and the list opens on it. */
 
-enum { MI_PROFILE, MI_TELE, MI_LANG, MI_TEXT, MI_EAR, MI_LOOK, MI_LINK, MI_BT, MI_ABOUT, MI_REPLAY, MI_SKIP, MI_DUORESET, MI_VER, MI_WIPE, MI_N };
-enum { MA_NONE, MA_REPLAY, MA_DUORESET, MA_DUOWIPE, MA_CHANGED, MA_SKIP, MA_PROFILE, MA_WIPE, MA_BT, MA_TELE };
+enum { MI_ROOM, MI_PROFILE, MI_TELE, MI_LANG, MI_TEXT, MI_EAR, MI_LOOK, MI_LINK, MI_BT, MI_ABOUT, MI_REPLAY, MI_SKIP, MI_DUORESET, MI_VER, MI_WIPE, MI_N };
+enum { MA_NONE, MA_REPLAY, MA_DUORESET, MA_DUOWIPE, MA_CHANGED, MA_SKIP, MA_PROFILE, MA_WIPE, MA_BT, MA_TELE, MA_ROOM };
 static struct { uint8_t on, sel, about, sure; int32_t t, win, rest, hold; } mn;
 static uint8_t mn_tele_ok;                        /* (arcave.c, each frame: the music room can be teleported to) */
-static int mi_shown(int i) { return (i != MI_BT || bt_state() != BT_NONE) && (i != MI_TELE || mn_tele_ok); }
+static uint8_t mn_room_ok;                        /* (arcave.c: Rock is in the music room: its own settings are the first line) */
+static int mi_shown(int i) { return (i != MI_BT || bt_state() != BT_NONE) && (i != MI_TELE || mn_tele_ok) && (i != MI_ROOM || mn_room_ok); }
 static int mi_pickable(int i) { return mi_shown(i) && i != MI_VER; }   /* (the version is only read) */
 #ifndef APP_VER
 #define APP_VER "dev"
 #endif
 
-static void menu_open(void) { mn.on = 1; mn.sel = 0; mn.about = 0; mn.sure = 0; mn.t = 0; mn.hold = 0; snd_ui(76); }
+static void menu_open(void) { mn.on = 1; mn.sel = mn_room_ok ? MI_ROOM : MI_PROFILE; mn.about = 0; mn.sure = 0; mn.t = 0; mn.hold = 0; snd_ui(76); }
 static void set_lang(int l) { lang = (uint8_t)(((l % L_N) + L_N) % L_N); }
 static void set_look(int l) { look_i = (uint8_t)(l & 1); th = &LOOKS[look_i]; }
 
@@ -66,6 +68,7 @@ static int menu_tick(int32_t dt)
     if (ch) {
         int d = ch > 0 ? 1 : -1;
         switch (mn.sel) {
+        case MI_ROOM: if (ok) { mn.on = 0; act = MA_ROOM; } break;
         case MI_PROFILE: if (ok) { mn.on = 0; act = MA_PROFILE; } break;
         case MI_TELE: if (ok) { mn.on = 0; act = MA_TELE; } break;
         case MI_BT: act = MA_BT; break;          /* (arcave.c turns the radio and keeps the setting) */
@@ -86,7 +89,7 @@ static int menu_tick(int32_t dt)
 }
 static void menu_draw(void)
 {
-    static const int LAB[MI_N] = {T_PROFILE, T_TELE, T_LANGUAGE, T_TEXTSIZE, T_EAR, T_LOOK, T_LINK, T_BT, T_ABOUT, T_REPLAY, T_SKIP, T_DUO_RESET, T_VERSION, T_WIPE_ALL};
+    static const int LAB[MI_N] = {T_MR_NAME, T_PROFILE, T_TELE, T_LANGUAGE, T_TEXTSIZE, T_EAR, T_LOOK, T_LINK, T_BT, T_ABOUT, T_REPLAY, T_SKIP, T_DUO_RESET, T_VERSION, T_WIPE_ALL};
     static const int BTS[5] = {T_OFF, T_BT_START, T_BT_ADV, T_BT_CONN, T_BT_FAIL};
     int bt_up = mn.sel == MI_BT && bt_state() != BT_OFF && bt_state() != BT_NONE;   /* the radio's line, and it is doing something */
     static const int LKS[4] = {T_LINK_ALONE, T_LINK_FOLLOW, T_LINK_LEAD, T_LINK_CLOCK};
@@ -137,7 +140,7 @@ static void menu_draw(void)
             int32_t sc = sh;
             if (!mi_shown(i)) { vals[i] = val; scs[i] = sc; lw[i] = 216; hs[i] = 0; continue; }
             if (i == MI_PROFILE) val = pf_named() ? pf.name : "\xE2\x86\x92";
-            else if (i == MI_TELE) val = "\xE2\x86\x92";
+            else if (i == MI_TELE || i == MI_ROOM) val = "\xE2\x86\x92";
             else if (i == MI_BT) val = TR(pf.flags & PF_BT ? T_ON : T_OFF);
             else if (i == MI_VER) val = APP_VER;
             else if (i == MI_LANG) val = TR(T_LANG);

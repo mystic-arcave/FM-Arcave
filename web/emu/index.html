@@ -48,7 +48,7 @@ main{padding:28px 0 0;display:grid;gap:22px}
 <div class="wrap">
 <header class="top">
   <a class="name" href="../">FM-ARCAVE</a>
-  <nav><a href="./" aria-current="page">PLAY</a><a href="../install/">INSTALL</a><a href="../link/">LINK</a><a href="https://github.com/mystic-arcave/FM-Arcave">SOURCE</a></nav>
+  <nav><a href="./" aria-current="page">PLAY</a><a href="../install/">INSTALL</a><a href="../link/">LINK</a><a href="../machines/">MACHINES</a><a href="../save/">SAVES</a><a href="https://github.com/mystic-arcave/FM-Arcave">SOURCE</a></nav>
 </header>
 <main>
   <div class="stage">
@@ -102,12 +102,14 @@ main{padding:28px 0 0;display:grid;gap:22px}
     <div><b>UNDERSONG, far away</b><span><a href="../link/online/">LINK, ONLINE</a>: a private lobby</span></div>
   </div>
 </main>
-<footer class="foot"><p>FM-ARCAVE is free software, GPL-3.0-only. The picture and the sound here come from the firmware's own code, built for the browser. Your progress is kept in this browser; with PLAY WITH MY FM-1, on your FM-1.</p></footer>
+<footer class="foot"><p>FM-ARCAVE is free software, GPL-3.0-only. The picture and the sound here come from the firmware's own code, built for the browser. Your progress is kept in this browser; with PLAY WITH MY FM-1, on your FM-1. <a href="../save/">SAVES</a> backs up either.</p></footer>
 </div>
 <script type="module">
 import { mountFm1, FM1_CSS } from "./panel.js";
 import { Fm1Remote, bleAccess } from "./remote.js";
 import { BlePorts, bleSay } from "./ble.js";
+import { Backups, Game } from "./saves.js";
+import { readBank, BANK_BYTES } from "./machines.js";
 document.head.appendChild(Object.assign(document.createElement("style"), { textContent: FM1_CSS }));
 const $ = (id) => document.getElementById(id);
 const SAVE = "fm-arcave-emu-save";
@@ -184,7 +186,9 @@ async function boot(store, status) {
       node = n;
     }
     node.status = status || ready();
-    node.port.postMessage({ type: "load", wasm: bytes, store, big: bigOn }, [bytes]);
+    let bank = null;                              // (the machines loaded into the browser game's ledges: the MYSTIC MACHINES page keeps them)
+    try { bank = readBank(localStorage, BANK_BYTES); } catch (e) {}
+    node.port.postMessage({ type: "load", wasm: bytes, store, bank, big: bigOn }, [bytes]);
   } catch (err) { $("status").textContent = "Could not start: " + err; }
 }
 function onWorklet(n, m) {
@@ -215,7 +219,22 @@ $("mute").addEventListener("click", () => {
   $("mute").setAttribute("aria-pressed", off); $("mute").textContent = off ? "SOUND: OFF" : "SOUND: ON";
   if (gain) gain.gain.value = off ? 0 : 1;
 });
-$("wipe").addEventListener("click", () => { try { localStorage.removeItem(SAVE); } catch (e) {} location.reload(); });
+// a copy for the SAVES page's list (saves.js), made without being asked: an FM-1's save as it joins, this browser's
+// before it is forgotten. The same save is not kept twice; the newest eight of these are kept
+let judge = null;
+async function autoBackup(bytes, from, why) {
+  try {
+    judge = judge || new Game(await wasm());
+    const about = await judge.about(bytes);
+    if (about.ok || about.newer) new Backups(localStorage).add(bytes, { from, auto: why, game: "@VERSION@", about });
+  } catch (e) {}
+}
+$("wipe").addEventListener("click", async () => {
+  const b = browserSave();
+  if (b) await autoBackup(b, "browser", "before FORGET THE SAVE");
+  try { localStorage.removeItem(SAVE); } catch (e) {}
+  location.reload();
+});
 // MIDI in and out: notes are not played, but ARCAVE LINK's messages and a MIDI clock are followed, as on the FM-1
 async function getMidi() {
   if (midi) return midi;
@@ -366,6 +385,7 @@ function fm1Start(access, via) {
         $("status").textContent = "Your FM-1 is the controller" + say("", " by Bluetooth") + ". Its save is not used, and nothing played here goes to it.";
         return;
       }
+      autoBackup(bytes, "fm1", "an FM-1 joined PLAY");
       if (bytes.length > saveSize) {
         remote.stop(); fm1Off("Your FM-1's FM-ARCAVE is newer than this page's. Nothing was changed.");
         return;

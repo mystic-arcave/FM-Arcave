@@ -23,6 +23,7 @@
 #include "ac_deco.h"
 #include "ac_rollmus.h"
 #include "ac_intro.h"
+#include "ac_slots.h"                            /* (before the cave: what stands on its ledges) */
 #include "ac_cave.h"
 #include "ac_juke.h"
 #include "ac_mach.h"
@@ -78,14 +79,14 @@ typedef struct {                                 /* (the same as save3_t as far 
     uint8_t gh_gem[JUKE_N];                      /* its crystals, two bits a mode */
     uint8_t gh_flags, gh_mode;                   /* bit 0: ROCK and CRYSTAL open; the mode last chosen */
     uint16_t duo_best[DM_N];                     /* UNDERSONG: the best of each of its games */
-    uint8_t duo_prog, duo_rsv;                   /* its chapters cleared, 0..4 */
+    uint8_t duo_prog, duo_rsv;                   /* its chapters cleared, 0..4; (0.29) ONE VOICE's best / 20 (it was a spare 0) */
     uint16_t duo_road[4];                        /* (0.20) TWIN ROAD's best on its four other songs */
     uint16_t trio_best[DM_N], trio_road[4];      /* (0.20) the same, played by three */
 } save_t;
 #define SAVE4_SIZE 192                           /* (the save of 0.19: up to duo_road) */
 #define SAVE5_SIZE 200                           /* (a save of an early 0.20: up to trio_best) */
 #define SAVE_MAGIC 0x41434156u                   /* "ACAV" */
-static struct { save_t g; room_save_t room; prof_save_t prof; } svr;   /* the game's save, then the music room's, then the profile's (0.21) */
+static struct { save_t g; room_save_t room; prof_save_t prof; mach_save_t mach; inst_save_t ins; } svr;   /* the game's save, then the music room's, the profile's (0.21), the ledges' slots, the room's places' */
 #define sv svr.g
 _Static_assert(sizeof svr <= FMR_BUF, "the save no longer fits the remote's buffer (ac_remote.h)");
 
@@ -104,15 +105,31 @@ static void save_now(void)
     for (i = 0; i < JUKE_N; i++) sv.gh_gem[i] = gh_gem[i];
     sv.gh_flags = gh_flags; sv.gh_mode = gh_mode;
     for (i = 0; i < DM_N; i++) sv.duo_best[i] = duo_best[i];
-    sv.duo_prog = duo_prog; sv.duo_rsv = 0;
+    sv.duo_prog = duo_prog; sv.duo_rsv = (uint8_t)imin(duo_hum / 20, 255);
     for (i = 0; i < 4u; i++) sv.duo_road[i] = duo_road[i];
     for (i = 0; i < DM_N; i++) sv.trio_best[i] = trio_best[i];
     for (i = 0; i < 4u; i++) sv.trio_road[i] = trio_road[i];
     play_saved_s = play_s;
-    svr.prof = pf;
+    svr.prof = pf; svr.mach = ms; svr.ins = is_;
     settings_save(&svr, sizeof svr);
 }
 static void save_soon(void) { save_dirty = 1; save_at = fm1_ms + 1500u; }
+/* the spare: the save as it was read whole at the start, in a sector of its own (the last blob that is the app's: the
+ * least likely to hold another firmware's things). A save erases its sector before it writes (platform.c), so the
+ * power going just then leaves no save at all: the next start is from the spare, as the game stood when the FM-1 was
+ * last switched on. Written only when it differs, so once a start at most (~50 ms without sound, and there is none
+ * yet); compared in the remote's buffer, which nothing uses at a start */
+#define SV_SPARE 6u
+static uint8_t save_spared;                      /* this start was from the spare */
+static void spare_keep(void)
+{
+    uint32_t i;
+    if (blob_load(SV_SPARE, fmr_rxb, sizeof svr) == 0) {
+        for (i = 0; i < sizeof svr && fmr_rxb[i] == ((const uint8_t *)&svr)[i]; i++) { }
+        if (i == sizeof svr) return;
+    }
+    blob_save(SV_SPARE, &svr, sizeof svr);
+}
 /* TELEPORT TO MUSIC ROOM (the settings): Rock drawn up into a beam of light out of wherever he is, a flash, and he comes
    down in one in the middle of the music room. tele_t: ms since it began (0: none); the scene holds still under it */
 #define TELE_OUT 900
@@ -148,6 +165,7 @@ static void tele_draw(void)
 
 static void to_cave(int fresh)
 {
+    if (scene == SC_MACH && mc.which == MACH_MM) mm_leave();
     if (scene == SC_ROOM) { room_leave(); save_soon(); }   /* (out of the music room: it is kept as it was left) */
     scene = SC_CAVE;
     rollmus_leave();
@@ -183,9 +201,10 @@ static void save_wipe(void)
     for (i = 0; i < JUKE_N * 3u; i++) gh_best[i / 3u][i % 3u] = 0;
     for (i = 0; i < JUKE_N; i++) gh_gem[i] = 0;
     gh_flags = 0; gh_mode = 0;
-    for (i = 0; i < DM_N; i++) duo_best[i] = 0;
+    for (i = 0; i < DM_N; i++) duo_best[i] = 0; duo_hum = 0;
     for (i = 0; i < 4u; i++) duo_road[i] = trio_road[i] = 0;
     for (i = 0; i < DM_N; i++) trio_best[i] = 0;
+    for (i = 0; i < sizeof ms.rec; i++) ((uint8_t *)ms.rec)[i] = 0;   /* (the loaded machines stay on their ledges; what was kept for them goes) */
     duo_prog = 0;
     link_id = 0; set_look(0); mn.on = 0; tsize = 1; sy_ear = 0; play_s = 0; play_ms = 0; sh.on = SH_NONE;
     story_reset();
@@ -199,16 +218,31 @@ static void mach_go(int which)
     if (which == 0) { juke_track = 4; mus_set(MUS_JUKE, juke_track); }
     mach_enter(which);
 }
+/* up to a ledge's machine: the one loaded into its slot, or the firmware's own that stands there */
+static void ledge_go(int i)
+{
+    if (ledge_loaded(i)) { mm_enter(i); mach_enter(MACH_MM); }
+    else mach_go(ledge_which(i));
+}
 static void arcave_init(void)
 {
     uint32_t i;
     hat_init();
-    RD[RI_ROOTS] = &ROOTS_DESC; RD[RI_GEODE] = &GE_DESC; RD[RI_RACK] = &RACK_DESC; RD[RI_SEAM] = &SEAM_DESC;
     room_sv = &svr.room;
     int have = settings_load(&svr, sizeof svr) == 0;
+    save_spared = 0;
+    if (have) spare_keep();
+    if (!have) {                                 /* a save from before the room's places had slots (shorter): all of it, the four instruments as ever */
+        for (i = 0; i < sizeof svr; i++) ((uint8_t *)&svr)[i] = 0;
+        have = settings_load(&svr, __builtin_offsetof(__typeof__(svr), ins)) == 0;
+    }
+    if (!have) {                                 /* a save from before the ledges' slots (shorter): all of it, the three machines as ever */
+        for (i = 0; i < sizeof svr; i++) ((uint8_t *)&svr)[i] = 0;
+        have = settings_load(&svr, __builtin_offsetof(__typeof__(svr), mach)) == 0;
+    }
     if (!have) {                                 /* a save from before the profile (shorter): all of it, no name, no tickets */
         for (i = 0; i < sizeof svr; i++) ((uint8_t *)&svr)[i] = 0;
-        have = settings_load(&svr, sizeof svr - sizeof svr.prof) == 0;
+        have = settings_load(&svr, __builtin_offsetof(__typeof__(svr), prof)) == 0;
     }
     if (!have) {                                 /* a save from before the music room (shorter): all of it, the room as new */
         for (i = 0; i < sizeof svr; i++) ((uint8_t *)&svr)[i] = 0;
@@ -234,6 +268,11 @@ static void arcave_init(void)
         for (i = 0; i < sizeof sv; i++) ((uint8_t *)&sv)[i] = 0;
         have = settings_load(&sv.v1, sizeof sv.v1) == 0;
     }
+    if (!have) {                                 /* no save of any version that reads: the spare, if there is one */
+        for (i = 0; i < sizeof svr; i++) ((uint8_t *)&svr)[i] = 0;
+        have = blob_load(SV_SPARE, &svr, sizeof svr) == 0;
+        save_spared = (uint8_t)(have && sv.v1.magic == SAVE_MAGIC);
+    }
     if (have && sv.v1.magic == SAVE_MAGIC) {
         const save1_t *v = &sv.v1;
         set_lang(v->lang); set_look(v->look); story = v->story > 4u ? 0u : v->story; link_id = v->link % 5u; juke_track = v->track % JUKE_N;
@@ -252,10 +291,28 @@ static void arcave_init(void)
         for (i = 0; i < 4u; i++) duo_road[i] = sv.duo_road[i];
         for (i = 0; i < DM_N; i++) trio_best[i] = sv.trio_best[i];
         for (i = 0; i < 4u; i++) trio_road[i] = sv.trio_road[i];
-        duo_prog = sv.duo_prog > 4u ? 0u : sv.duo_prog;
+        duo_prog = sv.duo_prog > 4u ? 0u : sv.duo_prog; duo_hum = (uint16_t)(sv.duo_rsv * 20u);
         if (story == 3u) story = 2u;             /* the light was back but no song yet: the rings again (they are quick) */
     }
     pf = svr.prof; pf_check();                   /* (no profile in the save: a new one) */
+    ms = svr.mach;                               /* the ledges' slots (none in the save: the three machines, as ever) */
+    is_ = svr.ins;                               /* the room's places' (none: the four instruments, as ever) */
+    (void)bank_runs(); bank_mark(0);             /* (was the FM-1 inside something loaded when it last restarted? Not in it now) */
+#ifdef AC_TEST_MOD
+    mb_test_load();
+#endif
+#ifdef AC_TEST_INS
+    ib_test_load();
+#endif
+    mb_check_all();
+#ifdef AC_TEST_MOD
+    ms.slot[AC_TEST_MOD - 1] |= MS_LOADED;
+#endif
+#ifdef AC_TEST_INS
+    is_.slot[AC_TEST_INS - 1] = MS_LOADED;
+#endif
+    rm.on = 0;                                   /* (the room is read out of this save when it is next walked into) */
+    room_kit();                                  /* what stands in its four places */
 #ifdef AC_TEST_TICKETS                           /* (tests) tickets in the pocket */
     pf.tickets = AC_TEST_TICKETS;
 #endif
@@ -285,6 +342,7 @@ static void arcave_init(void)
     intro_reset();
     mus_set(MUS_INTRO, 0);
     fb_all = 1;
+    if (save_spared) { banner_show("", TR(T_SPARE), 0); save_soon(); }   /* (said, and written where the save belongs) */
 #if defined AC_TEST_SCENE && !defined AC_TEST_X  /* (tests) where scene 9 puts Rock, unless AT=X,Y says */
 #define AC_TEST_X 466
 #define AC_TEST_Y 274
@@ -304,7 +362,7 @@ static void arcave_init(void)
     else if (AC_TEST_SCENE == 7) { scene = SC_CAVE; cave_enter(1); cv.x = Q8(CV_DOOR_X + 62); cv.y = Q8(181); }   /* (7: in the room by the door) */
     else if (AC_TEST_SCENE == 10) { scene = SC_DUO; mus_set(MUS_JUKE, 1); duo_enter(); }
     else if (AC_TEST_SCENE == 11) { scene = SC_ROOM; cave_enter(1); room_enter(); }   /* (11: in the music room) */   /* (10: down the well, UNDERSONG) */
-    else { scene = SC_MACH; mus_set(MUS_JUKE, 2); mach_go(AC_TEST_SCENE - 3); }
+    else { scene = SC_MACH; mus_set(MUS_JUKE, 2); ledge_go(AC_TEST_SCENE - 3); }
 #endif
 }
 
@@ -357,7 +415,7 @@ static void juke_change(int32_t d)
 }
 
 /* every pass of the main loop (and while the screen is being sent): the link wants its messages read promptly */
-static void arcave_poll(void) { if (ac_started) { link_poll(); duo_poll(); fmr_poll(); } }
+static void arcave_poll(void) { if (ac_started) { link_poll(); duo_poll(); rn_poll(); fmr_poll(); } }
 
 static void arcave_frame(void)
 {
@@ -385,7 +443,10 @@ static void arcave_frame(void)
         snd_ui(72 + lang * 2); save_soon();
     }
     /* GLO: a tap opens the settings (as it is let go). Wiping the save is in there, on its last line, and nowhere else */
-    if (BDOWN(BTN_GLO)) glo_used = mn.on || pu.on;
+    mn_room_ok = scene == SC_ROOM;
+    if (BDOWN(BTN_GLO)) glo_used = mn.on || pu.on || (scene == SC_ROOM && rsm.on);
+    /* in the music room GLO held is the quick mix (ac_hall.h): only a tap opens the settings */
+    if (scene == SC_ROOM && !mn.on && !pu.on && !sh.on && !tele_t && rq_tick(dt)) glo_used = 1;
     if ((in.bup >> BTN_GLO & 1u) && !glo_used && !pu.on) menu_open();
     /* the radio, if it was on and did not start: off, and said so (the next power-on does not try again) */
     if ((pf.flags & PF_BT) && bt_state() == BT_FAILED) { pf.flags &= (uint8_t)~PF_BT; bt_set(0); banner_show("", TR(T_BT_FAIL), 0); save_soon(); }
@@ -397,9 +458,9 @@ static void arcave_frame(void)
     if (scene == SC_CAVE && play_s - play_saved_s >= 900u && !save_dirty) save_soon();
     /* a machine on the clock (the run, the bloom) holds still while a sheet or the settings are up: its start moves on */
     {
-    int held = mn.on || sh.on || pu.on || (scene == SC_MACH && mc.state == MS_PLAY && mc.ask);   /* (and REC's box over a game) */
+    int held = mn.on || sh.on || pu.on || (scene == SC_MACH && mc.state == MS_PLAY && (mc.ask || (mc.which == MACH_MM && mb.help)));   /* (and REC's box over a game, a loaded machine's HOME) */
     if (held && !was_paused) { was_paused = 1; pause_tick = tr_now_q8() >> 8; gh_pause(); }
-    if (!held && was_paused) { uint32_t d = (tr_now_q8() >> 8) - pause_tick; was_paused = 0; nb.t0 += d; gh_resume(); }
+    if (!held && was_paused) { uint32_t d = (tr_now_q8() >> 8) - pause_tick; was_paused = 0; nb.t0 += d; gh_resume(); if (scene == SC_MACH && mc.which == MACH_MM) mm_held(d); }
     }
     mn_tele_ok = story >= 4u && scene != SC_ROOM && !tele_t;   /* (the settings offer the teleport once the tunnel is mended) */
     if (mn.on) {
@@ -410,7 +471,7 @@ static void arcave_frame(void)
             uint32_t i;
             duo_prog = 0;
             if (r == MA_DUOWIPE) {
-                for (i = 0; i < DM_N; i++) duo_best[i] = trio_best[i] = 0;
+                for (i = 0; i < DM_N; i++) duo_best[i] = trio_best[i] = 0; duo_hum = 0;
                 for (i = 0; i < 4u; i++) duo_road[i] = trio_road[i] = 0;
             }
             save_soon();
@@ -428,6 +489,7 @@ static void arcave_frame(void)
         else if (r == MA_CHANGED) save_soon();
         else if (r == MA_WIPE) save_wipe();
         else if (r == MA_PROFILE) pu_open(pf_named() ? PU_CARD : PU_NAME, 1);   /* (the first time: NAME YOUR ROCK) */
+        else if (r == MA_ROOM) rsm_open();       /* the music room's own settings (ac_hall.h) */
         else if (r == MA_TELE) {                 /* TELEPORT TO MUSIC ROOM: the beam (tele_draw), the room at its flash */
             tele_t = 1; sy_rumble_want = 0;
             sfx_ex(48, 0, 900, W_SAW, 1800, 300, 200, 0, 0, 66500); sfx(84, 200, 700, W_SINE, 1600, 200, 220); sfx(91, 450, 500, W_SINE, 1400, 100, 220);
@@ -501,7 +563,7 @@ static void arcave_frame(void)
             else if (r == CVA_DUO) { scene = SC_DUO; duo_enter(); sy_rumble_want = 0; }
             else if (r == CVA_ROOM) { scene = SC_ROOM; room_enter(); }
             else if (r == CVA_SHOP) pu_open(PU_SHOP, 0);   /* the gift shop's counter: the upgrades (as EDIT, anywhere) */
-            else if (r >= CVA_M1) { scene = SC_MACH; mach_go(r - CVA_M1); sy_rumble_want = 0; }
+            else if (r >= CVA_M1) { scene = SC_MACH; ledge_go(r - CVA_M1); sy_rumble_want = 0; }
             break;
         case SC_LAMP:
             r = lamp_tick(dt);

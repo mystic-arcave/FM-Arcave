@@ -21,6 +21,8 @@ D=; [ -n "$2" ] && D="-DAC_TEST_STORY=$2"
 [ -n "$WEAR" ] && D="$D -DAC_TEST_WEAR=$WEAR"   # WEAR=n: everything owned and a set of it on, trail n (1-6)
 [ -n "$BT" ] && D="$D -DAC_TEST_BT=1"           # BT=1: a pretend radio, so the settings show BLUETOOTH
 [ -n "$BIG" ] && D="$D -DAC_TEST_BIG=1"         # BIG=1: as on the emulator's BIG SCREEN (the text a size smaller)
+[ -n "$INS" ] && D="$D -DAC_TEST_INS=$INS"         # INS=1|2|3|4: THE SPRING as if loaded into that place of the music room
+[ -n "$MOD" ] && D="$D -DAC_TEST_MOD=$MOD"         # MOD=1|2|3: GLOW CAPS as if loaded into that ledge's slot of the machine bank (SCENE 3-5: straight up to a ledge)
 cc -O2 -Wall -Wno-unused-function -Wno-unused-variable -Wno-unused-const-variable -Wno-empty-body -DDINGHY_HOST \
    '-Dsection(x)=' -DAPP_VER='"dev"' $D -Ifirmware/hal -Ifirmware/src -Ifirmware/gen -o "build/host/$N" firmware/src/fm_arcave.c
 rm -f build/host/"$N"-*.ppm

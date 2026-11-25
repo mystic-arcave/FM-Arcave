@@ -45,14 +45,14 @@ main{padding:clamp(36px,6vw,72px) 0 0;display:grid;gap:44px}
 <div class="wrap">
 <header class="top">
   <a class="name" href="../../">FM-ARCAVE</a>
-  <nav><a href="../../emu/">PLAY</a><a href="../../install/">INSTALL</a><a href="../" aria-current="page">LINK</a><a href="https://github.com/mystic-arcave/FM-Arcave">SOURCE</a></nav>
+  <nav><a href="../../emu/">PLAY</a><a href="../../install/">INSTALL</a><a href="../" aria-current="page">LINK</a><a href="../../machines/">MACHINES</a><a href="../../save/">SAVES</a><a href="https://github.com/mystic-arcave/FM-Arcave">SOURCE</a></nav>
 </header>
 <main>
   <div>
     <p class="kicker">Arcave Link</p>
     <nav class="tabs" aria-label="Link"><a href="../">LOCAL</a><a href="./" aria-current="page">ONLINE</a></nav>
     <h1 style="font-size:clamp(28px,5vw,48px);margin:22px 0 18px">Down the well, together from far away</h1>
-    <p class="lead">UNDERSONG over the internet. Make a private lobby, send its code to a friend, and both of you roll Rock down the well: on a real FM-1 by USB or Bluetooth, or on the emulator in this browser. Up to three computers in a lobby.</p>
+    <p class="lead">UNDERSONG and the music room over the internet. Make a private lobby, send its code to a friend, and both of you roll Rock down the well, or into the music room: on a real FM-1 by USB or Bluetooth, or on the emulator in this browser. Up to four computers in a lobby: UNDERSONG is for two or three players, the music room for up to four.</p>
   </div>
 
   <div class="panes">
@@ -98,7 +98,7 @@ main{padding:clamp(36px,6vw,72px) 0 0;display:grid;gap:44px}
   </div>
 
   <div class="cols">
-    <div><h3>WHAT PASSES</h3><p>Only UNDERSONG's own messages: who is in the well, the keys and dials of each player, and the clock of the one who leads. The lobby server passes them on and knows nothing of the game. No sound or picture is sent: each FM-1 plays the game itself.</p></div>
+    <div><h3>WHAT PASSES</h3><p>Only UNDERSONG's and the music room's own messages: who is in the well or the room, the keys and dials of each player, what is changed in a shared room, and the clock of the one who leads. The lobby server passes them on and knows nothing of the game. No sound or picture is sent: each FM-1 plays the game itself.</p></div>
     <div><h3>DISTANCE</h3><p>Each FM-1 judges its own player against its own clock, so the time messages take never costs you a note. It shows only as your friends' notes sounding a little late. The ping by each name is the round trip from that computer to the lobby server.</p></div>
     <div><h3>REAL OR EMULATED</h3><p>Any mix works: an FM-1 against an emulator, two FM-1s at your end and one at your friend's. Every FM-1 on this computer, by USB or by Bluetooth, and every emulator window in this browser goes into the lobby. An FM-1 that is in both ways is counted once. Keep the emulator's own MIDI switched off here, or it is heard twice.</p></div>
     <div><h3>PRIVATE</h3><p>Lobbies are not listed anywhere: a lobby is found by its code alone. It closes when it has been empty for half an hour. If the connection breaks, this page joins again by itself.</p></div>
@@ -107,7 +107,7 @@ main{padding:clamp(36px,6vw,72px) 0 0;display:grid;gap:44px}
 <footer class="foot"><p>UNDERSONG's messages are control changes 102 to 118 on MIDI channel 16; <a href="https://github.com/mystic-arcave/FM-Arcave/blob/main/docs/LINK.md">docs/LINK.md</a> has them and the lobby's own protocol. The lobby server is <a href="https://github.com/mystic-arcave/FM-Arcave/tree/main/server">server/</a> in the source.</p></footer>
 </div>
 <script type="module">
-import { Gather, HELLO, outFor, holdTheLink } from "../undersong.js";
+import { Gather, HELLO, ROOM, outFor, holdTheLink } from "../undersong.js";
 import { LobbyClient, SERVER } from "../lobby.js";
 import { BlePorts, Twins, rankOf, bleRows, bleAdd, bleSay } from "../ble.js";
 const $ = (id) => document.getElementById(id);
@@ -135,7 +135,7 @@ function fromHere(s, cc, v) {
   // (an FM-1 that is in by a cable and by Bluetooth says everything twice: its second road is left out)
   if (s !== emu && twins.take(s.id, rankOf(s.kind === "ble" ? s.out : { name: s.label }), cc, v, now())) { s.twin = twins.shadowOf(s.id); return; }
   s.twin = null; s.heard = now();
-  if (cc === HELLO) { if (!inWell(s)) setTimeout(paintHere); s.hello = now(); }
+  if (cc === HELLO || cc === ROOM) { if (!inWell(s) || !!s.room !== (cc === ROOM)) setTimeout(paintHere); s.hello = now(); s.room = cc === ROOM; }
   const d = s.g.take(cc, v);
   if (!d || !online) return;
   lobby.send(d);
@@ -199,7 +199,7 @@ function paintHere() {
     const r = document.createElement("div"); r.className = "who" + (inWell(s) ? " well" : "");
     r.innerHTML = '<span class="dot"></span><span class="nm"></span><span class="ms"></span><span class="sub"></span>';
     r.querySelector(".nm").textContent = s.kind === "emu" ? "EMULATOR" : "FM-1";
-    r.querySelector(".sub").textContent = (s.kind === "emu" ? "This browser" : (s.kind === "ble" ? "Bluetooth: " : "USB: ") + s.label) + (inWell(s) ? ", down the well" : ", not in the well");
+    r.querySelector(".sub").textContent = (s.kind === "emu" ? "This browser" : (s.kind === "ble" ? "Bluetooth: " : "USB: ") + s.label) + (inWell(s) ? (s.room ? ", in the music room" : ", down the well") : ", not in the well or the music room");
     $("here").appendChild(r);
   }
 }
@@ -231,7 +231,7 @@ const lobby = new LobbyClient(server, {
 lobby.info = whatPlays;
 const WHY = {
   "no-lobby": "There is no lobby with that code. Check it with your friend: an empty lobby closes after half an hour.",
-  full: "That lobby already has three computers in it.",
+  full: "That lobby already has four computers in it.",
   "bad-code": "A lobby code is six letters and numbers.",
   busy: "The lobby server is busy. Try again in a moment.",
   server: "The lobby server could not be reached.",

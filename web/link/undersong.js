@@ -2,11 +2,18 @@
 // UNDERSONG's messages as a relay passes them on (docs/LINK.md): control changes 110 to 118 on channel 16, and the
 // clock of the FM-1 that leads the game (102 to 106, then 107 with 13). One Gather for each FM-1 (or emulator) heard.
 // Both Link pages use it: the LOCAL one between FM-1s on this computer, the ONLINE one between computers.
+// The music room played together (firmware/src/arcave/ac_roomnet.h) goes the same way: control changes 20 to 27, where
+// 21, 22 and 23 are a message's three numbers and 24 to 27 its last part (one for each seat).
 export class Gather {
-  constructor() { this.tempo = 0; this.pos = 0; this.held = null; }
+  constructor() { this.tempo = 0; this.pos = 0; this.held = null; this.room = null; }
   // one control change from this FM-1: what goes on now, as [cc, v, cc, v, ...], or null. A message with numbers
   // (118, 115, 116, then its 117) goes on in one piece, so two players' messages never mix on the way to a third
   take(cc, v) {
+    if (cc >= 20 && cc <= 27) {                           // the music room's
+      if (cc >= 21 && cc <= 23) { (this.room ||= []).push(cc, v); if (this.room.length > 6) this.room.splice(0, 2); return null; }
+      if (cc >= 24 && this.room) { const o = this.room; this.room = null; o.push(cc, v); return o; }
+      return [cc, v];
+    }
     if (cc >= 110 && cc <= 118) {
       if (cc === 115 || cc === 116 || cc === 118) { (this.held ||= []).push(cc, v); if (this.held.length > 16) this.held.splice(0, 2); return null; }
       if (cc === 117 && this.held) { const o = this.held; this.held = null; o.push(cc, v); return o; }
@@ -26,6 +33,10 @@ export class Gather {
 }
 // "I am here" (110): an FM-1 that sends it is down the well, in UNDERSONG
 export const HELLO = 110;
+// "I am in my music room" (20): an FM-1 that sends it shares its room with the others that do
+export const ROOM = 20;
+// either of them, or anything else that is passed on between friends
+export const passes = (cc, v) => (cc >= 110 && cc <= 118) || (cc >= 20 && cc <= 27) || (cc === 107 && v === 13);
 
 // a port's name without what tells an input from an output ("MIDIIN2 (FM-ARCAVE)", "FM-ARCAVE 3F2A Bluetooth MIDI
 // OUT"): some systems name the two ends of one device differently

@@ -6,7 +6,7 @@
 // of the game's time), with some jitter that never reorders.
 //   node tests/online_test.mjs              (after web/emu/build.sh, which also makes build/emu-catch)
 //   SERVER=wss://fm-arcave-lobby.mystic-arcave.workers.dev DELAY=0 node tests/online_test.mjs    (the live one)
-// One makes a lobby, a second joins it by its code; a wrong code and a fourth computer are refused. Both roll to the
+// One makes a lobby, a second joins it by its code; a wrong code and a fifth computer are refused. Both roll to the
 // well, find each other through the lobby, and play TWIN ROAD and NOTE RALLY (whose note flies to the other side on
 // a beat named in the message): both must agree on the score. The second one's connection breaks in the menu: it
 // must join again by itself and keep its place. A third joins, the three play ECHO STEPS for three, then the third
@@ -139,12 +139,16 @@ await run(2000);
 if (st(A).state !== 1 || st(B).state !== 1) fail("the broken connection ended the game for them");
 console.log(`B's connection broke and came back (${B.states.join(" > ")}): still at the list together`);
 
-// ---- a third, and a fourth that is turned away
+// ---- a third, a fourth, and a fifth that is turned away
 const C = await computer("C", 4);
 C.lobby.join(A.lobby.code, "third");
 await until("C did not get in", () => C.lobby.status === "in", NET, []);
+// (a lobby holds four computers, for the music room: a fourth with nothing playing is let in, a fifth is turned away)
 const D = new LobbyClient(URL, { state: (s, w) => { D.last = s + ":" + w; } }); D.join(A.lobby.code, "fourth");
-await until("a fourth computer was let in", () => D.last === "error:full", NET, []);
+await until("a fourth computer was not let in", () => D.status === "in", NET, []);
+const E = new LobbyClient(URL, { state: (s, w) => { E.last = s + ":" + w; } }); E.join(A.lobby.code, "fifth");
+await until("a fifth computer was let in", () => E.last === "error:full", NET, []);
+D.leave();
 // C was switched on later than A, but rolls to the well exactly as A did: in lockstep it would draw A's number at the
 // door, and draw again in step with it. People are never that exact; as in tests/duo_test.mjs, C waits a little first
 await run(2300);
@@ -152,7 +156,7 @@ await toWell(C);
 await until("the three did not find each other", () => [A, B, C].every((p) => st(p).state === 1 && st(p).np === 3), 6000);
 if (new Set([A, B, C].map((p) => st(p).seat)).size !== 3) fail("two took the same seat");
 await run(3000);
-console.log(`three: seats ${[A, B, C].map((p) => st(p).seat).join(", ")}, clocks ${ticks([A, B, C])} ticks apart; a fourth: refused`);
+console.log(`three: seats ${[A, B, C].map((p) => st(p).seat).join(", ")}, clocks ${ticks([A, B, C])} ticks apart; a fifth: refused`);
 await game([A, B, C], 0);                                  // ECHO STEPS for three
 
 // ---- C leaves the lobby in the middle of a game

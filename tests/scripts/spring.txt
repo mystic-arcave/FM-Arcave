@@ -1,0 +1,54 @@
+# the music room with THE SPRING loaded into THE GEODE's place (INS=2): in, SCL opens it (its lesson the first time,
+# six steps), then playing: heat, depth, the current, lily pads, the frog, keys of both rows, EDIT, the layouts; HOME
+# held: its topics; HOME: the room, where it stands as a basin
+300 shot
+2000 btn 3
+2600 shot
+5000 shot
+10500 shot
+17500 shot
+24500 shot
+30000 shot
+37000 shot
+43500 shot
+45000 enc 2 2
+45500 enc 3 2
+47000 shot
+47500 enc 4 3
+49000 shot
+49500 enc 0 1
+49600 enc 0 1
+51000 shot
+51500 btn 11
+53500 shot
+54000 keys 0x1
+54200 keys 0
+54400 keys 0x10
+54600 keys 0
+55000 keys 0x2
+55200 keys 0
+55500 shot
+56000 enc 6 1
+57000 enc 1 1
+58500 shot
+59000 btn 6
+59300 keys 0x40
+59500 keys 0
+59700 enc 2 2
+60200 shot
+60500 btn 6
+61000 btn 13
+63000 shot
+63500 btndown 8
+64400 btnup 8
+64600 shot
+64800 enc 0 1
+64900 enc 0 1
+65100 btn 12
+67000 shot
+72500 btn 8
+73000 btn 9
+74500 shot
+75000 btn 8
+77500 shot
+79500 end

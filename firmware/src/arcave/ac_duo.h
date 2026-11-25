@@ -18,6 +18,8 @@
  *                     (these two are places, with a story's opening each: ac_duoplace.h)
  *   ROCK-OFF      the one game against each other: the same song for both, who catches more (a key where no note
  *                 is costs points)
+ *   ONE VOICE     for two, beside the story: the two are one creature, one how high it floats (a key held), the other
+ *                 its shape (a knob), through the holes in walls of crystal (ac_onevoice.h)
  *   afterwards    the story played through, its four games can be played again for the best score; TWIN ROAD then
  *                 on any of five songs
  *
@@ -42,12 +44,13 @@
  * others follow, so all hear the same bar. Each FM-1 judges its own player against that clock and tells the others
  * what happened, so the delay of the link never costs a note. */
 
-enum { DM_ECHO, DM_ROAD, DM_PIPE, DM_DRUM, DM_DUEL, DM_N };
-static const char *const DU_NAME[DM_N] = {"ECHO STEPS", "TWIN ROAD", "POTION CHOIR", "NOTE RALLY", "ROCK-OFF"};
+/* (DM_N: the games whose bests are lists in the save; ONE VOICE came after, ac_onevoice.h, and has its own place) */
+enum { DM_ECHO, DM_ROAD, DM_PIPE, DM_DRUM, DM_DUEL, DM_N, DM_HUM = DM_N, DM_ALL };
+static const char *const DU_NAME[DM_ALL] = {"ECHO STEPS", "TWIN ROAD", "POTION CHOIR", "NOTE RALLY", "ROCK-OFF", "ONE VOICE"};
 /* the story's chapters in order: POTION CHOIR, TWIN ROAD, ECHO STEPS, NOTE RALLY */
 static const uint8_t DU_CHAP[4] = {DM_PIPE, DM_ROAD, DM_ECHO, DM_DRUM};
 static int du_chap(int m) { int i; for (i = 0; i < 4; i++) if (DU_CHAP[i] == m) return i; return 4; }
-static const uint8_t DU_TRACK[DM_N] = {4, 1, 3, 5, 2};   /* OPAL TIDE, SPORE DRIFT, MYCELIUM NIGHTS, ROLL ON, CRYSTAL STEPS */
+static const uint8_t DU_TRACK[DM_ALL] = {4, 1, 3, 5, 2, 4};   /* OPAL TIDE, SPORE DRIFT, MYCELIUM NIGHTS, ROLL ON, CRYSTAL STEPS, OPAL TIDE */
 enum { DUS_LOBBY, DUS_MENU, DUS_CARD, DUS_COUNT, DUS_PLAY, DUS_RESULT, DUS_FINALE, DUS_ERROR };
 enum { DO_HELLO = 1, DO_EPOCH, DO_PICK, DO_OPEN, DO_READY, DO_GO, DO_HIT, DO_MISS, DO_QUIT, DO_STRAY, DO_SONG, DO_POUR, DO_STONE, DO_LOOK, DO_NAME };
 #define DU_YL 180                                /* the line the notes are played on */
@@ -70,6 +73,10 @@ static void pl_draw(uint32_t tm);
 static const char *du_hint(void);
 #endif
 static void ra_sounds(int32_t t0, int32_t t1);
+#define HM_INTRO 14800                           /* ONE VOICE (ac_onevoice.h): its opening, the first time */
+static void hm_sounds(int32_t t0, int32_t t1);
+static uint32_t hm_build(uint32_t seed);
+static void hm_tick(int32_t now);
 #define DU_POT_N 12                              /* POTION CHOIR: at most twelve rocks; */
 static const uint8_t DU_POT_RN[3] = {6, 8, 12};  /* three rounds, each of new rocks: six, then eight, then twelve. In each,
                                                     everyone pours once (a "pour": one of them needs the potion), */
@@ -86,6 +93,7 @@ static const col_t DU_COL[4] = {AC_RGB(240, 96, 200), AC_RGB(110, 232, 210), AC_
 static uint16_t duo_best[DM_N];                  /* (kept in the save) the best of each game; ROCK-OFF: your own */
 static uint16_t trio_best[DM_N], trio_road[4];   /* (kept in the save) the same, played by three */
 static uint8_t duo_prog;                         /* chapters cleared, 0..4 */
+static uint16_t duo_hum;                         /* (kept in the save, in twenties) ONE VOICE's best: for two only */
 
 typedef struct { uint16_t step; uint8_t lane, own, hid, pair, st[3]; int8_t pitch; } du_note_t;   /* own: bit = seat; st: 0 to come, 1 PERFECT, 2 GOOD, 3 missed */
 static du_note_t du_n[DU_NOTES];
@@ -156,6 +164,7 @@ static uint32_t du_track(void) { return du.mission == DM_ROAD && !du.story ? DU_
 static uint16_t *du_bestp(int m, int story)      /* where a game's best is kept: TWIN ROAD has one for each song */
 {
     uint32_t t = DU_ROAD_SONG[du.song % 5u];
+    if (m == DM_HUM) return &duo_hum;
     if (du.np == 3u) return m == DM_ROAD && !story && t != 1u ? &trio_road[t - 2u] : &trio_best[m];
     return m == DM_ROAD && !story && t != 1u ? &duo_road[t - 2u] : &duo_best[m];
 }
@@ -247,6 +256,8 @@ static void du_build(uint32_t seed)
             if (d == MUS_NONE) continue;
             du_add(s, d * 4 / 16, du.mission == DM_DUEL || s % 16u == 0u ? du_all() : 1 << ((s / 16u + s / n) % du.np), 0, p);
         }
+    } else if (du.mission == DM_HUM) {           /* ONE VOICE: its sixteen walls, each a note for both */
+        last = hm_build(seed);
     } else if (du.mission == DM_DRUM) {          /* NOTE RALLY: thirty-two bars; seat 0 serves */
         du.dial[0] = 1; du.dial[1] = 2; du.dial[2] = 0;
         du.bmode = 0; du.bown = 0; du.bready = 0; du.rally = du.rbest = 0; du.vh[0] = du.vh[1] = 0;
@@ -330,7 +341,7 @@ static void du_abort(void)
     }
     du.state = DUS_MENU; du.t = 0;
 }
-static int du_opening(void) { return du.mission == DM_ECHO || du.mission == DM_DRUM || du.mission == DM_PIPE; }   /* (the
+static int du_opening(void) { return du.mission == DM_ECHO || du.mission == DM_DRUM || du.mission == DM_PIPE || du.mission == DM_HUM; }   /* (the
                                                     story's games with an opening on the card's first page) */
 static void du_opened(void)                      /* the opening over: how it is played (POTION CHOIR for two: its lesson) */
 {
@@ -338,8 +349,8 @@ static void du_opened(void)                      /* the opening over: how it is 
 }
 static void du_open(int item)
 {
-    du.mission = (uint8_t)((item & 7) % DM_N); du.story = (uint8_t)(item >> 3 & 1);
-    du.page = du.story ? 0u : 1u; du.ready[0] = du.ready[1] = du.ready[2] = du.ready[3] = 0;
+    du.mission = (uint8_t)((item & 7) % DM_ALL); du.story = (uint8_t)(item >> 3 & 1);
+    du.page = du.story || (du.mission == DM_HUM && !duo_hum) ? 0u : 1u;   /* (ONE VOICE: its opening until it has a best) */ du.ready[0] = du.ready[1] = du.ready[2] = du.ready[3] = 0;
     du.state = DUS_CARD; du.t = 0;
     mus_duo = 1; mus_set(MUS_JUKE, du_track());   /* its tune, the tempo with it: the clocks agree long before the start */
     snd_ui(79);
@@ -351,7 +362,7 @@ static void du_go(uint32_t t0)
     du_build(t0 / 96u);
     for (i = 0; i < 4u; i++) { du.stray[i] = 0; du.rx[i] = du.tx[i] = Q8(i == 1u ? 150 : i == 2u ? 120 : 90); du.hop[i] = 0; }
     mus_set(MUS_OFF, 0);                         /* a bar of clicks, then the tune from its own bar one */
-    if (du.mission == DM_PIPE || du.mission == DM_DRUM) du_dial_tx(du.dial[du.seat]);
+    if (du.mission == DM_PIPE || du.mission == DM_DRUM || du.mission == DM_HUM) du_dial_tx(du.dial[du.seat]);
 }
 /* POTION CHOIR: the potion is poured over a rock (127: over none, the time ran out). Both FM-1s hear of it from
  * the one who poured, with the bars it took: the next round starts a bar after that one ends */
@@ -453,7 +464,7 @@ static void du_op(int from, uint32_t op, uint32_t a, uint32_t b, uint32_t c)   /
         if (from == 0 && (du.state == DUS_CARD || du.state == DUS_MENU)) {
             uint32_t own = tr_tick / 96u, v = (own & ~16383u) | (b | c << 7);
             if (v + 8192u < own) v += 16384u; else if (v > own + 8192u) v -= 16384u;
-            du.mission = (uint8_t)((a & 7u) % DM_N); du.story = (uint8_t)(a >> 3 & 1u);
+            du.mission = (uint8_t)((a & 7u) % DM_ALL); du.story = (uint8_t)(a >> 3 & 1u);
             if (du.mission == DM_ROAD && !du.story) du.song = (uint8_t)((a >> 4 & 7u) % 5u);
             du_go(v * 96u);
         }
@@ -463,7 +474,7 @@ static void du_op(int from, uint32_t op, uint32_t a, uint32_t b, uint32_t c)   /
             if (du.state == DUS_PLAY && du.bown == from) du_rally_hit(from, (int)(a & 3u), (int)(a >> 2 & 3u), du.bmode ? du.bt1 : du_now(), (int32_t)(b | c << 7) * 96);
         } else if (du.mission != DM_PIPE && (du.state == DUS_PLAY || du.state == DUS_RESULT)) {
             uint32_t i = a | c << 7;
-            if (i < du.n && !du_n[i].st[from]) { du_set((int)i, from, b == 1u ? 1 : 2); du_sound(&du_n[i], 150, 0); }
+            if (i < du.n && !du_n[i].st[from]) { du_set((int)i, from, b == 1u ? 1 : 2); if (du.mission != DM_HUM) du_sound(&du_n[i], 150, 0); }
         }
         break;
     case DO_MISS:
@@ -580,6 +591,7 @@ static int du_items(uint8_t *it)                 /* what the two can choose: the
     if (sp < 4) it[n++] = (uint8_t)(DU_CHAP[sp] | 8);
     else for (i = 0; i < 4; i++) it[n++] = (uint8_t)i;
     it[n++] = DM_DUEL;
+    if (du.np == 2u) it[n++] = DM_HUM;           /* (ONE VOICE: for two; last, so the list above it is as it was) */
     return n;
 }
 
@@ -613,6 +625,7 @@ static void du_play_tick(int32_t now)
 {
     int me = du.seat, i, k;
     uint32_t used = 0;                           /* (keys that made a stone of the path) */
+    if (du.mission == DM_HUM) { hm_tick(now); return; }
     if (du.mission == DM_PIPE) {
         int r = du.pr, giver = du_giver(r);
         int32_t el = now - du.pstart, b = now >= 0 ? now / 96 : -1;
@@ -904,8 +917,9 @@ static int duo_tick(int32_t dt)
         if (du.page == 0u && du_opening()) {     /* the story's opening: its sounds; at its end, on to how it is played */
             if (du.mission == DM_ECHO) ec_sounds(du.t - dt, du.t);
             else if (du.mission == DM_DRUM) ra_sounds(du.t - dt, du.t);
+            else if (du.mission == DM_HUM) hm_sounds(du.t - dt, du.t);
             else po_sounds(du.t - dt, du.t);
-            if (du.t >= (du.mission == DM_ECHO ? EC_INTRO : du.mission == DM_DRUM ? RA_INTRO : PO_INTRO)) du_opened();
+            if (du.t >= (du.mission == DM_ECHO ? EC_INTRO : du.mission == DM_DRUM ? RA_INTRO : du.mission == DM_HUM ? HM_INTRO : PO_INTRO)) du_opened();
         }
         if (du.page == 2u) {                     /* POTION CHOIR's lesson: its own keys, knobs and PLAY; REC as ever */
             if (BDOWN(BTN_REC)) { du_tx(DO_OPEN, 127, 0, 0); du_abort(); break; }
@@ -1334,9 +1348,11 @@ static void du_potion(int32_t now)
     }
 }
 #include "ac_duoplace.h"
+#include "ac_onevoice.h"
 static void du_play_draw(int32_t now)
 {
-    if (du.mission == DM_PIPE) du_potion(now);
+    if (du.mission == DM_HUM) hm_world(now);
+    else if (du.mission == DM_PIPE) du_potion(now);
     else if (du.mission == DM_DRUM) du_rally_hall(now);
     else if (du.mission == DM_ECHO) du_echo_world(now);
     else du_field(now);
@@ -1506,7 +1522,7 @@ static void duo_draw(void)
         du_pair(56, 0);
         n = du_items(it);
         a = n > 3 ? 2 : ts(2, 3);
-        y = 96;
+        y = n > 5 ? 92 : 96;                     /* (six: closer together) */
         for (i = 0; i < n; i++) {
             int m = it[i] & 7, sel = i == du.cur;
             int32_t h = 5 * a + 10, p = 0, sc = a;
@@ -1522,7 +1538,7 @@ static void duo_draw(void)
                 gtext(14, y + 5 + (a - sc) * 2, DU_NAME[m], sel ? th->text : th->mute, sc);
                 if (bs) { num_str(b, bs); gtextr(226, y + 5 + (a - 1) * 2, b, th->pad, imin(a, 2)); }
             }
-            y += h + 3;
+            y += h + (n > 5 ? 1 : 3);
         }
         {   /* (the others not back from what they were doing: wait for them) */
             int s, busy = 0;
@@ -1533,11 +1549,11 @@ static void duo_draw(void)
         break;
     case DUS_CARD: {
         if (du.page == 0u && du_opening()) {     /* the story's opening */
-            if (du.mission == DM_ECHO) ec_intro(du.t, tm); else if (du.mission == DM_DRUM) ra_intro(du.t, tm); else po_intro(du.t, tm);
+            if (du.mission == DM_ECHO) ec_intro(du.t, tm); else if (du.mission == DM_DRUM) ra_intro(du.t, tm); else if (du.mission == DM_HUM) hm_intro(du.t, tm); else po_intro(du.t, tm);
             break;
         }
         if (du.page == 2u) { pl_draw(tm); break; }   /* POTION CHOIR's lesson */
-        const char *s = du.page == 0u ? TR(T_DU_S1 + du.mission) : TR((du.np == 3u ? T_DU_T1 : T_DU_H1) + du.mission);
+        const char *s = du.mission == DM_HUM ? TR(T_HM_HOW) : du.page == 0u ? TR(T_DU_S1 + du.mission) : TR((du.np == 3u ? T_DU_T1 : T_DU_H1) + du.mission);
         int song = du.mission == DM_ROAD && !du.story && du.page;   /* (TWIN ROAD, the story told: its song, a knob turns to another) */
         int32_t foot = du.page ? (song ? 118 : 150) : 214;   /* (how it is played: the two rocks under it, ticked as each is ready) */
         gfit(120, 14, 232, DU_NAME[du.mission], th->caps[du.mission % 5u], 3);

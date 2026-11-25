@@ -1,0 +1,51 @@
+# the music room: HOME held in an instrument is HOW IT WORKS, the lessons by topic; one of its own, then one every
+# instrument has (LFO: the strip shows its page, the caption goes to the top), back to the list each time, out; then
+# the pool's
+1500 btn 3
+2600 btn 8
+3000 btndown 8
+3400 shot
+3900 btnup 8
+4000 shot
+4100 enc 0 1
+4300 btn 12
+5500 shot
+7000 btn 8
+7300 enc 0 1
+7400 enc 0 1
+7500 enc 0 1
+7600 enc 0 1
+7700 enc 0 1
+7800 enc 0 1
+7900 shot
+8000 btn 12
+10300 shot
+12600 shot
+15000 shot
+16900 shot
+17300 enc 0 1
+17400 enc 0 1
+17500 enc 0 1
+17600 enc 0 1
+17700 enc 0 1
+17800 enc 0 1
+17900 enc 0 1
+18000 btn 12
+21000 shot
+23500 shot
+26400 btn 8
+26800 btn 8
+27400 btn 4
+28000 btndown 8
+28800 btnup 8
+28900 enc 0 1
+29000 enc 0 1
+29100 enc 0 1
+29200 shot
+29300 btn 12
+31000 shot
+33200 shot
+36000 btn 8
+36400 btn 8
+36800 shot
+37000 end

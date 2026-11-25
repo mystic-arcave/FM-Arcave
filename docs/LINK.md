@@ -202,6 +202,7 @@ one piece anyway.)
 | 6 go | game (+ 8; + 16 times the song, TWIN ROAD), the beat it starts on (14 bits: b low, c high) | from seat 0, once all are ready |
 | 7 hit, 8 miss | the note (a low, c high), 1 PERFECT or 2 GOOD | each FM-1 judges its own player and tells the others |
 | 7 hit, 8 miss | NOTE RALLY: a the lane it flies to (drawn at random by the one who hit it) + 4 times how well (0 a serve, 1 PERFECT, 2 GOOD), the beat it lands on (b low, c high); miss: it fell | from the one who hit, or dropped, it; the note goes to the next seat (seat 2 to seat 0) |
+| 7 hit, 8 miss | ONE VOICE (game 5, two players): the wall (a low, c high); hit: your half of it was right, miss: wrong | a wall rings only when both halves were right. How high the Hum is and its shape are the key held (CC 112, 113) and the dial (CC 114: 0 round, 1 square, 2 spiky) |
 | 9 quit | 0: out of this game; 1: back up to the Arcave | REC twice in a game sends 1: the others see that player leave |
 | 10 stray | | ROCK-OFF: a key where no note was |
 | 11 song | the song, 0-4 | TWIN ROAD's card, the story told: turned to another song (nobody is ready again) |
@@ -216,15 +217,77 @@ shows as the friends' notes sounding that much late.
 three between three, and one of the three going dark in the middle of a game. Two real FM-1s have played it on the
 Link page; three real FM-1s have not been tried yet.
 
+## The music room, together: up to four in one room
+
+`firmware/src/arcave/ac_roomnet.h`. Whoever is in their music room, with TOGETHER on in the room's settings (it is on
+unless turned off), shares one room with everyone else who is, through the same relay as UNDERSONG: the Link page
+(LOCAL or ONLINE), or emulator windows in one browser. There is nothing to press: the Link page is the door.
+
+- **One room.** It is the room of whoever was there first. Someone coming in is sent all of it (TUNING IN, about five
+  seconds), and their own room stays as it was in their save: it is theirs again the next time they come in alone,
+  or as soon as they turn TOGETHER off. SAVE in a friend's room keeps that room as one's own.
+- **One player to an instrument.** An instrument, or the pool, belongs to one player at a time. In the room their
+  Rock sits over it with their name, and PLAY and its button do nothing for the others until it is free. Two at the
+  same moment: the lower seat stays. The quick mix (GLO held) is everyone's.
+- **Watching, and swapping.** GLO held and a station's button goes straight onto it; onto a friend's, to watch it:
+  nothing there answers but HOME. The one watching is told whose it is, the one playing who watches, and a strip on
+  both screens says so. OCT- and OCT+ pressed together by both within 1.5 s and they swap. The one playing decides
+  (it has seen the watcher's ask, op 20 with b 0, and its own two buttons) and says so (op 20 with b 1), so the two
+  FM-1s never disagree. When the player leaves, the one watching plays.
+- **What is sent is not sound.** Every FM-1 plays the whole room itself, on seat 0's clock. What the players change
+  is sent: each FM-1 compares the room with a copy of what it last told or heard and sends the bytes that differ, a
+  few a frame. So laws, layouts, the mixer, scale and tempo are the same everywhere and the steady devices fall on
+  the same beats; the loose parts of each world (stones, pods, shards) fall as each FM-1 has them. Keys played by
+  hand are sent as keys. What changes by chance (a layout tending itself, the pool's dives) is drawn by one FM-1
+  only: the one whose player is on that instrument, else the host (the lowest seat that has the room). That one also
+  records the instrument onto the loop and tells the rest each hit; playing together, each instrument has a quarter
+  of the loop's 256 places.
+- **I HEAR: MY OWN** (the room's settings): an FM-1 sounds only the instrument its player is on, for players in one
+  room with a loudspeaker each.
+
+The messages, control changes on channel 16:
+
+| CC | Value | |
+| --- | --- | --- |
+| 20 | n, 1-127 | "I am in my music room", every 300 ms. n is drawn on coming in, after 600 ms of listening, above every number heard: seats are the numbers in order, so nobody's seat moves when someone joins |
+| 21, 22, 23 | a, b, c | the three numbers of a message |
+| 24 + s | op | ends a message from seat s (0-3) and names it |
+
+The Link page holds 21, 22 and 23 until their 24-27 comes and passes the four on together (`web/link/undersong.js`).
+
+| op | a, b, c | |
+| --- | --- | --- |
+| 1 hello | the number of the room held (0: none yet), station sat on (0-5) + 8 if the room is settled | with every 20 |
+| 2 epoch | seat 0's clock / 32, 21 bits (c high, a, b low) | as UNDERSONG's; seat 0 also sends LINK's clock as sender 5 |
+| 3 sit | station played 0-5 (0: none; 1 ROOTS, 2 THE GEODE, 3 THE POOL, 4 MUSHROOM RACK, 5 CRYSTAL SEAM), station watched 0-5 | when either changes, and every second while watching (an FM-1 before 0.29 sends b 0) |
+| 4 pos | x / 8, y / 2, (x mod 8) * 16 | Rock loose in the room, when he moves |
+| 5 look, 6 name | as UNDERSONG's 14 and 15 | in turn with the hello |
+| 7 poke | byte number / 8, (number mod 8) + 8 * (value / 128), value mod 128 | one shared byte changed here. The bytes: each instrument (157), the four mixer strips (32), the pool (7), the room (scale, root, loop bars, sieve, echo time, echo lasts, tempo, loop rests, REC) |
+| 8 scrub | as poke | the host, four a second, round and round: mends a byte lost on the way (not taken within a second of a change made here) |
+| 9 key | instrument + 4 if the top row, the key's place in its row | a key played by hand |
+| 10, 11 | a hit recorded onto the loop, in two halves | from whoever records that instrument |
+| 12 wipe | instrument 0-3, or 4: all | a part of the loop wiped |
+| 13 need | the number asked | "send me the whole room" |
+| 14 snap0 ... 18 done | the count; pokes (15); loop hits (16, 17); the room's number | the whole room, six messages a frame, to whoever asked |
+| 19 bye | | leaving, or TOGETHER turned off |
+| 20 swap | station, 0, 0: "OCT- and OCT+, from the one watching it"; station, 1, seat: "seat plays it now, I watch it" | the first from the one watching, the second from the one playing |
+
+Everything that comes in is brought into range before it is believed (`rn_sane`). A lesson (HOME) has the room to
+itself on the FM-1 it plays on: what the others change meanwhile is put in when it ends.
+
+Tested by `tests/room_test.mjs` (four browser builds through undersong.js's gathering, at 0 and 150 ms each way).
+Not yet tried between real FM-1s.
+
 ## Online: UNDERSONG between computers
 
 The Link page has two tabs. **LOCAL** (`web/link/`) is the hub above, for FM-1s on one computer. **ONLINE**
-(`web/link/online/`) puts this computer into a private lobby with up to two others, anywhere:
+(`web/link/online/`) puts this computer into a private lobby with up to three others, anywhere (UNDERSONG is for two or three of them; the
+music room for all four):
 
 - **What plays here:** every FM-1 plugged in by USB (USE MY FM-1, Web MIDI) and every emulator window open in the same
   browser (OPEN THE EMULATOR; they speak on the BroadcastChannel `fm-arcave-link`). Any mix at either end.
 - **The lobby:** MAKE A PRIVATE LOBBY gives a code of six letters and numbers (no I, O, 0 or 1); JOIN takes one, or a
-  link that ends in `#CODE`. Lobbies are never listed. Three computers at most; an empty lobby closes after half an
+  link that ends in `#CODE`. Lobbies are never listed. Four computers at most; an empty lobby closes after half an
   hour; a page whose connection breaks joins again by itself and keeps its place.
 - **What passes:** UNDERSONG's messages only, gathered as the LOCAL hub gathers them (`web/link/undersong.js`: 118, 115
   and 116 held for their 117; the leader's clock in one piece). From an FM-1 here they go to the lobby and to the
@@ -310,7 +373,7 @@ the page's `web/emu/remote.js`:
 | 79 | from it | what became of the page's save: 1 kept, 2 not this FM-1's size (it needs the page's version), 3 damaged |
 | 80-92 | to the FM-1 | the lights, 7 bits each: lit buttons (bit 14 PLAY lit, 15 PLAY breathing) in 3, lit keys in 4, glowing keys in 4, breathing buttons in 2 |
 
-The save is 2616 bytes (with the music room), about 3000 messages. The FM-1 sends four a millisecond at most (its USB
+The save is 3404 bytes (with the music room and the slots of its places), about 3900 messages. The FM-1 sends four a millisecond at most (its USB
 ring holds 64 and is emptied at 2 kHz); the page sends two a millisecond by Web MIDI's own timestamps, and the FM-1
 draws nothing while one comes in, so its ring of 64 coming in is read often enough. A save of another length is
 refused (the FM-1 asks to be updated, on its screen; the page says the same), and a damaged one is never written.
@@ -319,8 +382,18 @@ The page needs Web MIDI: Chrome and Edge have it, Safari does not.
 `tests/remote_test.mjs` runs all of it without an FM-1: one browser build is the FM-1, another the page's game, the
 page's `remote.js` between them on a made-up MIDI port that keeps to Web MIDI's timestamps. What only a real FM-1 can
 show: that its USB port is the one that answers (the page takes the first port to answer and the output of the same
-name), that the flash write of a 2616-byte save while the page goes on sending lights loses nothing, and how quick the
+name), that the flash write of a 3404-byte save while the page goes on sending lights loses nothing, and how quick the
 keys feel through the computer.
+
+### The same link for the SAVES and MACHINES pages
+
+Two more pages say hello to an FM-1 the way the PLAY page does, and let it go again without playing:
+
+- **SAVES** (`web/site/save`, `web/emu/saves.js`) takes the save the FM-1 sends on hello and keeps it as a backup; to
+  put one back it sends that save (CC 74 to 77) and says goodbye once the FM-1 has answered CC 79 1. Nothing new on
+  the FM-1's side, so it works with every FM-ARCAVE that has PLAY WITH MY FM-1.
+- **MACHINES** (`web/site/machines`, `web/emu/machines.js`) needs protocol 3 (the FM-1's CC 70 says so): CC 60 to 63
+  read the ledges' slots and load a machine into the bank. [MACHINES.md](MACHINES.md) has the messages.
 
 ### By Bluetooth
 
