@@ -119,7 +119,9 @@ await toWell(A); await run(1500);
 if (st(A).state !== 0 || st(A).peer) fail("A should be waiting alone");
 await toWell(B);
 await until("the two did not find each other", () => [A, B].every((p) => st(p).state === 1 && st(p).peer), 6000);
-if (st(A).seat === st(B).seat) fail("both took the same seat");
+// (two numbers the same: each draws again, and the old one is still heard for 2.5 s, so for a moment the two may
+// see the room differently; the seats must part once it has gone)
+await until("both took the same seat", () => st(A).seat !== st(B).seat, 4000, [A, B]);
 await run(3000);
 const lag = lagTicks(A);
 console.log(`found each other: seats ${st(A).seat}, ${st(B).seat}; clocks ${ticks([A, B])} ticks apart (the delay allows ${lag})`);
