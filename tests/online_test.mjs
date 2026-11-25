@@ -37,6 +37,7 @@ async function computer(name, prog) {
   const s = save(prog);
   new Uint8Array(ex.memory.buffer, ex.web_store(), s.length).set(s); ex.web_store_set(s.length);
   ex.web_boot();
+  ex.web_seed(players.length + 1);                          // (in lockstep, one seed would draw the same numbers at the well)
   const p = { name, ex, g: new Gather(), inbox: [], last: 0, on: true, states: [] };
   p.lobby = new LobbyClient(URL, {
     state: (st, why) => p.states.push(st + (why ? ":" + why : "")),
@@ -119,9 +120,7 @@ await toWell(A); await run(1500);
 if (st(A).state !== 0 || st(A).peer) fail("A should be waiting alone");
 await toWell(B);
 await until("the two did not find each other", () => [A, B].every((p) => st(p).state === 1 && st(p).peer), 6000);
-// (two numbers the same: each draws again, and the old one is still heard for 2.5 s, so for a moment the two may
-// see the room differently; the seats must part once it has gone)
-await until("both took the same seat", () => st(A).seat !== st(B).seat, 4000, [A, B]);
+if (st(A).seat === st(B).seat) fail("both took the same seat");
 await run(3000);
 const lag = lagTicks(A);
 console.log(`found each other: seats ${st(A).seat}, ${st(B).seat}; clocks ${ticks([A, B])} ticks apart (the delay allows ${lag})`);

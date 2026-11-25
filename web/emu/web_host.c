@@ -144,6 +144,9 @@ static float w_l[1024], w_r[1024];
 static uint32_t w_have, w_pos, w_owed;
 
 EXPORT void web_boot(void) { fm1_ms = 1; arcave_frame(); }
+/* (tests) copies of the build run in lockstep from one seed draw the same numbers where people never would: each is
+   stirred apart first */
+EXPORT void web_seed(uint32_t s) { ac_rng_s = ac_rng_s * 2654435761u + s * 40503u + 1u; if (!ac_rng_s) ac_rng_s = 1u; }
 #ifdef AC_TEST_DUO
 EXPORT const char *web_duo_hint(void) { return du_hint(); }   /* (the local test build: what the CPU friend says) */
 #endif
